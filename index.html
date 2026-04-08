@@ -2211,15 +2211,39 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             const availableProducts = products.filter(p => p.type === type || p.type === 'Both');
             
             const surfacesList = document.getElementById('profileSurfacesList');
-            surfacesList.innerHTML = surfaces.map(surface => `
+            surfacesList.innerHTML = surfaces.map(surface => {
+                const sfx = surface.replace(/\s+/g, '_');
+                return `
                 <div class="room-card" style="margin-bottom:10px;">
                     <h4 style="margin-bottom:8px;">${surface}</h4>
-                    <select id="surface_${surface.replace(/\s+/g, '_')}" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
-                        <option value="">-- Select Product --</option>
-                        ${availableProducts.map(p => `<option value="${p.id}">${p.brand} - ${p.name} - ${p.sheen}</option>`).join('')}
-                    </select>
-                </div>
-            `).join('');
+                    <div class="form-group" style="margin-bottom:8px;">
+                        <label style="font-size:13px;">Product</label>
+                        <select id="surface_${sfx}" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
+                            <option value="">-- Select Product --</option>
+                            ${availableProducts.map(p => `<option value="${p.id}">${p.brand} - ${p.name} - ${p.sheen}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                        <div class="form-group" style="margin-bottom:8px;">
+                            <label style="font-size:13px;">Default Color</label>
+                            <select id="color_${sfx}" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
+                                <option value="TBD">TBD</option>
+                                <option value="Match">Match</option>
+                                <option value="White">White</option>
+                                <option value="">Custom (leave blank)</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom:8px;">
+                            <label style="font-size:13px;">Default Coats</label>
+                            <select id="coats_${sfx}" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
+                                <option value="2">2 Coats</option>
+                                <option value="1">1 Coat</option>
+                                <option value="3">3 Coats</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
         };
 
         window.saveProfile = async function(event) {
@@ -2229,12 +2253,19 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             
             const surfaceMapping = {};
             surfaces.forEach(surface => {
-                const productId = document.getElementById(`surface_${surface.replace(/\s+/g, '_')}`).value;
+                const sfx = surface.replace(/\s+/g, '_');
+                const productId = document.getElementById(`surface_${sfx}`).value;
                 if (productId) {
-                    surfaceMapping[surface] = productId;
+                    const product = window.products.find(p => p.id === productId);
+                    surfaceMapping[surface] = {
+                        productId: productId,
+                        sheen: product ? product.sheen : '',
+                        color: document.getElementById(`color_${sfx}`).value,
+                        coats: parseInt(document.getElementById(`coats_${sfx}`).value) || 2
+                    };
                 }
             });
-            
+
             const profile = {
                 userId: currentUser.uid,
                 name: document.getElementById('profileName').value,
@@ -2266,9 +2297,18 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             updateProfileSurfaces();
             
             setTimeout(() => {
-                Object.entries(profile.surfaceMapping || {}).forEach(([surface, productId]) => {
-                    const select = document.getElementById(`surface_${surface.replace(/\s+/g, '_')}`);
+                Object.entries(profile.surfaceMapping || {}).forEach(([surface, mapping]) => {
+                    const sfx = surface.replace(/\s+/g, '_');
+                    // Support old format (string productId) and new format (object)
+                    const productId = typeof mapping === 'string' ? mapping : mapping.productId;
+                    const select = document.getElementById(`surface_${sfx}`);
                     if (select) select.value = productId;
+                    if (typeof mapping === 'object') {
+                        const colorEl = document.getElementById(`color_${sfx}`);
+                        const coatsEl = document.getElementById(`coats_${sfx}`);
+                        if (colorEl) colorEl.value = mapping.color || 'TBD';
+                        if (coatsEl) coatsEl.value = mapping.coats || 2;
+                    }
                 });
             }, 100);
             
@@ -3219,7 +3259,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                     document.getElementById('primerSection').classList.add('hidden');
                 }
             } else {
-                // New surface
+                // New surface — check profile for defaults
                 if (canAutoCalc) {
                     document.getElementById('surfaceQuantity').value = autoCalcQty.toFixed(2);
                     document.getElementById('autoCalcNote').classList.remove('hidden');
@@ -3227,10 +3267,27 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                     document.getElementById('surfaceQuantity').value = '';
                     document.getElementById('autoCalcNote').classList.add('hidden');
                 }
-                document.getElementById('surfaceProduct').value = '';
-                document.getElementById('surfaceSheen').value = 'Satin';
-                document.getElementById('surfaceColor').value = '';
-                document.getElementById('surfaceCoats').value = 2;
+
+                // Look up profile defaults
+                const profile = currentEstimate.profileId ? (window.profiles || []).find(p => p.id === currentEstimate.profileId) : null;
+                const mapping = profile?.surfaceMapping?.[surfaceType];
+                // Support old format (string) and new format (object)
+                const profileProductId = mapping ? (typeof mapping === 'string' ? mapping : mapping.productId) : '';
+                const profileSheen = (mapping && typeof mapping === 'object') ? mapping.sheen : '';
+                const profileColor = (mapping && typeof mapping === 'object') ? mapping.color : '';
+                const profileCoats = (mapping && typeof mapping === 'object') ? mapping.coats : 2;
+
+                if (profileProductId) {
+                    document.getElementById('surfaceProduct').value = profileProductId;
+                    // Auto-fill sheen from product if profile doesn't have it
+                    const product = window.products.find(p => p.id === profileProductId);
+                    document.getElementById('surfaceSheen').value = profileSheen || (product ? product.sheen : '');
+                } else {
+                    document.getElementById('surfaceProduct').value = '';
+                    document.getElementById('surfaceSheen').value = '';
+                }
+                document.getElementById('surfaceColor').value = profileColor || '';
+                document.getElementById('surfaceCoats').value = profileCoats || 2;
                 // Reset primer
                 document.getElementById('usePrimer').checked = false;
                 document.getElementById('primerSection').classList.add('hidden');
@@ -3526,12 +3583,25 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 document.getElementById('surfaceColor').value = existingSurface.color || '';
                 document.getElementById('surfaceCoats').value = existingSurface.coats || 2;
             } else {
-                // New surface
+                // New surface — check profile for defaults
+                const profile = currentEstimate.profileId ? (window.profiles || []).find(p => p.id === currentEstimate.profileId) : null;
+                const mapping = profile?.surfaceMapping?.[surfaceType];
+                const profileProductId = mapping ? (typeof mapping === 'string' ? mapping : mapping.productId) : '';
+                const profileSheen = (mapping && typeof mapping === 'object') ? mapping.sheen : '';
+                const profileColor = (mapping && typeof mapping === 'object') ? mapping.color : '';
+                const profileCoats = (mapping && typeof mapping === 'object') ? mapping.coats : 2;
+
                 document.getElementById('surfaceQuantity').value = '';
-                document.getElementById('surfaceProduct').value = '';
-                document.getElementById('surfaceSheen').value = '';
-                document.getElementById('surfaceColor').value = '';
-                document.getElementById('surfaceCoats').value = 2;
+                if (profileProductId) {
+                    document.getElementById('surfaceProduct').value = profileProductId;
+                    const product = window.products.find(p => p.id === profileProductId);
+                    document.getElementById('surfaceSheen').value = profileSheen || (product ? product.sheen : '');
+                } else {
+                    document.getElementById('surfaceProduct').value = '';
+                    document.getElementById('surfaceSheen').value = '';
+                }
+                document.getElementById('surfaceColor').value = profileColor || '';
+                document.getElementById('surfaceCoats').value = profileCoats || 2;
             }
 
             // Show modal
