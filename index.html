@@ -1391,7 +1391,7 @@
         };
 
         // Price Settings - Save to Firebase
-        async function savePriceSettings() {
+        window.savePriceSettings = async function() {
             try {
                 // Helper to safely read input value or fall back to PRICING default
                 const getVal = (id, fallback) => parseFloat(document.getElementById(id)?.value) || fallback;
