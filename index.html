@@ -1278,7 +1278,8 @@
                 html += '<h4 style="color:#667eea;margin-bottom:10px;">' + surface.name + ' <span style="font-size:10px;color:#999;">(custom)</span></h4>';
                 html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">';
                 html += '<div>';
-                html += '<label style="font-size:10pt;color:#666;">' + (surface.calcType === 'flat' ? 'Flat Rate ($)' : 'Labor Rate (' + surface.unit + ')') + '</label>';
+                const laborLabel = surface.calcType === 'flat' ? 'Flat Rate ($)' : surface.calcType === 'perunit' ? 'Price per Unit ($)' : 'Labor Rate (' + surface.unit + ')';
+                html += '<label style="font-size:10pt;color:#666;">' + laborLabel + '</label>';
                 html += '<input type="number" id="custom_' + type + '_labor_' + idx + '" value="' + (surface.laborRate || '') + '" step="0.01" min="0" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;background:#fff;">';
                 html += '</div>';
                 if (surface.calcType === 'area') {
@@ -1295,24 +1296,73 @@
         }
 
         function addCustomSurface(type) {
-            const name = prompt('Enter surface name:');
-            if (!name || !name.trim()) return;
+            // Show a custom modal for adding surface
+            const overlay = document.createElement('div');
+            overlay.id = 'customSurfaceOverlay';
+            overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+            overlay.innerHTML = `
+                <div style="background:#fff;border-radius:12px;padding:25px;max-width:400px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+                    <h3 style="color:#1e3c72;margin-bottom:15px;">Add Custom ${type === 'exterior' ? 'Exterior' : 'Interior'} Surface</h3>
+                    <div style="margin-bottom:12px;">
+                        <label style="font-weight:600;font-size:13px;display:block;margin-bottom:4px;">Surface Name</label>
+                        <input type="text" id="newSurfaceName" placeholder="e.g. Crown Molding" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:15px;">
+                    </div>
+                    <div style="margin-bottom:12px;">
+                        <label style="font-weight:600;font-size:13px;display:block;margin-bottom:4px;">Measurement Type</label>
+                        <select id="newSurfaceMeasurement" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:15px;" onchange="document.getElementById('newSurfaceCoverageRow').style.display = this.value === 'flat' ? 'none' : 'block';">
+                            <option value="sqft">Square Feet (sq ft)</option>
+                            <option value="linft">Linear Feet (lin ft)</option>
+                            <option value="unit">Per Unit (each/count)</option>
+                            <option value="flat">Flat Rate ($)</option>
+                        </select>
+                    </div>
+                    <div style="margin-bottom:12px;">
+                        <label style="font-weight:600;font-size:13px;display:block;margin-bottom:4px;" id="newSurfaceLaborLabel">Labor Rate</label>
+                        <input type="number" id="newSurfaceLaborRate" placeholder="100" step="0.01" min="0" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:15px;">
+                        <p style="font-size:10px;color:#999;margin-top:3px;" id="newSurfaceLaborHint">How many sq ft can be painted per hour</p>
+                    </div>
+                    <div id="newSurfaceCoverageRow" style="margin-bottom:15px;">
+                        <label style="font-weight:600;font-size:13px;display:block;margin-bottom:4px;">Paint Coverage (sq ft per gallon)</label>
+                        <input type="number" id="newSurfaceCoverage" placeholder="250" step="1" min="0" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:15px;">
+                    </div>
+                    <div style="display:flex;gap:10px;">
+                        <button onclick="document.getElementById('customSurfaceOverlay').remove();" style="flex:1;padding:12px;border:1px solid #ddd;border-radius:8px;background:#f5f5f5;font-size:15px;cursor:pointer;">Cancel</button>
+                        <button onclick="confirmAddCustomSurface('${type}')" style="flex:1;padding:12px;border:none;border-radius:8px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;font-size:15px;font-weight:600;cursor:pointer;">Add Surface</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+        }
 
-            const trimmed = name.trim();
+        function confirmAddCustomSurface(type) {
+            const name = document.getElementById('newSurfaceName').value.trim();
+            if (!name) { alert('Please enter a surface name.'); return; }
+
             const allSurfaces = type === 'exterior' ? EXTERIOR_SURFACES : INTERIOR_SURFACES;
-            if (allSurfaces.includes(trimmed)) {
-                alert('A surface named "' + trimmed + '" already exists.');
+            if (allSurfaces.includes(name)) {
+                alert('A surface named "' + name + '" already exists.');
                 return;
             }
 
-            const calcType = confirm('Does this surface use area-based pricing (sq ft)?\n\nOK = Area-based (sq ft/hour + coverage)\nCancel = Flat rate ($ per unit)') ? 'area' : 'flat';
+            const measurement = document.getElementById('newSurfaceMeasurement').value;
+            const laborRate = parseFloat(document.getElementById('newSurfaceLaborRate').value) || (measurement === 'flat' ? 50 : 100);
+            const coverage = parseFloat(document.getElementById('newSurfaceCoverage').value) || (measurement === 'flat' || measurement === 'unit' ? 0 : 250);
+
+            const measureMap = {
+                sqft: { unit: 'sq ft/hour', calcType: 'area', measureUnit: 'Sq Ft' },
+                linft: { unit: 'lin ft/hour', calcType: 'area', measureUnit: 'Lin Ft' },
+                unit: { unit: '$/unit', calcType: 'perunit', measureUnit: 'Units' },
+                flat: { unit: '$ flat rate', calcType: 'flat', measureUnit: 'Units' }
+            };
+            const m = measureMap[measurement];
 
             const newSurface = {
-                name: trimmed,
-                laborRate: calcType === 'area' ? 100 : 50,
-                coverage: calcType === 'area' ? 250 : 0,
-                unit: calcType === 'area' ? 'sq ft/hour' : '$ per unit',
-                calcType: calcType
+                name: name,
+                laborRate: laborRate,
+                coverage: coverage,
+                unit: m.unit,
+                calcType: m.calcType,
+                measureUnit: m.measureUnit
             };
 
             if (type === 'exterior') {
@@ -1323,6 +1373,7 @@
 
             rebuildSurfaceLists();
             displayCustomSurfaces(type);
+            document.getElementById('customSurfaceOverlay').remove();
         }
 
         function deleteCustomSurface(type, idx) {
@@ -2456,6 +2507,9 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                         if (cs && cs.calcType === 'area') {
                             labor = (qty / (cs.laborRate || 100)) * PRICING.LaborRate * coats;
                             material = cs.coverage ? (qty / cs.coverage) * PRICING.PaintPricePerGallon * coats : 0;
+                        } else if (cs && cs.calcType === 'perunit') {
+                            labor = (cs.laborRate || 0) * qty * coats;
+                            material = cs.coverage ? (qty / cs.coverage) * PRICING.PaintPricePerGallon * coats : 0;
                         } else if (cs && cs.calcType === 'flat') {
                             labor = (cs.laborRate || 0) * qty * coats;
                             material = 0;
@@ -2504,6 +2558,9 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                         const cs = customInteriorSurfaces.find(s => s.name === surface.surfaceType);
                         if (cs && cs.calcType === 'area') {
                             labor = (qty / (cs.laborRate || 100)) * PRICING.LaborRate * coats;
+                            material = cs.coverage ? (qty / cs.coverage) * PRICING.InteriorPaintPricePerGallon * coats : 0;
+                        } else if (cs && cs.calcType === 'perunit') {
+                            labor = (cs.laborRate || 0) * qty * coats;
                             material = cs.coverage ? (qty / cs.coverage) * PRICING.InteriorPaintPricePerGallon * coats : 0;
                         } else if (cs && cs.calcType === 'flat') {
                             labor = (cs.laborRate || 0) * qty * coats;
@@ -3026,9 +3083,15 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
         function getSurfaceUnit(surfaceType) {
             const sqFtSurfaces = ['Siding', 'Ceiling', 'Walls'];
             const linFtSurfaces = ['Soffit', 'Fascia', 'Baseboards'];
-            
+
             if (sqFtSurfaces.includes(surfaceType)) return 'Sq Ft';
             if (linFtSurfaces.includes(surfaceType)) return 'Lin Ft';
+
+            // Check custom surfaces
+            const cs = customExteriorSurfaces.find(s => s.name === surfaceType) ||
+                       customInteriorSurfaces.find(s => s.name === surfaceType);
+            if (cs && cs.measureUnit) return cs.measureUnit;
+
             return 'Units';
         }
 
