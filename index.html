@@ -1374,6 +1374,8 @@
             rebuildSurfaceLists();
             displayCustomSurfaces(type);
             document.getElementById('customSurfaceOverlay').remove();
+            // Auto-save to Firebase immediately
+            savePriceSettings();
         };
 
         window.deleteCustomSurface = function(type, idx) {
@@ -1385,46 +1387,50 @@
             }
             rebuildSurfaceLists();
             displayCustomSurfaces(type);
+            savePriceSettings();
         };
 
         // Price Settings - Save to Firebase
         async function savePriceSettings() {
             try {
+                // Helper to safely read input value or fall back to PRICING default
+                const getVal = (id, fallback) => parseFloat(document.getElementById(id)?.value) || fallback;
+
                 const pricingData = {
                     userId: currentUser.uid,
                     // Global rates
-                    LaborRate: parseFloat(document.getElementById('globalLaborRate').value) || PRICING.LaborRate,
-                    PaintPricePerGallon: parseFloat(document.getElementById('exteriorPaintPrice').value) || PRICING.PaintPricePerGallon,
-                    InteriorPaintPricePerGallon: parseFloat(document.getElementById('interiorPaintPrice').value) || PRICING.InteriorPaintPricePerGallon,
-                    
+                    LaborRate: getVal('globalLaborRate', PRICING.LaborRate),
+                    PaintPricePerGallon: getVal('exteriorPaintPrice', PRICING.PaintPricePerGallon),
+                    InteriorPaintPricePerGallon: getVal('interiorPaintPrice', PRICING.InteriorPaintPricePerGallon),
+
                     // Exterior surfaces
-                    SidingLaborRate: parseFloat(document.getElementById('SidingLaborRate').value) || PRICING.SidingLaborRate,
-                    SidingPaintCoverage: parseFloat(document.getElementById('SidingPaintCoverage').value) || PRICING.SidingPaintCoverage,
-                    SoffitLaborRate: parseFloat(document.getElementById('SoffitLaborRate').value) || PRICING.SoffitLaborRate,
-                    SoffitPaintCoverage: parseFloat(document.getElementById('SoffitPaintCoverage').value) || PRICING.SoffitPaintCoverage,
-                    FasciaLaborRate: parseFloat(document.getElementById('FasciaLaborRate').value) || PRICING.FasciaLaborRate,
-                    FasciaPaintCoverage: parseFloat(document.getElementById('FasciaPaintCoverage').value) || PRICING.FasciaPaintCoverage,
-                    WindowLaborRate: parseFloat(document.getElementById('WindowLaborRate').value) || PRICING.WindowLaborRate,
-                    WindowPaintCoverage: parseFloat(document.getElementById('WindowPaintCoverage').value) || PRICING.WindowPaintCoverage,
-                    DoorLaborHours: parseFloat(document.getElementById('DoorLaborHours').value) || PRICING.DoorLaborHours,
-                    DoorPaintCoverage: parseFloat(document.getElementById('DoorPaintCoverage').value) || PRICING.DoorPaintCoverage,
-                    BayWindowLaborHours: parseFloat(document.getElementById('BayWindowLaborHours').value) || PRICING.BayWindowLaborHours,
-                    RailingLaborHours: parseFloat(document.getElementById('RailingLaborHours').value) || PRICING.RailingLaborHours,
-                    RailingPaintCost: parseFloat(document.getElementById('RailingPaintCost').value) || PRICING.RailingPaintCost,
-                    
+                    SidingLaborRate: getVal('SidingLaborRate', PRICING.SidingLaborRate),
+                    SidingPaintCoverage: getVal('SidingPaintCoverage', PRICING.SidingPaintCoverage),
+                    SoffitLaborRate: getVal('SoffitLaborRate', PRICING.SoffitLaborRate),
+                    SoffitPaintCoverage: getVal('SoffitPaintCoverage', PRICING.SoffitPaintCoverage),
+                    FasciaLaborRate: getVal('FasciaLaborRate', PRICING.FasciaLaborRate),
+                    FasciaPaintCoverage: getVal('FasciaPaintCoverage', PRICING.FasciaPaintCoverage),
+                    WindowLaborRate: getVal('WindowLaborRate', PRICING.WindowLaborRate),
+                    WindowPaintCoverage: getVal('WindowPaintCoverage', PRICING.WindowPaintCoverage),
+                    DoorLaborHours: getVal('DoorLaborHours', PRICING.DoorLaborHours),
+                    DoorPaintCoverage: getVal('DoorPaintCoverage', PRICING.DoorPaintCoverage),
+                    BayWindowLaborHours: getVal('BayWindowLaborHours', PRICING.BayWindowLaborHours),
+                    RailingLaborHours: getVal('RailingLaborHours', PRICING.RailingLaborHours),
+                    RailingPaintCost: getVal('RailingPaintCost', PRICING.RailingPaintCost),
+
                     // Interior surfaces
-                    WallCeilingLaborRate: parseFloat(document.getElementById('WallCeilingLaborRate').value) || PRICING.WallCeilingLaborRate,
-                    WallCeilingPaintCoverage: parseFloat(document.getElementById('WallCeilingPaintCoverage').value) || PRICING.WallCeilingPaintCoverage,
-                    InteriorDoorLaborHours: parseFloat(document.getElementById('InteriorDoorLaborHours').value) || PRICING.InteriorDoorLaborHours,
-                    InteriorDoorPaintCoverage: parseFloat(document.getElementById('InteriorDoorPaintCoverage').value) || PRICING.InteriorDoorPaintCoverage,
-                    InteriorWindowLaborRate: parseFloat(document.getElementById('InteriorWindowLaborRate').value) || PRICING.InteriorWindowLaborRate,
-                    InteriorWindowPaintCoverage: parseFloat(document.getElementById('InteriorWindowPaintCoverage').value) || PRICING.InteriorWindowPaintCoverage,
-                    BaseboardLaborRate: parseFloat(document.getElementById('BaseboardLaborRate').value) || PRICING.BaseboardLaborRate,
-                    BaseboardPaintCoverage: parseFloat(document.getElementById('BaseboardPaintCoverage').value) || PRICING.BaseboardPaintCoverage,
-                    ClosetFlatRate: parseFloat(document.getElementById('ClosetFlatRate').value) || PRICING.ClosetFlatRate,
-                    CabinetDoorPrice: parseFloat(document.getElementById('CabinetDoorPrice').value) || PRICING.CabinetDoorPrice,
-                    CabinetDrawerPrice: parseFloat(document.getElementById('CabinetDrawerPrice').value) || PRICING.CabinetDrawerPrice,
-                    SpindlePricePerCoat: parseFloat(document.getElementById('SpindlePricePerCoat').value) || PRICING.SpindlePricePerCoat,
+                    WallCeilingLaborRate: getVal('WallCeilingLaborRate', PRICING.WallCeilingLaborRate),
+                    WallCeilingPaintCoverage: getVal('WallCeilingPaintCoverage', PRICING.WallCeilingPaintCoverage),
+                    InteriorDoorLaborHours: getVal('InteriorDoorLaborHours', PRICING.InteriorDoorLaborHours),
+                    InteriorDoorPaintCoverage: getVal('InteriorDoorPaintCoverage', PRICING.InteriorDoorPaintCoverage),
+                    InteriorWindowLaborRate: getVal('InteriorWindowLaborRate', PRICING.InteriorWindowLaborRate),
+                    InteriorWindowPaintCoverage: getVal('InteriorWindowPaintCoverage', PRICING.InteriorWindowPaintCoverage),
+                    BaseboardLaborRate: getVal('BaseboardLaborRate', PRICING.BaseboardLaborRate),
+                    BaseboardPaintCoverage: getVal('BaseboardPaintCoverage', PRICING.BaseboardPaintCoverage),
+                    ClosetFlatRate: getVal('ClosetFlatRate', PRICING.ClosetFlatRate),
+                    CabinetDoorPrice: getVal('CabinetDoorPrice', PRICING.CabinetDoorPrice),
+                    CabinetDrawerPrice: getVal('CabinetDrawerPrice', PRICING.CabinetDrawerPrice),
+                    SpindlePricePerCoat: getVal('SpindlePricePerCoat', PRICING.SpindlePricePerCoat),
 
                     updatedAt: new Date().toISOString()
                 };
