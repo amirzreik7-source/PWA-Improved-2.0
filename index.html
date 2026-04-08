@@ -4476,7 +4476,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
             const customer = customers.find(c => c.id === currentEstimate.customerId);
             const date = new Date().toLocaleDateString();
-            const groupedRooms = currentEstimate.rooms.filter(room => room.surfaces.length > 0);
+            const groupedRooms = currentEstimate.rooms.filter(room => room.surfaces.length > 0 || (room.additionalServices && room.additionalServices.length > 0) || room.notes);
 
             const proposalNumber = 'NSP-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-6);
             const validUntilDate = new Date(); validUntilDate.setDate(validUntilDate.getDate() + 15);
@@ -4606,7 +4606,7 @@ ${priceRow('Balance','$'+balanceAmount.toFixed(2))}
 </div>
 ${sectionTitle('PROJECT SUMMARY')}
 <p><strong>Included in the price above:</strong></p>
-<ul>${groupedRooms.map(r=>'<li><strong>'+r.name+'</strong> ('+r.surfaces.map(s=>s.surfaceType||'Surface').join(', ')+')</li>').join('')}</ul>
+<ul>${groupedRooms.map(r=>{const parts=[...r.surfaces.map(s=>s.surfaceType||'Surface'),...(r.additionalServices||[]).map(svc=>svc.name)];return '<li><strong>'+r.name+'</strong>'+(parts.length?' ('+parts.join(', ')+')':'')+'</li>';}).join('')}</ul>
 ${projectNotes ? '<p style="margin-top:8px">'+projectNotes+'</p>' : ''}
 ${detailsHTML}
 ${sectionTitle(currentEstimate.jobType.toUpperCase()+' PAINTING CONTRACT TERMS')}
