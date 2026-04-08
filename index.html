@@ -334,15 +334,7 @@
                 </div>
                 <div class="form-group">
                     <label>Sheen</label>
-                    <select id="surfaceSheen">
-                        <option value="Flat">Flat</option>
-                        <option value="Matte">Matte</option>
-                        <option value="Eggshell">Eggshell</option>
-                        <option value="Satin">Satin</option>
-                        <option value="Semi-Gloss">Semi-Gloss</option>
-                        <option value="Soft Gloss">Soft Gloss</option>
-                        <option value="Gloss">Gloss</option>
-                    </select>
+                    <input type="text" id="surfaceSheen" list="sheenOptions" placeholder="Auto-filled from product">
                 </div>
                 <div class="form-group">
                     <label>Color</label>
@@ -3167,32 +3159,44 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             // Update modal title
             document.getElementById('surfaceConfigTitle').textContent = 'Configure ' + surfaceType;
             
-            // Populate product dropdown
+            // Filter products by job type
+            const jobType = currentEstimate.jobType; // 'Exterior' or 'Interior'
+            const filteredProducts = window.products.filter(p => p.type === jobType || p.type === 'Both');
+
+            // Populate product dropdown with brand + name + sheen
             const productDropdown = document.getElementById('surfaceProduct');
             productDropdown.innerHTML = '<option value="">Select Product...</option>';
-            window.products.forEach(product => {
+            filteredProducts.forEach(product => {
                 const option = document.createElement('option');
                 option.value = product.id;
-                option.textContent = product.name;
+                option.textContent = `${product.brand} - ${product.name} - ${product.sheen}`;
                 productDropdown.appendChild(option);
             });
-            
+
+            // Auto-fill sheen when product is selected
+            productDropdown.onchange = function() {
+                const selected = window.products.find(p => p.id === this.value);
+                if (selected) {
+                    document.getElementById('surfaceSheen').value = selected.sheen;
+                }
+            };
+
             // Auto-calculate quantity if applicable
             const autoCalcQty = getAutoCalculatedQuantity(surfaceType);
             const canAutoCalc = autoCalcQty !== null;
-            
+
             // Set quantity label and unit
             const unit = getSurfaceUnit(surfaceType);
             document.getElementById('surfaceQuantityLabel').textContent = 'Quantity (' + unit + ')';
             document.getElementById('surfaceUnit').textContent = unit;
-            
-            // Populate primer product dropdown
+
+            // Populate primer product dropdown (filtered by type)
             const primerDropdown = document.getElementById('primerProduct');
             primerDropdown.innerHTML = '<option value="">Select Primer...</option>';
-            window.products.forEach(product => {
+            filteredProducts.forEach(product => {
                 const option = document.createElement('option');
                 option.value = product.id;
-                option.textContent = product.name;
+                option.textContent = `${product.brand} - ${product.name} - ${product.sheen}`;
                 primerDropdown.appendChild(option);
             });
 
@@ -3491,17 +3495,29 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             
             // Update modal title
             document.getElementById('surfaceConfigTitle').textContent = 'Configure ' + surfaceType;
-            
-            // Populate product dropdown
+
+            // Filter products by job type
+            const jobType = currentEstimate.jobType;
+            const filteredProducts = window.products.filter(p => p.type === jobType || p.type === 'Both');
+
+            // Populate product dropdown with brand + name + sheen
             const productDropdown = document.getElementById('surfaceProduct');
             productDropdown.innerHTML = '<option value="">Select Product...</option>';
-            window.products.forEach(product => {
+            filteredProducts.forEach(product => {
                 const option = document.createElement('option');
                 option.value = product.id;
-                option.textContent = product.name;
+                option.textContent = `${product.brand} - ${product.name} - ${product.sheen}`;
                 productDropdown.appendChild(option);
             });
-            
+
+            // Auto-fill sheen when product is selected
+            productDropdown.onchange = function() {
+                const selected = window.products.find(p => p.id === this.value);
+                if (selected) {
+                    document.getElementById('surfaceSheen').value = selected.sheen;
+                }
+            };
+
             if (existingSurface) {
                 // Editing existing
                 document.getElementById('surfaceQuantity').value = existingSurface.quantity || '';
@@ -3513,11 +3529,11 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 // New surface
                 document.getElementById('surfaceQuantity').value = '';
                 document.getElementById('surfaceProduct').value = '';
-                document.getElementById('surfaceSheen').value = 'Satin';
+                document.getElementById('surfaceSheen').value = '';
                 document.getElementById('surfaceColor').value = '';
                 document.getElementById('surfaceCoats').value = 2;
             }
-            
+
             // Show modal
             console.log('Showing surfaceConfigModal');
             showScreen('surfaceConfigModal');
