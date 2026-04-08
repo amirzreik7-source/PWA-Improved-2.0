@@ -856,7 +856,8 @@
                     <p style="color:#666;margin-bottom:15px;">Configure labor rates and paint coverage for each exterior surface.</p>
                     <p style="background:#f8f9fa;padding:10px;border-radius:6px;margin-bottom:10px;font-size:10pt;"><strong>Legend:</strong> Labor Rate = how much work can be done per hour. Spread Rate = how much area one gallon covers.</p>
                     <div id="exteriorSurfacesList"></div>
-                    <button class="btn btn-info" onclick="alert('Add Custom Surface - Coming soon!')" style="margin-top:15px;">➕ Add Custom Surface</button>
+                    <div id="customExteriorSurfacesList"></div>
+                    <button class="btn btn-info" onclick="addCustomSurface('exterior')" style="margin-top:15px;">➕ Add Custom Surface</button>
                 </div>
             </div>
             
@@ -867,7 +868,8 @@
                     <p style="color:#666;margin-bottom:15px;">Configure labor rates and paint coverage for each interior surface.</p>
                     <p style="background:#f8f9fa;padding:10px;border-radius:6px;margin-bottom:10px;font-size:10pt;"><strong>Legend:</strong> Labor Rate = how much work can be done per hour. Spread Rate = how much area one gallon covers.</p>
                     <div id="interiorSurfacesList"></div>
-                    <button class="btn btn-info" onclick="alert('Add Custom Surface - Coming soon!')" style="margin-top:15px;">➕ Add Custom Surface</button>
+                    <div id="customInteriorSurfacesList"></div>
+                    <button class="btn btn-info" onclick="addCustomSurface('interior')" style="margin-top:15px;">➕ Add Custom Surface</button>
                 </div>
             </div>
             
@@ -1004,10 +1006,23 @@
         };
 
         // Surface definitions
-        const EXTERIOR_SURFACES = ['Siding', 'Soffit', 'Fascia', 'Windows', 'Front Door', 'Front Door Frame', 
+        const EXTERIOR_SURFACES_DEFAULT = ['Siding', 'Soffit', 'Fascia', 'Windows', 'Front Door', 'Front Door Frame',
                                     'Garage Door', 'Garage Door Frame', 'Shutters', 'Bay Windows', 'Railings'];
-        const INTERIOR_SURFACES = ['Walls', 'Ceiling', 'Doors', 'Windows', 'Baseboards', 'Closets', 
+        const INTERIOR_SURFACES_DEFAULT = ['Walls', 'Ceiling', 'Doors', 'Windows', 'Baseboards', 'Closets',
                                    'Cabinet Doors', 'Cabinet Drawers', 'Spindles'];
+
+        // Custom surfaces stored per user (loaded from Firebase)
+        let customExteriorSurfaces = [];
+        let customInteriorSurfaces = [];
+
+        // Dynamic surface lists (default + custom)
+        let EXTERIOR_SURFACES = [...EXTERIOR_SURFACES_DEFAULT];
+        let INTERIOR_SURFACES = [...INTERIOR_SURFACES_DEFAULT];
+
+        function rebuildSurfaceLists() {
+            EXTERIOR_SURFACES = [...EXTERIOR_SURFACES_DEFAULT, ...customExteriorSurfaces.map(s => s.name)];
+            INTERIOR_SURFACES = [...INTERIOR_SURFACES_DEFAULT, ...customInteriorSurfaces.map(s => s.name)];
+        }
         
         const INTERIOR_ROOMS = ['Living Room', 'Dining Room', 'Kitchen', 'Family Room', 'Master Bedroom',
                                'Bedroom 2', 'Bedroom 3', 'Bedroom 4', 'Bathroom 1', 'Bathroom 2',
@@ -1166,9 +1181,11 @@
             
             // Display exterior surfaces
             displayExteriorSurfaces();
-            
+            displayCustomSurfaces('exterior');
+
             // Display interior surfaces
             displayInteriorSurfaces();
+            displayCustomSurfaces('interior');
         }
 
         function displayExteriorSurfaces() {
@@ -1247,6 +1264,78 @@
             container.innerHTML = html;
         }
 
+        // Custom Surface Management
+        function displayCustomSurfaces(type) {
+            const list = type === 'exterior' ? customExteriorSurfaces : customInteriorSurfaces;
+            const containerId = type === 'exterior' ? 'customExteriorSurfacesList' : 'customInteriorSurfacesList';
+            const container = document.getElementById(containerId);
+            if (!container) return;
+
+            let html = '';
+            list.forEach((surface, idx) => {
+                html += '<div style="border:1px solid #667eea;padding:15px;margin-bottom:10px;border-radius:6px;background:#f0f0ff;position:relative;">';
+                html += '<button onclick="deleteCustomSurface(\'' + type + '\',' + idx + ')" style="position:absolute;top:8px;right:8px;background:#dc3545;color:#fff;border:none;border-radius:4px;width:24px;height:24px;cursor:pointer;font-size:14px;line-height:24px;">×</button>';
+                html += '<h4 style="color:#667eea;margin-bottom:10px;">' + surface.name + ' <span style="font-size:10px;color:#999;">(custom)</span></h4>';
+                html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">';
+                html += '<div>';
+                html += '<label style="font-size:10pt;color:#666;">' + (surface.calcType === 'flat' ? 'Flat Rate ($)' : 'Labor Rate (' + surface.unit + ')') + '</label>';
+                html += '<input type="number" id="custom_' + type + '_labor_' + idx + '" value="' + (surface.laborRate || '') + '" step="0.01" min="0" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;background:#fff;">';
+                html += '</div>';
+                if (surface.calcType === 'area') {
+                    html += '<div>';
+                    html += '<label style="font-size:10pt;color:#666;">Spread Rate (sq ft/gal)</label>';
+                    html += '<input type="number" id="custom_' + type + '_coverage_' + idx + '" value="' + (surface.coverage || '') + '" step="1" min="0" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;background:#fff;">';
+                    html += '</div>';
+                } else {
+                    html += '<div></div>';
+                }
+                html += '</div></div>';
+            });
+            container.innerHTML = html;
+        }
+
+        function addCustomSurface(type) {
+            const name = prompt('Enter surface name:');
+            if (!name || !name.trim()) return;
+
+            const trimmed = name.trim();
+            const allSurfaces = type === 'exterior' ? EXTERIOR_SURFACES : INTERIOR_SURFACES;
+            if (allSurfaces.includes(trimmed)) {
+                alert('A surface named "' + trimmed + '" already exists.');
+                return;
+            }
+
+            const calcType = confirm('Does this surface use area-based pricing (sq ft)?\n\nOK = Area-based (sq ft/hour + coverage)\nCancel = Flat rate ($ per unit)') ? 'area' : 'flat';
+
+            const newSurface = {
+                name: trimmed,
+                laborRate: calcType === 'area' ? 100 : 50,
+                coverage: calcType === 'area' ? 250 : 0,
+                unit: calcType === 'area' ? 'sq ft/hour' : '$ per unit',
+                calcType: calcType
+            };
+
+            if (type === 'exterior') {
+                customExteriorSurfaces.push(newSurface);
+            } else {
+                customInteriorSurfaces.push(newSurface);
+            }
+
+            rebuildSurfaceLists();
+            displayCustomSurfaces(type);
+        }
+
+        function deleteCustomSurface(type, idx) {
+            if (!confirm('Delete this custom surface?')) return;
+            if (type === 'exterior') {
+                customExteriorSurfaces.splice(idx, 1);
+            } else {
+                customInteriorSurfaces.splice(idx, 1);
+            }
+            rebuildSurfaceLists();
+            displayCustomSurfaces(type);
+        }
+
         // Price Settings - Save to Firebase
         async function savePriceSettings() {
             try {
@@ -1285,9 +1374,22 @@
                     CabinetDoorPrice: parseFloat(document.getElementById('CabinetDoorPrice').value) || PRICING.CabinetDoorPrice,
                     CabinetDrawerPrice: parseFloat(document.getElementById('CabinetDrawerPrice').value) || PRICING.CabinetDrawerPrice,
                     SpindlePricePerCoat: parseFloat(document.getElementById('SpindlePricePerCoat').value) || PRICING.SpindlePricePerCoat,
-                    
+
                     updatedAt: new Date().toISOString()
                 };
+
+                // Collect updated custom surface values from inputs
+                customExteriorSurfaces.forEach((s, i) => {
+                    s.laborRate = parseFloat(document.getElementById('custom_exterior_labor_' + i)?.value) || s.laborRate;
+                    if (s.calcType === 'area') s.coverage = parseFloat(document.getElementById('custom_exterior_coverage_' + i)?.value) || s.coverage;
+                });
+                customInteriorSurfaces.forEach((s, i) => {
+                    s.laborRate = parseFloat(document.getElementById('custom_interior_labor_' + i)?.value) || s.laborRate;
+                    if (s.calcType === 'area') s.coverage = parseFloat(document.getElementById('custom_interior_coverage_' + i)?.value) || s.coverage;
+                });
+
+                pricingData.customExteriorSurfaces = JSON.parse(JSON.stringify(customExteriorSurfaces));
+                pricingData.customInteriorSurfaces = JSON.parse(JSON.stringify(customInteriorSurfaces));
                 
                 // Save to Firebase
                 const pricingQuery = query(collection(db, 'pricingSettings'), where('userId', '==', currentUser.uid));
@@ -1317,6 +1419,14 @@
                 
                 if (!pricingDocs.empty) {
                     const savedPricing = pricingDocs.docs[0].data();
+                    // Restore custom surfaces
+                    if (savedPricing.customExteriorSurfaces) {
+                        customExteriorSurfaces = savedPricing.customExteriorSurfaces;
+                    }
+                    if (savedPricing.customInteriorSurfaces) {
+                        customInteriorSurfaces = savedPricing.customInteriorSurfaces;
+                    }
+                    rebuildSurfaceLists();
                     // Update global PRICING with saved values
                     Object.assign(PRICING, savedPricing);
                 }
@@ -2341,9 +2451,19 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                         labor = qty * PRICING.DoorLaborHours * PRICING.LaborRate * coats;
                         material = (qty / PRICING.DoorPaintCoverage) * PRICING.PaintPricePerGallon * coats;
                         break;
-                    default:
-                        labor = (qty / 100) * PRICING.LaborRate * coats;
-                        material = (qty / 200) * PRICING.PaintPricePerGallon * coats;
+                    default: {
+                        const cs = customExteriorSurfaces.find(s => s.name === surface.surfaceType);
+                        if (cs && cs.calcType === 'area') {
+                            labor = (qty / (cs.laborRate || 100)) * PRICING.LaborRate * coats;
+                            material = cs.coverage ? (qty / cs.coverage) * PRICING.PaintPricePerGallon * coats : 0;
+                        } else if (cs && cs.calcType === 'flat') {
+                            labor = (cs.laborRate || 0) * qty * coats;
+                            material = 0;
+                        } else {
+                            labor = (qty / 100) * PRICING.LaborRate * coats;
+                            material = (qty / 200) * PRICING.PaintPricePerGallon * coats;
+                        }
+                    }
                 }
             } else {
                 switch(surface.surfaceType) {
@@ -2380,9 +2500,19 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                         labor = PRICING.SpindlePricePerCoat * PRICING.SpindleStandardCoats * qty;
                         material = 0;
                         break;
-                    default:
-                        labor = (qty / 100) * PRICING.LaborRate * coats;
-                        material = (qty / 300) * PRICING.InteriorPaintPricePerGallon * coats;
+                    default: {
+                        const cs = customInteriorSurfaces.find(s => s.name === surface.surfaceType);
+                        if (cs && cs.calcType === 'area') {
+                            labor = (qty / (cs.laborRate || 100)) * PRICING.LaborRate * coats;
+                            material = cs.coverage ? (qty / cs.coverage) * PRICING.InteriorPaintPricePerGallon * coats : 0;
+                        } else if (cs && cs.calcType === 'flat') {
+                            labor = (cs.laborRate || 0) * qty * coats;
+                            material = 0;
+                        } else {
+                            labor = (qty / 100) * PRICING.LaborRate * coats;
+                            material = (qty / 300) * PRICING.InteriorPaintPricePerGallon * coats;
+                        }
+                    }
                 }
             }
             
