@@ -2449,6 +2449,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 profileId: job.profileId,
                 rooms: job.rooms || [],
                 basePrice: job.basePrice || job.grandTotal,
+                priceOverride: job.priceOverride || false,
                 discountType: job.discountType,
                 discountValue: job.discountValue,
                 discountName: job.discountName,
@@ -2523,6 +2524,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 profileId: job.profileId,
                 rooms: job.rooms || [],
                 basePrice: job.basePrice || job.grandTotal,
+                priceOverride: job.priceOverride || false,
                 discountType: job.discountType,
                 discountValue: job.discountValue,
                 discountName: job.discountName,
@@ -4034,9 +4036,12 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
             content.innerHTML = roomsHTML;
 
-            currentEstimate.basePrice = totalLabor + totalMaterials;
             currentEstimate.totalLabor = totalLabor;
             currentEstimate.totalMaterials = totalMaterials;
+            // Only set basePrice from calculation if user hasn't manually overridden it
+            if (!currentEstimate.priceOverride) {
+                currentEstimate.basePrice = totalLabor + totalMaterials;
+            }
 
             updateDiscountPreview();
         }
@@ -4126,11 +4131,14 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
         // Manual price edit — tap base price to override
         window.editBasePrice = function() {
             const current = currentEstimate.basePrice || 0;
-            const newPrice = prompt('Enter new base price:', current.toFixed(2));
+            const calcPrice = (currentEstimate.totalLabor || 0) + (currentEstimate.totalMaterials || 0);
+            const newPrice = prompt('Enter new base price (calculated: $' + calcPrice.toFixed(2) + '):', current.toFixed(2));
             if (newPrice === null) return;
             const parsed = parseFloat(newPrice);
             if (isNaN(parsed) || parsed < 0) { alert('Invalid price'); return; }
             currentEstimate.basePrice = parsed;
+            // Mark as overridden so it doesn't get recalculated
+            currentEstimate.priceOverride = true;
             updateDiscountPreview();
         };
 
@@ -4269,6 +4277,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 profileId: currentEstimate.profileId,
                 rooms: currentEstimate.rooms,
                 basePrice: currentEstimate.basePrice,
+                priceOverride: currentEstimate.priceOverride || false,
                 discountType: currentEstimate.discountType,
                 discountValue: currentEstimate.discountValue,
                 discountName: currentEstimate.discountName,
