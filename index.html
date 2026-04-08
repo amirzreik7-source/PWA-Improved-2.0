@@ -667,7 +667,7 @@
         <div id="proposalViewScreen" class="screen">
             <div class="no-print" style="display:flex;gap:10px;margin-bottom:15px;flex-wrap:wrap;">
                 <button class="btn btn-back" onclick="exitProposalView()" style="flex:0 0 auto;">← Back</button>
-                <button class="btn btn-success" onclick="window.print()" style="flex:1;">🖨️ Print / Save PDF</button>
+                <button class="btn btn-success" id="printPdfBtn" onclick="fastPrint()" style="flex:1;">🖨️ Print / Save PDF</button>
             </div>
             <div id="proposalContent" style="background:#fff;"></div>
         </div>
@@ -4422,6 +4422,42 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
         window.exitProposalView = function() {
             showScreen(window._proposalReturnScreen || 'homeScreen');
+        };
+
+        window.fastPrint = function() {
+            const btn = document.getElementById('printPdfBtn');
+            btn.textContent = 'Preparing...';
+            btn.disabled = true;
+
+            // Hide all non-proposal screens from DOM to reduce print render load
+            const allScreens = document.querySelectorAll('.screen');
+            const hidden = [];
+            allScreens.forEach(s => {
+                if (s.id !== 'proposalViewScreen' && s.classList.contains('active') === false) {
+                    s.style.display = 'none';
+                    hidden.push(s);
+                }
+            });
+
+            // Pre-decode all images so Safari doesn't block on them during print
+            const imgs = document.querySelectorAll('#proposalContent img');
+            const loaded = [...imgs].map(img => {
+                if (img.complete) return Promise.resolve();
+                return new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
+            });
+
+            Promise.all(loaded).then(() => {
+                // Give Safari a frame to settle layout
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        window.print();
+                        // Restore hidden screens
+                        hidden.forEach(s => s.style.display = '');
+                        btn.textContent = '🖨️ Print / Save PDF';
+                        btn.disabled = false;
+                    });
+                });
+            });
         };
 
         // Generate Proposal — renders in-app (no popup, works in Safari PWA)
