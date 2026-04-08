@@ -191,8 +191,9 @@
             <h2 class="screen-title" id="step4Title">Select Sides/Rooms</h2>
             <p class="screen-subtitle" id="step4Subtitle">Click each side/room to add surfaces</p>
             
+            <button class="btn btn-info" onclick="openBulkChangeModal()" style="width:100%;margin-bottom:15px;">🔄 Bulk Change</button>
             <div id="sidesRoomsCards"></div>
-            
+
             <div class="form-group" style="margin-top:20px;">
                 <label>Add Custom Side/Room:</label>
                 <div style="display: flex; gap: 10px;">
@@ -458,6 +459,89 @@
             <button class="btn btn-success btn-large" onclick="saveService()">Save Service</button>
         </div>
 
+        <!-- BULK CHANGE MODAL -->
+        <div id="bulkChangeModal" class="screen">
+            <button class="btn btn-back" onclick="showScreen('estimateStep4Screen')">← Back</button>
+            <h2 class="screen-title">Bulk Change</h2>
+
+            <!-- Step 1: Pick surface type -->
+            <div id="bulkStep1">
+                <p class="screen-subtitle">Select a surface type to change across all rooms/sides</p>
+                <div id="bulkSurfaceList"></div>
+            </div>
+
+            <!-- Step 2: Pick which rooms -->
+            <div id="bulkStep2" class="hidden">
+                <p class="screen-subtitle" id="bulkStep2Title">Select which rooms/sides to update</p>
+                <div style="margin-bottom:10px;">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;padding:8px 0;">
+                        <input type="checkbox" id="bulkSelectAll" onchange="bulkToggleAll()" checked style="width:20px;height:20px;"> Select All
+                    </label>
+                </div>
+                <div id="bulkRoomChecks"></div>
+                <button class="btn btn-primary btn-large" onclick="bulkGoToStep3()" style="margin-top:15px;">Next → Choose Changes</button>
+            </div>
+
+            <!-- Step 3: Pick what to change -->
+            <div id="bulkStep3" class="hidden">
+                <p class="screen-subtitle">Change only what you need — leave others on "Don't change"</p>
+                <div class="room-card">
+                    <h3>Product</h3>
+                    <div class="form-group">
+                        <select id="bulkProduct"><option value="">— Don't change —</option></select>
+                    </div>
+                </div>
+                <div class="room-card">
+                    <h3>Sheen</h3>
+                    <div class="form-group">
+                        <input type="text" id="bulkSheen" list="sheenOptions" placeholder="Don't change">
+                    </div>
+                </div>
+                <div class="room-card">
+                    <h3>Color</h3>
+                    <div class="form-group">
+                        <input type="text" id="bulkColor" placeholder="Don't change">
+                    </div>
+                </div>
+                <div class="room-card">
+                    <h3>Coats</h3>
+                    <div class="form-group">
+                        <select id="bulkCoats">
+                            <option value="">— Don't change —</option>
+                            <option value="1">1 Coat</option>
+                            <option value="2">2 Coats</option>
+                            <option value="3">3 Coats</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="room-card">
+                    <h3>Primer</h3>
+                    <div class="form-group">
+                        <select id="bulkPrimerAction">
+                            <option value="">— Don't change —</option>
+                            <option value="add">Add Primer</option>
+                            <option value="remove">Remove Primer</option>
+                        </select>
+                    </div>
+                    <div id="bulkPrimerDetails" class="hidden">
+                        <div class="form-group">
+                            <label>Primer Product</label>
+                            <select id="bulkPrimerProduct"></select>
+                        </div>
+                        <div class="form-group">
+                            <label>Primer Coats</label>
+                            <select id="bulkPrimerCoats">
+                                <option value="1">1 Coat</option>
+                                <option value="2">2 Coats</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div id="bulkSummary" style="padding:15px;background:#eff6ff;border-radius:8px;margin-bottom:15px;"></div>
+                <button class="btn btn-success btn-large" onclick="applyBulkChange()">✓ Apply Bulk Change</button>
+            </div>
+        </div>
+
         <!-- NEW ESTIMATE: STEP 6 - REVIEW -->
         <div id="estimateStep6Screen" class="screen">
             <div id="step6StepIndicator" class="step-indicator">Step 6 of 6</div>
@@ -681,15 +765,10 @@
                     <option value="Behr">Behr</option>
                     <option value="Other">Other</option>
                 </select></div>
-                <div class="form-group"><label>Sheen *</label><select id="productSheen" required>
-                    <option value="">-- Select Sheen --</option>
-                    <option value="Soft Gloss">Soft Gloss</option>
-                    <option value="Semi-Gloss">Semi-Gloss</option>
-                    <option value="Matte">Matte</option>
-                    <option value="Flat">Flat</option>
-                    <option value="Eggshell">Eggshell</option>
-                    <option value="Satin">Satin</option>
-                </select></div>
+                <div class="form-group"><label>Sheen *</label><input type="text" id="productSheen" list="sheenOptions" required placeholder="e.g. Semi-Gloss, Matte, Flat...">
+                <datalist id="sheenOptions">
+                    <option value="Soft Gloss"><option value="Semi-Gloss"><option value="Matte"><option value="Flat"><option value="Eggshell"><option value="Satin">
+                </datalist></div>
                 <div class="form-group"><label>Type *</label><select id="productType" required>
                     <option value="">-- Select Type --</option>
                     <option value="Exterior">Exterior</option>
@@ -1968,13 +2047,13 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 sheen: document.getElementById('productSheen').value,
                 type: document.getElementById('productType').value
             };
-            
+
             if (editingProductId) {
                 await updateDoc(doc(db, 'products', editingProductId), product);
             } else {
                 await addDoc(collection(db, 'products'), product);
             }
-            
+
             editingProductId = null;
             document.getElementById('productForm').reset();
             await loadProducts();
@@ -3511,6 +3590,157 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             `).join('');
         }
         
+        // === BULK CHANGE ===
+        window._bulkSurfaceType = '';
+        window._bulkSelectedRooms = [];
+
+        window.openBulkChangeModal = function() {
+            if (!currentEstimate.rooms || currentEstimate.rooms.length === 0) { alert('No rooms/sides to update'); return; }
+
+            // Find all surface types used across rooms, with counts
+            const surfaceMap = {};
+            currentEstimate.rooms.forEach(room => {
+                room.surfaces.forEach(s => {
+                    if (!surfaceMap[s.surfaceType]) surfaceMap[s.surfaceType] = [];
+                    surfaceMap[s.surfaceType].push(room.name);
+                });
+            });
+
+            if (Object.keys(surfaceMap).length === 0) { alert('No surfaces configured yet'); return; }
+
+            const container = document.getElementById('bulkSurfaceList');
+            container.innerHTML = '';
+            Object.entries(surfaceMap).forEach(([surfaceType, rooms]) => {
+                const card = document.createElement('div');
+                card.className = 'room-card';
+                card.style.cssText = 'cursor:pointer;padding:15px;margin-bottom:10px;';
+                card.innerHTML = `<h3>${surfaceType}</h3><p style="color:#666;">${rooms.length} ${currentEstimate.jobType === 'Interior' ? 'room' : 'side'}(s): ${rooms.join(', ')}</p>`;
+                card.addEventListener('click', () => bulkSelectSurface(surfaceType, rooms));
+                container.appendChild(card);
+            });
+
+            document.getElementById('bulkStep1').classList.remove('hidden');
+            document.getElementById('bulkStep2').classList.add('hidden');
+            document.getElementById('bulkStep3').classList.add('hidden');
+            showScreen('bulkChangeModal');
+        };
+
+        function bulkSelectSurface(surfaceType, rooms) {
+            window._bulkSurfaceType = surfaceType;
+            const label = currentEstimate.jobType === 'Interior' ? 'rooms' : 'sides';
+            document.getElementById('bulkStep2Title').textContent = `Select which ${label} to update "${surfaceType}"`;
+
+            const container = document.getElementById('bulkRoomChecks');
+            container.innerHTML = rooms.map(name => `
+                <label style="display:flex;align-items:center;gap:10px;padding:10px;background:#f8f9fa;border-radius:8px;margin-bottom:8px;cursor:pointer;font-size:15px;">
+                    <input type="checkbox" class="bulk-room-check" value="${name}" checked style="width:20px;height:20px;"> ${name}
+                </label>
+            `).join('');
+            document.getElementById('bulkSelectAll').checked = true;
+
+            document.getElementById('bulkStep1').classList.add('hidden');
+            document.getElementById('bulkStep2').classList.remove('hidden');
+        }
+
+        window.bulkToggleAll = function() {
+            const checked = document.getElementById('bulkSelectAll').checked;
+            document.querySelectorAll('.bulk-room-check').forEach(cb => cb.checked = checked);
+        };
+
+        window.bulkGoToStep3 = function() {
+            const selected = [...document.querySelectorAll('.bulk-room-check:checked')].map(cb => cb.value);
+            if (selected.length === 0) { alert('Select at least one room/side'); return; }
+            window._bulkSelectedRooms = selected;
+
+            // Populate product dropdown
+            const isExterior = currentEstimate.jobType === 'Exterior';
+            const availableProducts = products.filter(p => p.type === currentEstimate.jobType || p.type === 'Both');
+            const prodSelect = document.getElementById('bulkProduct');
+            prodSelect.innerHTML = '<option value="">— Don\'t change —</option>' + availableProducts.map(p => `<option value="${p.id}">${p.brand} - ${p.name} - ${p.sheen}</option>`).join('');
+
+            // Populate primer product dropdown
+            const primerSelect = document.getElementById('bulkPrimerProduct');
+            primerSelect.innerHTML = availableProducts.map(p => `<option value="${p.id}">${p.brand} - ${p.name} - ${p.sheen}</option>`).join('');
+
+            // Reset fields
+            document.getElementById('bulkSheen').value = '';
+            document.getElementById('bulkColor').value = '';
+            document.getElementById('bulkCoats').value = '';
+            document.getElementById('bulkPrimerAction').value = '';
+            document.getElementById('bulkPrimerDetails').classList.add('hidden');
+
+            // Show/hide primer details on change
+            document.getElementById('bulkPrimerAction').onchange = function() {
+                document.getElementById('bulkPrimerDetails').classList.toggle('hidden', this.value !== 'add');
+            };
+
+            // Update summary on any change
+            const updateSummary = () => {
+                const changes = [];
+                if (document.getElementById('bulkProduct').value) changes.push('Product');
+                if (document.getElementById('bulkSheen').value) changes.push('Sheen');
+                if (document.getElementById('bulkColor').value) changes.push('Color');
+                if (document.getElementById('bulkCoats').value) changes.push('Coats');
+                if (document.getElementById('bulkPrimerAction').value) changes.push('Primer');
+                const summary = document.getElementById('bulkSummary');
+                if (changes.length === 0) {
+                    summary.innerHTML = '<p style="color:#666;">No changes selected yet.</p>';
+                } else {
+                    summary.innerHTML = `<p style="font-weight:600;color:#1e3a8a;">Will change: ${changes.join(', ')}</p><p style="color:#666;">Across ${window._bulkSelectedRooms.length} ${currentEstimate.jobType === 'Interior' ? 'room' : 'side'}(s) for "${window._bulkSurfaceType}"</p>`;
+                }
+            };
+            ['bulkProduct','bulkSheen','bulkColor','bulkCoats','bulkPrimerAction'].forEach(id => {
+                document.getElementById(id).addEventListener('input', updateSummary);
+                document.getElementById(id).addEventListener('change', updateSummary);
+            });
+            updateSummary();
+
+            document.getElementById('bulkStep2').classList.add('hidden');
+            document.getElementById('bulkStep3').classList.remove('hidden');
+        };
+
+        window.applyBulkChange = function() {
+            const surfaceType = window._bulkSurfaceType;
+            const rooms = window._bulkSelectedRooms;
+            const newProductId = document.getElementById('bulkProduct').value;
+            const newSheen = document.getElementById('bulkSheen').value.trim();
+            const newColor = document.getElementById('bulkColor').value.trim();
+            const newCoats = document.getElementById('bulkCoats').value;
+            const primerAction = document.getElementById('bulkPrimerAction').value;
+            const primerProductId = document.getElementById('bulkPrimerProduct').value;
+            const primerCoats = parseInt(document.getElementById('bulkPrimerCoats').value) || 1;
+
+            if (!newProductId && !newSheen && !newColor && !newCoats && !primerAction) {
+                alert('No changes selected'); return;
+            }
+
+            let updated = 0;
+            currentEstimate.rooms.forEach(room => {
+                if (!rooms.includes(room.name)) return;
+                const surface = room.surfaces.find(s => s.surfaceType === surfaceType);
+                if (!surface) return;
+
+                if (newProductId) surface.productId = newProductId;
+                if (newSheen) surface.sheen = newSheen;
+                if (newColor) surface.color = newColor;
+                if (newCoats) surface.coats = parseInt(newCoats);
+                if (primerAction === 'add') {
+                    surface.usePrimer = true;
+                    surface.primerProductId = primerProductId;
+                    surface.primerCoats = primerCoats;
+                } else if (primerAction === 'remove') {
+                    surface.usePrimer = false;
+                    surface.primerProductId = '';
+                    surface.primerCoats = 0;
+                }
+                updated++;
+            });
+
+            alert(`Updated ${surfaceType} across ${updated} ${currentEstimate.jobType === 'Interior' ? 'room' : 'side'}(s)`);
+            displaySidesRoomsCards();
+            showScreen('estimateStep4Screen');
+        };
+
         // Delete individual surface
         window.deleteSurface = function(surfaceType) {
             if (!confirm('Delete this surface?')) return;
@@ -4059,7 +4289,8 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 const ths = `background-color:#1e3a8a;color:#fff;padding:6px;text-align:left;font-size:8.5pt;font-weight:600;${pca}`;
                 let rows = '';
                 groupedRooms.forEach(room => {
-                    const rowCount = room.surfaces.length + 1;
+                    const svcCount = (room.additionalServices || []).length;
+                    const rowCount = room.surfaces.length + svcCount + 1;
                     const photos = room.photos || (room.photoData ? [room.photoData] : []);
                     const photoCell = photos.length > 0
                         ? `<td rowspan="${rowCount+1}" style="padding:4px;vertical-align:top"><div style="display:grid;grid-template-columns:${photos.length>1?'1fr 1fr':'1fr'};gap:3px">${photos.map(p=>'<img src="'+p+'" style="width:100%;height:auto;border-radius:3px;object-fit:cover">').join('')}</div></td>`
@@ -4075,8 +4306,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                     const brands = [...new Set(room.surfaces.map(s=>{const p=products.find(pr=>pr.id===s.productId);return p?p.brand:'Brand'}))].join(', ');
                     rows += `<tr><td colspan="5" style="padding:3px 6px;font-size:8.5pt;color:#666">Brands: ${brands}</td></tr>`;
                     if (room.additionalServices?.length > 0) {
-                        rows += `<tr><td colspan="6" style="padding:4px 6px;font-weight:600;font-size:9pt;color:#1e3a8a;background-color:#f0f5ff;${pca}">Additional Services</td></tr>`;
-                        room.additionalServices.forEach(svc => { rows += `<tr><td style="padding:3px 4px 3px 14px;font-size:9pt">${svc.name}</td><td colspan="3" style="font-size:9pt">${svc.description||''}</td><td style="font-size:9pt">${svc.qty>1?svc.qty+' × $'+svc.price.toFixed(2):'$'+svc.price.toFixed(2)}</td><td></td></tr>`; });
+                        room.additionalServices.forEach(svc => { rows += `<tr><td style="padding:4px 4px 4px 14px;font-size:9pt">${svc.name}</td><td colspan="3" style="font-size:9pt">${svc.description||''}</td><td style="padding:4px;font-size:9pt"></td></tr>`; });
                     }
                     if (room.notes) rows += `<tr><td colspan="5" style="padding:4px 6px;font-style:italic;color:#666;font-size:9pt">Note: ${room.notes}</td></tr>`;
                 });
