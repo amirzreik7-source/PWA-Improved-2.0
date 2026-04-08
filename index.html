@@ -747,8 +747,20 @@
         <div id="productsScreen" class="screen">
             <button class="btn btn-back" onclick="showScreen('homeScreen')">← Back</button>
             <h2 class="screen-title">Products</h2>
-            <button class="btn btn-success" onclick="showScreen('newProductScreen')" style="margin-bottom: 20px;">➕ Add Product</button>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                <button class="btn btn-info" onclick="openProductCatalog('Exterior')">🏠 Add Exterior</button>
+                <button class="btn btn-warning" onclick="openProductCatalog('Interior')">🛏️ Add Interior</button>
+            </div>
+            <button class="btn btn-success" onclick="showScreen('newProductScreen')" style="width:100%;margin-bottom:20px;">➕ Add Custom Product</button>
             <div id="productList"></div>
+        </div>
+
+        <!-- PRODUCT CATALOG SCREEN -->
+        <div id="productCatalogScreen" class="screen">
+            <button class="btn btn-back" onclick="showScreen('productsScreen')">← Back</button>
+            <h2 class="screen-title" id="catalogTitle">Exterior Products</h2>
+            <p class="screen-subtitle">Tap a product to add it. Pick the sheen you want.</p>
+            <div id="catalogList"></div>
         </div>
 
         <!-- NEW PRODUCT SCREEN -->
@@ -2084,6 +2096,86 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             document.getElementById('productForm').reset();
             document.getElementById('productFormTitle').textContent = 'New Product';
             showScreen('productsScreen');
+        };
+
+        // === PRODUCT CATALOG ===
+        const PRODUCT_CATALOG = {
+            Exterior: [
+                { brand: 'Benjamin Moore', name: 'Regal Select', sheens: ['Soft Gloss', 'Semi-Gloss', 'Satin', 'Flat'] },
+                { brand: 'Benjamin Moore', name: 'Ben Exterior', sheens: ['Soft Gloss', 'Semi-Gloss', 'Flat'] },
+                { brand: 'Benjamin Moore', name: 'Aura Exterior', sheens: ['Soft Gloss', 'Semi-Gloss', 'Satin', 'Flat'] },
+                { brand: 'Benjamin Moore', name: 'Ultra Spec EXT', sheens: ['Semi-Gloss', 'Satin', 'Flat'] },
+                { brand: 'Sherwin Williams', name: 'Duration', sheens: ['Soft Gloss', 'Semi-Gloss', 'Satin', 'Flat'] },
+                { brand: 'Sherwin Williams', name: 'Emerald', sheens: ['Soft Gloss', 'Semi-Gloss', 'Satin', 'Flat'] },
+                { brand: 'Sherwin Williams', name: 'SuperPaint', sheens: ['Soft Gloss', 'Semi-Gloss', 'Satin', 'Flat'] },
+                { brand: 'Sherwin Williams', name: 'A-100', sheens: ['Semi-Gloss', 'Satin', 'Flat'] },
+                { brand: 'Sherwin Williams', name: 'Resilience', sheens: ['Semi-Gloss', 'Satin', 'Flat'] },
+                { brand: 'Behr', name: 'Marquee Exterior', sheens: ['Semi-Gloss', 'Satin', 'Flat'] },
+                { brand: 'Behr', name: 'Ultra Exterior', sheens: ['Semi-Gloss', 'Satin', 'Flat'] },
+                { brand: 'Behr', name: 'Dynasty Exterior', sheens: ['Semi-Gloss', 'Satin', 'Flat'] },
+                { brand: 'PPG', name: 'Manor Hall', sheens: ['Semi-Gloss', 'Satin', 'Flat'] },
+                { brand: 'PPG', name: 'Timeless', sheens: ['Semi-Gloss', 'Satin', 'Flat'] },
+            ],
+            Interior: [
+                { brand: 'Benjamin Moore', name: 'Regal Select', sheens: ['Matte', 'Eggshell', 'Semi-Gloss', 'Flat'] },
+                { brand: 'Benjamin Moore', name: 'Ben Interior', sheens: ['Matte', 'Eggshell', 'Semi-Gloss', 'Flat'] },
+                { brand: 'Benjamin Moore', name: 'Aura', sheens: ['Matte', 'Eggshell', 'Semi-Gloss', 'Satin'] },
+                { brand: 'Benjamin Moore', name: 'Advance', sheens: ['Semi-Gloss', 'Satin', 'Matte'] },
+                { brand: 'Benjamin Moore', name: 'Ultra Spec 500', sheens: ['Eggshell', 'Semi-Gloss', 'Flat'] },
+                { brand: 'Benjamin Moore', name: 'Natura', sheens: ['Eggshell', 'Semi-Gloss', 'Flat'] },
+                { brand: 'Sherwin Williams', name: 'Emerald', sheens: ['Matte', 'Eggshell', 'Semi-Gloss', 'Satin', 'Flat'] },
+                { brand: 'Sherwin Williams', name: 'Duration', sheens: ['Matte', 'Eggshell', 'Semi-Gloss', 'Satin', 'Flat'] },
+                { brand: 'Sherwin Williams', name: 'Cashmere', sheens: ['Matte', 'Eggshell', 'Semi-Gloss'] },
+                { brand: 'Sherwin Williams', name: 'SuperPaint', sheens: ['Matte', 'Eggshell', 'Semi-Gloss', 'Satin', 'Flat'] },
+                { brand: 'Sherwin Williams', name: 'ProClassic', sheens: ['Semi-Gloss', 'Satin'] },
+                { brand: 'Sherwin Williams', name: 'ProMar 200', sheens: ['Eggshell', 'Semi-Gloss', 'Flat'] },
+                { brand: 'Behr', name: 'Marquee Interior', sheens: ['Matte', 'Eggshell', 'Semi-Gloss', 'Satin'] },
+                { brand: 'Behr', name: 'Ultra Interior', sheens: ['Matte', 'Eggshell', 'Semi-Gloss', 'Flat'] },
+                { brand: 'Behr', name: 'Dynasty Interior', sheens: ['Matte', 'Eggshell', 'Semi-Gloss', 'Flat'] },
+                { brand: 'PPG', name: 'Manor Hall', sheens: ['Eggshell', 'Semi-Gloss', 'Satin', 'Flat'] },
+                { brand: 'PPG', name: 'Timeless', sheens: ['Eggshell', 'Semi-Gloss', 'Satin', 'Flat'] },
+            ]
+        };
+
+        window.openProductCatalog = function(type) {
+            document.getElementById('catalogTitle').textContent = type + ' Products';
+            const catalog = PRODUCT_CATALOG[type] || [];
+            const container = document.getElementById('catalogList');
+
+            // Group by brand
+            const brands = {};
+            catalog.forEach(p => {
+                if (!brands[p.brand]) brands[p.brand] = [];
+                brands[p.brand].push(p);
+            });
+
+            container.innerHTML = Object.entries(brands).map(([brand, items]) => `
+                <div style="margin-bottom:20px;">
+                    <h3 style="color:#1e3a8a;margin-bottom:10px;padding-bottom:5px;border-bottom:2px solid #e0e0e0;">${brand}</h3>
+                    ${items.map(p => `
+                        <div class="room-card" style="margin-bottom:10px;padding:15px;">
+                            <h4 style="margin:0 0 8px 0;">${p.name}</h4>
+                            <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                                ${p.sheens.map(sh => `<button class="btn btn-small" style="background:#e7f0ff;color:#1e3a8a;border:2px solid #667eea;padding:8px 14px;" onclick="addCatalogProduct('${brand}','${p.name}','${sh}','${type}')">${sh}</button>`).join('')}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `).join('');
+
+            showScreen('productCatalogScreen');
+        };
+
+        window.addCatalogProduct = async function(brand, name, sheen, type) {
+            // Check if this exact product already exists
+            const exists = products.find(p => p.brand === brand && p.name === name && p.sheen === sheen && (p.type === type || p.type === 'Both'));
+            if (exists) {
+                alert(`${brand} ${name} (${sheen}) already in your products`);
+                return;
+            }
+            await addDoc(collection(db, 'products'), { userId: currentUser.uid, name, brand, sheen, type });
+            await loadProducts();
+            alert(`Added: ${brand} ${name} — ${sheen}`);
         };
 
         // Profiles
