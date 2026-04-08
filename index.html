@@ -527,13 +527,6 @@
                     </label>
                     <p style="font-size:12px;color:#666;margin-top:4px;">OFF = show total only. Scope of work always shows.</p>
                 </div>
-                <div class="form-group" style="margin-top:10px;">
-                    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
-                        <input type="checkbox" id="showCustomSurfacePrices" style="width:20px;height:20px;">
-                        Show custom surface prices as line items
-                    </label>
-                    <p style="font-size:12px;color:#666;margin-top:4px;">OFF = custom surface costs included in total only.</p>
-                </div>
             </div>
 
             <!-- Lead Status -->
@@ -3143,10 +3136,10 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
                 const card = document.createElement('div');
                 card.className = 'room-card';
-                card.style.cssText = 'cursor:pointer;position:relative;padding:15px;margin-bottom:10px;border:2px solid ' + (isCustom ? '#667eea' : '#ddd') + ';border-radius:8px;background:#fff;';
+                card.style.cssText = 'cursor:pointer;position:relative;padding:15px;margin-bottom:10px;border:2px solid #ddd;border-radius:8px;background:#fff;';
 
                 card.innerHTML = `
-                    <h3>${isInterior ? '🛏️' : '🏠'} ${name}${isCustom ? ' <span style="font-size:11px;color:#667eea;font-weight:normal;">(custom)</span>' : ''}</h3>
+                    <h3>${isInterior ? '🛏️' : '🏠'} ${name}</h3>
                     <p style="color:#666;margin:5px 0;">${surfaceCount} surface(s) configured</p>
                     <p style="font-weight:bold;color:#11998e;font-size:14pt;margin:5px 0;">$${total.toFixed(2)}</p>
                 `;
@@ -3579,7 +3572,6 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
         function displayEstimateReview() {
             const content = document.getElementById('estimateReviewContent');
             const showRoomPrices = document.getElementById('showRoomPrices')?.checked === true;
-            const showCustomPrices = document.getElementById('showCustomSurfacePrices')?.checked === true;
 
             let totalLabor = 0;
             let totalMaterials = 0;
@@ -3605,13 +3597,11 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                         <div style="margin:6px 0;">
                             ${room.surfaces.map(s => {
                                 const product = products.find(p => p.id === s.productId);
-                                const isCustom = !['Walls','Ceiling','Doors','Windows','Baseboards','Closets','Cabinet Doors','Cabinet Drawers','Spindles','Siding','Soffit','Fascia','Front Door','Shutters','Railings','Bay Windows','Garage Door','Garage Door Frame','Front Door Frame'].includes(s.surfaceType);
-                                const priceVisible = isCustom ? showCustomPrices : true;
                                 return `
                                     <div style="margin:4px 0;padding:8px;background:#f8f9fa;border-radius:6px;font-size:13px;">
                                         <strong>${s.surfaceType}</strong>: ${s.quantity} ${s.unit} •
                                         ${product ? product.brand + ' ' + product.name : ''} ${s.sheen} ${s.color} • ${s.coats} coat(s)
-                                        ${showRoomPrices && priceVisible ? `<span style="float:right;color:#11998e;font-weight:600;">$${s.total.toFixed(2)}</span>` : ''}
+                                        ${showRoomPrices ? `<span style="float:right;color:#11998e;font-weight:600;">$${s.total.toFixed(2)}</span>` : ''}
                                     </div>
                                 `;
                             }).join('')}
@@ -3689,7 +3679,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
         // Refresh review when toggles change
         document.addEventListener('change', function(e) {
-            if (e.target.id === 'showRoomPrices' || e.target.id === 'showCustomSurfacePrices') {
+            if (e.target.id === 'showRoomPrices') {
                 displayEstimateReview();
             }
         });
