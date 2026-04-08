@@ -2579,17 +2579,20 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 }
             }
             
-            // Add primer material cost if primer is used
-            let primerMaterial = 0;
+            // Add primer cost — same labor + material formula as paint coats
+            let primerLabor = 0, primerMaterial = 0;
             if (surface.usePrimer && surface.primerCoats > 0) {
-                const primerCoats = surface.primerCoats;
-                const pricePerGallon = currentEstimate.jobType === 'Exterior' ? PRICING.PaintPricePerGallon : PRICING.InteriorPaintPricePerGallon;
-                const coverage = currentEstimate.jobType === 'Exterior' ? 350 : 350; // primer coverage ~350 sqft/gal
-                primerMaterial = (qty / coverage) * pricePerGallon * primerCoats;
+                const pc = surface.primerCoats;
+                // Primer uses the exact same per-coat labor & material as paint
+                const laborPerCoat = coats > 0 ? (labor / coats) : 0;
+                const materialPerCoat = coats > 0 ? (material / coats) : 0;
+                primerLabor = laborPerCoat * pc;
+                primerMaterial = materialPerCoat * pc;
+                labor += primerLabor;
                 material += primerMaterial;
             }
 
-            return { laborCost: labor, materialCost: material, primerMaterialCost: primerMaterial, total: labor + material };
+            return { laborCost: labor, materialCost: material, primerLaborCost: primerLabor, primerMaterialCost: primerMaterial, total: labor + material };
         }
 
         function calculateRoomTotal(room) {
