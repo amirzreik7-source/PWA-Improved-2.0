@@ -1295,7 +1295,7 @@
             container.innerHTML = html;
         }
 
-        function addCustomSurface(type) {
+        window.addCustomSurface = function(type) {
             // Show a custom modal for adding surface
             const overlay = document.createElement('div');
             overlay.id = 'customSurfaceOverlay';
@@ -1332,9 +1332,9 @@
                 </div>
             `;
             document.body.appendChild(overlay);
-        }
+        };
 
-        function confirmAddCustomSurface(type) {
+        window.confirmAddCustomSurface = function(type) {
             const name = document.getElementById('newSurfaceName').value.trim();
             if (!name) { alert('Please enter a surface name.'); return; }
 
@@ -1374,9 +1374,9 @@
             rebuildSurfaceLists();
             displayCustomSurfaces(type);
             document.getElementById('customSurfaceOverlay').remove();
-        }
+        };
 
-        function deleteCustomSurface(type, idx) {
+        window.deleteCustomSurface = function(type, idx) {
             if (!confirm('Delete this custom surface?')) return;
             if (type === 'exterior') {
                 customExteriorSurfaces.splice(idx, 1);
@@ -1385,7 +1385,7 @@
             }
             rebuildSurfaceLists();
             displayCustomSurfaces(type);
-        }
+        };
 
         // Price Settings - Save to Firebase
         async function savePriceSettings() {
