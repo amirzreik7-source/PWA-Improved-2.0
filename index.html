@@ -628,7 +628,7 @@
                 <summary style="cursor:pointer;font-size:13px;color:#666;">⚙️ AI Settings</summary>
                 <div class="form-group" style="margin-top:10px;">
                     <label style="font-size:13px;">Proxy URL</label>
-                    <input type="text" id="aiProxyUrl" placeholder="https://your-worker.workers.dev" style="font-size:13px;padding:8px;" value="">
+                    <input type="text" id="aiProxyUrl" placeholder="https://your-worker.workers.dev" style="font-size:13px;padding:8px;" value="https://damp-moon-203c.amirzreik7.workers.dev">
                     <p style="font-size:11px;color:#999;margin-top:4px;">Cloudflare Worker URL for Claude API proxy</p>
                 </div>
             </details>
@@ -4209,15 +4209,18 @@ ${currentEstimate.customerSignature ? '<p>Signature:</p><img src="'+currentEstim
 
         window.openAIEstimateGenerator = function(customerId) {
             window._aiCustomerId = customerId;
-            // Reset chat
+            // Reset chat and conversation history
+            aiConversationHistory = [];
             const msgs = document.getElementById('aiChatMessages');
             msgs.innerHTML = `
                 <div style="background:#e7f0ff;padding:10px 14px;border-radius:10px;margin-bottom:10px;font-size:14px;color:#333;">
-                    <strong>AI Assistant:</strong> Tell me about the painting job. For example:<br><br>
-                    <em style="color:#667eea;">"Interior paint job. 3 bedrooms, living room, kitchen. Walls and ceiling in each room. 2 coats."</em><br><br>
-                    <em style="color:#667eea;">"Exterior - front and back sides. Siding, soffit, fascia, 4 windows, front door. 2 coats."</em>
+                    <strong>AI Assistant:</strong> Describe the painting job and I'll build the estimate. I know your products and custom surfaces. For example:<br><br>
+                    <em style="color:#667eea;">"Interior - 3 bedrooms walls ceiling and crown molding, living room walls and ceiling, kitchen cabinets 20 doors 10 drawers. Use Benjamin Moore Regal. Prime the kitchen cabinets."</em><br><br>
+                    <em style="color:#667eea;">"Exterior front and back. Siding, soffit, fascia, 4 windows, front door. 2 coats semi-gloss."</em><br><br>
+                    After I generate, you can say things like <em>"add a bathroom"</em> or <em>"make it 3 coats"</em> to modify.
                 </div>`;
             document.getElementById('aiChatInput').value = '';
+            document.getElementById('aiSendBtn').textContent = 'Generate Estimate →';
             showScreen('aiChatScreen');
         };
 
@@ -4252,59 +4255,104 @@ ${currentEstimate.customerSignature ? '<p>Signature:</p><img src="'+currentEstim
             }
         }
 
-        // System prompt that instructs Claude to return structured JSON
-        const AI_SYSTEM_PROMPT = `You are an estimate generator for a house painting company called Northern Star Painters.
+        // AI conversation history for multi-turn
+        let aiConversationHistory = [];
 
-The user will describe a painting job in plain English. You must parse it and return ONLY valid JSON (no markdown, no explanation, just JSON).
+        // Build dynamic system prompt with user's actual products and custom surfaces
+        function buildAISystemPrompt() {
+            // Gather products
+            const productList = (window.products || []).map(p => `"${p.brand} ${p.name}" (id: ${p.id})`).join(', ');
+
+            // Gather custom surfaces
+            const customExt = customExteriorSurfaces.map(s => `"${s.name}" (${s.measureUnit})`).join(', ');
+            const customInt = customInteriorSurfaces.map(s => `"${s.name}" (${s.measureUnit})`).join(', ');
+
+            return `You are a smart estimate generator for Northern Star Painters, a professional house painting company.
+
+The user will describe a painting job in plain English (often via voice — expect typos, grammar issues, and casual speech). You must understand the intent, clean up the language, and return ONLY valid JSON (no markdown, no explanation, just the JSON object).
 
 Return this exact structure:
 {
   "jobType": "Interior" or "Exterior",
   "rooms": [
     {
-      "name": "Room/Side Name",
+      "name": "Room Name",
       "length": 12,
       "width": 12,
       "height": 9,
+      "notes": "Clean, professional note about this room if user mentioned anything special",
       "surfaces": [
         {
           "surfaceType": "Walls",
           "quantity": 432,
           "coats": 2,
           "sheen": "Eggshell",
-          "color": "TBD"
+          "color": "TBD",
+          "productName": "Benjamin Moore Regal",
+          "usePrimer": false,
+          "primerCoats": 0
         }
       ]
     }
   ]
 }
 
+AVAILABLE PRODUCTS IN OUR SYSTEM:
+${productList || 'No products configured yet — set productName to null'}
+
+If the user mentions a paint brand/product, match it to the closest product above and set "productName" to the exact name. If no match or not mentioned, set productName to null.
+
+SURFACE TYPES:
+Interior built-in: Walls, Ceiling, Doors, Windows, Baseboards, Closets, Cabinet Doors, Cabinet Drawers, Spindles
+${customInt ? 'Interior custom surfaces: ' + customInt : ''}
+Exterior built-in: Siding, Soffit, Fascia, Windows, Doors, Front Door, Bay Windows, Railings, Shutters, Front Door Frame, Garage Door, Garage Door Frame
+${customExt ? 'Exterior custom surfaces: ' + customExt : ''}
+
+CRITICAL: If the user mentions a surface that matches a custom surface name (e.g. "molding", "crown molding", "wainscoting"), use the EXACT custom surface name as surfaceType. Custom surfaces are real surfaces in our system — treat them identically to built-in surfaces.
+
+If the user mentions a surface that doesn't exist in ANY list above, use the closest match. If truly no match exists, use the exact name they gave — the system will handle it.
+
 RULES:
-- jobType must be "Interior" or "Exterior"
-- Interior surfaceType options: Walls, Ceiling, Doors, Windows, Baseboards, Closets, Cabinet Doors, Cabinet Drawers, Spindles
-- Exterior surfaceType options: Siding, Soffit, Fascia, Windows, Doors, Front Door, Bay Windows, Railings, Shutters, Front Door Frame, Garage Door, Garage Door Frame
+- jobType must be "Interior" or "Exterior" (or "Both" if user describes both — split into separate room groups)
 - Default coats to 2 if not specified
-- Default sheen: "Eggshell" for interior walls/ceiling, "Satin" for trim/doors/baseboards, "Semi-Gloss" for exterior
+- Default sheen: "Eggshell" for interior walls/ceiling, "Satin" for trim/doors/baseboards/molding, "Semi-Gloss" for exterior
 - Default color to "TBD" if not specified
-- If user says "walls and ceiling" for a room, create 2 surface entries
-- If user mentions multiple rooms, create entries for each
-- For exterior, use "Front", "Back", "Left Side", "Right Side" as room names
-- Keep room names simple and clear
+- If user says "walls and ceiling" create BOTH surface entries — never skip a surface the user mentioned
+- If user mentions multiple rooms, create ALL of them — never skip a room
+- For exterior, use "Front", "Back", "Left", "Right" as room/side names
+- Room names should be clean and professional (capitalize properly, fix typos)
 
-QUANTITY RULES (very important - always include quantity):
-- For Interior Walls: calculate as 2*(length*height) + 2*(width*height) in sq ft. If no dimensions given, use typical room: bedroom=320, living room=480, kitchen=400, bathroom=200, dining room=360
-- For Interior Ceiling: length * width in sq ft. Use same room size defaults
-- For Baseboards: 2*(length + width) in linear ft. Defaults: bedroom=44, living room=56, kitchen=48
-- For Doors: count as units (typically 1-2 per room)
-- For Windows: count as units (typically 1-2 per room)
-- For Closets: count as units (1 per bedroom typically)
-- For Exterior Siding: typical house side 400-600 sq ft
-- For Exterior Soffit/Fascia: typically 40-80 linear ft per side
-- For Exterior Windows/Doors: count as units
-- NEVER set quantity to 0. Always estimate a reasonable default.
-- length/width/height are for the room dimensions (interior only). Use reasonable defaults if not specified.
+NOTES:
+- If the user mentions anything special about a room (furniture to move, wallpaper removal, damage, high ceilings, accent walls, special prep), put it in the room "notes" field
+- Write notes in clean, professional English — fix any grammar, spelling, or unclear phrasing from the user
+- Keep notes concise but complete
 
-IMPORTANT: Return ONLY the JSON object. No other text.`;
+PRIMER:
+- If user mentions "prime", "primer", "priming", or "seal" for a surface, set usePrimer: true and primerCoats: 1
+- If user says "2 coats primer" set primerCoats: 2
+- Default usePrimer: false
+
+QUANTITY RULES (critical — always calculate):
+- Interior Walls: 2*(length*height) + 2*(width*height) sq ft. Defaults if no dimensions: bedroom=320, living room=480, kitchen=400, bathroom=200, dining room=360, hallway=280
+- Interior Ceiling: length * width sq ft. Use same room defaults
+- Baseboards/Crown Molding/any Lin Ft surface: 2*(length + width). Defaults: bedroom=44, living room=56, kitchen=48, bathroom=28
+- Doors: count as units (1-2 per room typically)
+- Windows: count as units (1-2 per room typically)
+- Closets: count as units (1 per bedroom)
+- Cabinet Doors/Drawers: count as units
+- Exterior Siding: 400-600 sq ft per side typically
+- Exterior Soffit/Fascia: 40-80 linear ft per side
+- NEVER set quantity to 0 — always estimate a reasonable default
+- length/width/height are room dimensions in feet. Use reasonable defaults if not specified.
+
+CONVERSATION:
+- This is a multi-turn conversation. If the user says "add a bathroom" or "change that to 3 coats" or "also include baseboards", update the FULL estimate (all rooms) and return the complete JSON again.
+- Always return the COMPLETE estimate with ALL rooms, not just the changes.
+
+IMPORTANT: Return ONLY the JSON object. No other text, no explanation, no markdown.`;
+        }
+
+        const AI_PROXY_URL = 'https://damp-moon-203c.amirzreik7.workers.dev';
 
         window.sendAIMessage = async function() {
             const input = document.getElementById('aiChatInput');
@@ -4316,20 +4364,18 @@ IMPORTANT: Return ONLY the JSON object. No other text.`;
             input.value = '';
             showAILoading(true);
 
-            const proxyUrl = document.getElementById('aiProxyUrl')?.value?.trim();
-            if (!proxyUrl) {
-                addAIChatMessage('ai', '⚠️ Please set your Proxy URL in AI Settings below. You need a Cloudflare Worker to connect to Claude.');
-                showAILoading(false);
-                return;
-            }
+            const proxyUrl = document.getElementById('aiProxyUrl')?.value?.trim() || AI_PROXY_URL;
+
+            // Add to conversation history
+            aiConversationHistory.push({ role: 'user', content: userText });
 
             try {
                 const response = await fetch(proxyUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        system: AI_SYSTEM_PROMPT,
-                        messages: [{ role: 'user', content: userText }]
+                        system: buildAISystemPrompt(),
+                        messages: aiConversationHistory
                     })
                 });
 
@@ -4340,10 +4386,12 @@ IMPORTANT: Return ONLY the JSON object. No other text.`;
                 const data = await response.json();
                 const aiText = data.content?.[0]?.text || data.error?.message || 'No response';
 
+                // Store AI response in conversation history
+                aiConversationHistory.push({ role: 'assistant', content: aiText });
+
                 // Try to parse JSON from AI response
                 let estimate;
                 try {
-                    // Extract JSON if wrapped in backticks
                     const jsonStr = aiText.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
                     estimate = JSON.parse(jsonStr);
                 } catch (parseErr) {
@@ -4359,15 +4407,28 @@ IMPORTANT: Return ONLY the JSON object. No other text.`;
                     return;
                 }
 
-                // Show summary
-                const roomList = estimate.rooms.map(r => `<strong>${r.name}</strong>: ${r.surfaces.map(s => s.surfaceType).join(', ')}`).join('<br>');
-                addAIChatMessage('ai', `Got it! Here's what I'll create:<br><br>
+                // Show summary with details
+                const roomList = estimate.rooms.map(r => {
+                    const surfaces = r.surfaces.map(s => {
+                        let detail = s.surfaceType;
+                        if (s.usePrimer) detail += ' +primer';
+                        if (s.productName) detail += ' (' + s.productName + ')';
+                        return detail;
+                    }).join(', ');
+                    const noteSnip = r.notes ? '<br><em style="font-size:12px;color:#666;">' + r.notes + '</em>' : '';
+                    return `<strong>${r.name}</strong>: ${surfaces}${noteSnip}`;
+                }).join('<br>');
+
+                addAIChatMessage('ai', `Got it! Here's the estimate:<br><br>
                     <strong>Type:</strong> ${estimate.jobType}<br>
-                    <strong>Rooms/Sides:</strong><br>${roomList}<br><br>
-                    Creating your estimate now...`);
+                    <strong>Rooms:</strong><br>${roomList}<br><br>
+                    Building estimate now... You can say <em>"add a bathroom"</em> or <em>"change to 3 coats"</em> to modify.`);
 
                 // Build the estimate
                 await buildEstimateFromAI(estimate);
+
+                // Update button text for follow-up
+                document.getElementById('aiSendBtn').textContent = 'Send Follow-up →';
 
             } catch (error) {
                 addAIChatMessage('ai', '❌ Error: ' + error.message);
@@ -4375,6 +4436,23 @@ IMPORTANT: Return ONLY the JSON object. No other text.`;
 
             showAILoading(false);
         };
+
+        // Fuzzy match product name to actual product in system
+        function matchProduct(productName) {
+            if (!productName || !window.products || window.products.length === 0) return null;
+            const search = productName.toLowerCase();
+            // Try exact match first
+            let match = window.products.find(p => (p.brand + ' ' + p.name).toLowerCase() === search);
+            if (match) return match.id;
+            // Try partial match
+            match = window.products.find(p => (p.brand + ' ' + p.name).toLowerCase().includes(search) || search.includes(p.name.toLowerCase()));
+            if (match) return match.id;
+            // Try brand match
+            match = window.products.find(p => search.includes(p.brand.toLowerCase()));
+            if (match) return match.id;
+            // Return first product as default
+            return window.products[0]?.id || null;
+        }
 
         // Build a real estimate from AI-parsed data
         async function buildEstimateFromAI(aiEstimate) {
@@ -4393,10 +4471,11 @@ IMPORTANT: Return ONLY the JSON object. No other text.`;
             // Set jobType FIRST so calculateSurfaceCost works during room building
             currentEstimate = { jobType: aiEstimate.jobType, rooms: [] };
 
-            // Build rooms with surfaces (AI provides quantities and dimensions)
+            // Build rooms with surfaces
             const rooms = aiEstimate.rooms.map(aiRoom => {
                 const surfaces = (aiRoom.surfaces || []).map(s => {
                     const qty = s.quantity || 0;
+                    const productId = matchProduct(s.productName);
                     const surface = {
                         surfaceType: s.surfaceType,
                         quantity: qty,
@@ -4404,10 +4483,10 @@ IMPORTANT: Return ONLY the JSON object. No other text.`;
                         coats: s.coats || 2,
                         sheen: s.sheen || 'Eggshell',
                         color: s.color || 'TBD',
-                        productId: null,
-                        usePrimer: false,
-                        primerCoats: 0,
-                        primerProductId: null,
+                        productId: productId,
+                        usePrimer: s.usePrimer || false,
+                        primerCoats: s.primerCoats || 0,
+                        primerProductId: s.usePrimer ? productId : null,
                         laborCost: 0,
                         materialCost: 0,
                         total: 0
@@ -4428,7 +4507,7 @@ IMPORTANT: Return ONLY the JSON object. No other text.`;
                     height: aiRoom.height || 8,
                     photoData: null,
                     photos: [],
-                    notes: '',
+                    notes: aiRoom.notes || '',
                     surfaces: surfaces,
                     additionalServices: []
                 };
