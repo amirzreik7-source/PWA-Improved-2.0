@@ -4214,10 +4214,10 @@ ${currentEstimate.customerSignature ? '<p>Signature:</p><img src="'+currentEstim
             const msgs = document.getElementById('aiChatMessages');
             msgs.innerHTML = `
                 <div style="background:#e7f0ff;padding:10px 14px;border-radius:10px;margin-bottom:10px;font-size:14px;color:#333;">
-                    <strong>AI Assistant:</strong> Describe the painting job and I'll build the estimate. I know your products and custom surfaces. For example:<br><br>
-                    <em style="color:#667eea;">"Interior - 3 bedrooms walls ceiling and crown molding, living room walls and ceiling, kitchen cabinets 20 doors 10 drawers. Use Benjamin Moore Regal. Prime the kitchen cabinets."</em><br><br>
-                    <em style="color:#667eea;">"Exterior front and back. Siding, soffit, fascia, 4 windows, front door. 2 coats semi-gloss."</em><br><br>
-                    After I generate, you can say things like <em>"add a bathroom"</em> or <em>"make it 3 coats"</em> to modify.
+                    <strong>AI Assistant:</strong> Describe the painting job — I know your products and custom surfaces. Talk naturally like you would on a walk-through:<br><br>
+                    <em style="color:#667eea;">"Exterior using Ben by Benjamin Moore, 2 coats on everything. Exclude unpainted and maintenance-free items. Front side: siding, soffit, fascia, 4 windows, front door and trim. Fix 5 feet of rotten wood on front."</em><br><br>
+                    <em style="color:#667eea;">"Interior 3 bedrooms walls ceiling crown molding and baseboards. Kitchen cabinets 15 doors 8 drawers, prime them first. Use Regal."</em><br><br>
+                    Then keep going: <em>"now the left side has..."</em> or <em>"add a bathroom"</em> or <em>"change to 3 coats"</em>
                 </div>`;
             document.getElementById('aiChatInput').value = '';
             document.getElementById('aiSendBtn').textContent = 'Generate Estimate →';
@@ -4267,28 +4267,28 @@ ${currentEstimate.customerSignature ? '<p>Signature:</p><img src="'+currentEstim
             const customExt = customExteriorSurfaces.map(s => `"${s.name}" (${s.measureUnit})`).join(', ');
             const customInt = customInteriorSurfaces.map(s => `"${s.name}" (${s.measureUnit})`).join(', ');
 
-            return `You are a smart estimate generator for Northern Star Painters, a professional house painting company.
+            return `You are the smartest painting estimate generator for Northern Star Painters. You work alongside a painting contractor during walk-throughs and phone consultations.
 
-The user will describe a painting job in plain English (often via voice — expect typos, grammar issues, and casual speech). You must understand the intent, clean up the language, and return ONLY valid JSON (no markdown, no explanation, just the JSON object).
+The user speaks casually (often via voice dictation) — expect typos, grammar mistakes, half-sentences, and informal speech. YOU must understand intent perfectly, fix all language issues, and produce clean professional output.
 
-Return this exact structure:
+RETURN ONLY VALID JSON — no markdown, no backticks, no explanation. Just the JSON object.
+
+JSON STRUCTURE:
 {
   "jobType": "Interior" or "Exterior",
+  "globalNotes": "Job-wide notes: exclusions, special conditions, product choices",
   "rooms": [
     {
-      "name": "Room Name",
-      "length": 12,
-      "width": 12,
-      "height": 9,
-      "notes": "Clean, professional note about this room if user mentioned anything special",
+      "name": "Front",
+      "notes": "Professional, clean note about this side/room",
       "surfaces": [
         {
-          "surfaceType": "Walls",
-          "quantity": 432,
+          "surfaceType": "Siding",
+          "quantity": 500,
           "coats": 2,
-          "sheen": "Eggshell",
+          "sheen": "Semi-Gloss",
           "color": "TBD",
-          "productName": "Benjamin Moore Regal",
+          "productName": "Ben",
           "usePrimer": false,
           "primerCoats": 0
         }
@@ -4300,56 +4300,74 @@ Return this exact structure:
 AVAILABLE PRODUCTS IN OUR SYSTEM:
 ${productList || 'No products configured yet — set productName to null'}
 
-If the user mentions a paint brand/product, match it to the closest product above and set "productName" to the exact name. If no match or not mentioned, set productName to null.
-
 SURFACE TYPES:
 Interior built-in: Walls, Ceiling, Doors, Windows, Baseboards, Closets, Cabinet Doors, Cabinet Drawers, Spindles
-${customInt ? 'Interior custom surfaces: ' + customInt : ''}
-Exterior built-in: Siding, Soffit, Fascia, Windows, Doors, Front Door, Bay Windows, Railings, Shutters, Front Door Frame, Garage Door, Garage Door Frame
-${customExt ? 'Exterior custom surfaces: ' + customExt : ''}
+${customInt ? 'Interior custom: ' + customInt : ''}
+Exterior built-in: Siding, Soffit, Fascia, Windows, Front Door, Front Door Frame, Garage Door, Garage Door Frame, Shutters, Bay Windows, Railings
+${customExt ? 'Exterior custom: ' + customExt : ''}
 
-CRITICAL: If the user mentions a surface that matches a custom surface name (e.g. "molding", "crown molding", "wainscoting"), use the EXACT custom surface name as surfaceType. Custom surfaces are real surfaces in our system — treat them identically to built-in surfaces.
+═══ CRITICAL RULES ═══
 
-If the user mentions a surface that doesn't exist in ANY list above, use the closest match. If truly no match exists, use the exact name they gave — the system will handle it.
+UNDERSTANDING THE USER:
+- The user will often set GLOBAL context first: "exterior job, using Ben by Benjamin Moore, 2 coats on everything" — apply that product and coat count to ALL surfaces unless overridden per-surface
+- "trim" = doors + door frames + window frames. Create separate surface entries for each
+- "everything" on a side = siding + soffit + fascia + windows + doors (all applicable surfaces)
+- "maintenance free" / "unpainted" / "exclude" = do NOT include those surfaces, but note the exclusion in room notes
+- "rotten wood" / "wood repair" / "fix" / "replace" = add to room notes as repair work, not as a surface
+- If user says "same as front" for another side, duplicate the front's surfaces for that side
+- "we will do front left right and back" = create ALL four sides, even if details only given for some — use the global context for the rest
 
-RULES:
-- jobType must be "Interior" or "Exterior" (or "Both" if user describes both — split into separate room groups)
-- Default coats to 2 if not specified
-- Default sheen: "Eggshell" for interior walls/ceiling, "Satin" for trim/doors/baseboards/molding, "Semi-Gloss" for exterior
-- Default color to "TBD" if not specified
-- If user says "walls and ceiling" create BOTH surface entries — never skip a surface the user mentioned
-- If user mentions multiple rooms, create ALL of them — never skip a room
-- For exterior, use "Front", "Back", "Left", "Right" as room/side names
-- Room names should be clean and professional (capitalize properly, fix typos)
+PRODUCT MATCHING:
+- "Ben" or "ben" = match to Benjamin Moore Ben product
+- "Regal" = match to Benjamin Moore Regal
+- "Aura" = match to Benjamin Moore Aura
+- Match to the closest product in the list above. If user says a brand/product not in the list, set productName to exactly what they said — we'll handle it
+- When user sets a product globally ("using Ben on everything"), apply it to ALL surfaces
 
-NOTES:
-- If the user mentions anything special about a room (furniture to move, wallpaper removal, damage, high ceilings, accent walls, special prep), put it in the room "notes" field
-- Write notes in clean, professional English — fix any grammar, spelling, or unclear phrasing from the user
-- Keep notes concise but complete
+SURFACE INTELLIGENCE:
+- If user mentions a custom surface name (even partially — "molding" → "Crown Molding"), use the EXACT custom surface name from our list
+- Never skip a surface the user mentioned
+- When user lists surfaces for a side ("windows, front door, trim, siding"), create an entry for EACH one
+- "4 windows" = quantity 4. "front door" = quantity 1. "siding" = estimate sq ft for that side
+
+NOTES — THIS IS CRITICAL:
+- Write ALL notes in clean, professional English. Fix every grammar mistake, unclear phrase, and typo
+- "fix 5 liner feet of rotton wooid" → "Repair 5 linear feet of rotten wood prior to painting"
+- "exlude unpaied matianes free iteams" → "Exclude all unpainted and maintenance-free materials from scope of work"
+- "furnitur needs movin" → "Furniture to be moved prior to painting"
+- "wallpaper comin off" → "Remove existing wallpaper before painting"
+- Per-room notes go in that room's "notes" field
+- Job-wide notes (exclusions, product choice, general conditions) go in "globalNotes"
+- ALWAYS include exclusions as professional notes — this protects the contractor
 
 PRIMER:
-- If user mentions "prime", "primer", "priming", or "seal" for a surface, set usePrimer: true and primerCoats: 1
-- If user says "2 coats primer" set primerCoats: 2
-- Default usePrimer: false
+- "prime", "primer", "priming", "seal" → usePrimer: true, primerCoats: 1
+- "2 coats primer" → primerCoats: 2
+- Default: usePrimer: false
 
-QUANTITY RULES (critical — always calculate):
-- Interior Walls: 2*(length*height) + 2*(width*height) sq ft. Defaults if no dimensions: bedroom=320, living room=480, kitchen=400, bathroom=200, dining room=360, hallway=280
-- Interior Ceiling: length * width sq ft. Use same room defaults
-- Baseboards/Crown Molding/any Lin Ft surface: 2*(length + width). Defaults: bedroom=44, living room=56, kitchen=48, bathroom=28
-- Doors: count as units (1-2 per room typically)
-- Windows: count as units (1-2 per room typically)
-- Closets: count as units (1 per bedroom)
-- Cabinet Doors/Drawers: count as units
-- Exterior Siding: 400-600 sq ft per side typically
-- Exterior Soffit/Fascia: 40-80 linear ft per side
-- NEVER set quantity to 0 — always estimate a reasonable default
-- length/width/height are room dimensions in feet. Use reasonable defaults if not specified.
+QUANTITY DEFAULTS (when not specified):
+Interior:
+- Walls: 2*(L*H)+2*(W*H). Defaults: bedroom=320, living=480, kitchen=400, bath=200, dining=360, hall=280
+- Ceiling: L*W. Same size defaults
+- Baseboards/Lin Ft surfaces: 2*(L+W). Defaults: bedroom=44, living=56, kitchen=48, bath=28
+- Doors: 1-2 per room. Windows: 1-2 per room. Closets: 1 per bedroom
+Exterior:
+- Siding: 400-600 sq ft per side (front typically largest)
+- Soffit/Fascia: 40-80 lin ft per side
+- Windows: 2-4 per side. Doors: 0-1 per side
+- NEVER set quantity to 0
 
-CONVERSATION:
-- This is a multi-turn conversation. If the user says "add a bathroom" or "change that to 3 coats" or "also include baseboards", update the FULL estimate (all rooms) and return the complete JSON again.
-- Always return the COMPLETE estimate with ALL rooms, not just the changes.
+CONVERSATION FLOW:
+- This is a multi-turn walk-through conversation
+- User may describe the whole job at once OR go side-by-side / room-by-room
+- ALWAYS return the COMPLETE estimate with ALL rooms/sides so far — never just the new part
+- If user says "now the left side has..." → add Left to existing rooms, keep everything else
+- If user says "actually make that 3 coats" → update ALL surfaces' coats
+- If user says "remove the soffit from back" → remove just that surface
+- If user says "same product on everything" → apply to all existing surfaces
+- Carry forward ALL global context (product, coats, exclusions) to new rooms added later
 
-IMPORTANT: Return ONLY the JSON object. No other text, no explanation, no markdown.`;
+IMPORTANT: Return ONLY the JSON object. No other text.`;
         }
 
         const AI_PROXY_URL = 'https://damp-moon-203c.amirzreik7.workers.dev';
@@ -4408,21 +4426,22 @@ IMPORTANT: Return ONLY the JSON object. No other text, no explanation, no markdo
                 }
 
                 // Show summary with details
+                const globalNote = estimate.globalNotes ? `<div style="background:#fff3cd;padding:8px;border-radius:6px;margin-bottom:8px;font-size:12px;"><strong>Job Notes:</strong> ${estimate.globalNotes}</div>` : '';
                 const roomList = estimate.rooms.map(r => {
                     const surfaces = r.surfaces.map(s => {
-                        let detail = s.surfaceType;
+                        let detail = s.surfaceType + ' (' + s.quantity + ')';
                         if (s.usePrimer) detail += ' +primer';
-                        if (s.productName) detail += ' (' + s.productName + ')';
                         return detail;
                     }).join(', ');
-                    const noteSnip = r.notes ? '<br><em style="font-size:12px;color:#666;">' + r.notes + '</em>' : '';
-                    return `<strong>${r.name}</strong>: ${surfaces}${noteSnip}`;
+                    const product = r.surfaces[0]?.productName ? ' — ' + r.surfaces[0].productName : '';
+                    const noteSnip = r.notes ? '<br><em style="font-size:12px;color:#666;">Note: ' + r.notes + '</em>' : '';
+                    return `<strong>${r.name}</strong>${product}: ${surfaces}${noteSnip}`;
                 }).join('<br>');
 
-                addAIChatMessage('ai', `Got it! Here's the estimate:<br><br>
+                addAIChatMessage('ai', `${globalNote}
                     <strong>Type:</strong> ${estimate.jobType}<br>
-                    <strong>Rooms:</strong><br>${roomList}<br><br>
-                    Building estimate now... You can say <em>"add a bathroom"</em> or <em>"change to 3 coats"</em> to modify.`);
+                    <strong>${estimate.jobType === 'Exterior' ? 'Sides' : 'Rooms'}:</strong><br>${roomList}<br><br>
+                    Building estimate now... Say <em>"now the left side has..."</em> or <em>"change to 3 coats"</em> to modify.`);
 
                 // Build the estimate
                 await buildEstimateFromAI(estimate);
@@ -4528,9 +4547,18 @@ IMPORTANT: Return ONLY the JSON object. No other text, no explanation, no markdo
                 customerSignature: null
             };
 
-            // Navigate to Step 4 (rooms overview) so user can review and add dimensions
+            // Set global notes into the project summary notes field if available
+            if (aiEstimate.globalNotes) {
+                setTimeout(() => {
+                    const notesField = document.getElementById('projectSummaryNotes');
+                    if (notesField) notesField.value = aiEstimate.globalNotes;
+                }, 100);
+            }
+
+            // Navigate to Step 4 (rooms overview) so user can review
             setTimeout(() => {
-                addAIChatMessage('ai', '✅ Estimate created! Taking you to the rooms screen to add dimensions and review...');
+                const surfaceCount = rooms.reduce((sum, r) => sum + r.surfaces.length, 0);
+                addAIChatMessage('ai', '✅ Estimate created! ' + rooms.length + ' sides/rooms, ' + surfaceCount + ' surfaces total.<br>Taking you to review — you can still come back and say <em>"add..."</em> or <em>"change..."</em>');
                 setTimeout(() => {
                     displaySidesRoomsCards();
                     showScreen('estimateStep4Screen');
