@@ -3008,7 +3008,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             
             // Auto-calculate quantity if applicable
             const autoCalcQty = getAutoCalculatedQuantity(surfaceType);
-            const canAutoCalc = autoCalcQty !== null && currentEstimate.jobType === 'Interior';
+            const canAutoCalc = autoCalcQty !== null;
             
             // Set quantity label and unit
             const unit = getSurfaceUnit(surfaceType);
@@ -3065,20 +3065,33 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             showScreen('surfaceConfigModal');
         };
         
-        // Auto-calculate quantity for walls/ceiling/baseboards
+        // Auto-calculate quantity from room dimensions
         function getAutoCalculatedQuantity(surfaceType) {
             if (!window.currentRoom.length || !window.currentRoom.width || !window.currentRoom.height) return null;
-            
+
             const L = window.currentRoom.length;
             const W = window.currentRoom.width;
             const H = window.currentRoom.height;
-            
+
+            // Built-in surfaces
             switch(surfaceType) {
                 case 'Ceiling': return L * W;
                 case 'Walls': return 2 * (L * H) + 2 * (W * H);
+                case 'Siding': return 2 * (L * H) + 2 * (W * H);
                 case 'Baseboards': return 2 * (L + W);
-                default: return null;
+                case 'Soffit': return 2 * (L + W);
+                case 'Fascia': return 2 * (L + W);
             }
+
+            // Custom surfaces — auto-calc based on measurement type
+            const cs = customExteriorSurfaces.find(s => s.name === surfaceType) ||
+                       customInteriorSurfaces.find(s => s.name === surfaceType);
+            if (cs) {
+                if (cs.measureUnit === 'Sq Ft') return 2 * (L * H) + 2 * (W * H);
+                if (cs.measureUnit === 'Lin Ft') return 2 * (L + W);
+            }
+
+            return null;
         }
         
         // Get the unit for a surface type
