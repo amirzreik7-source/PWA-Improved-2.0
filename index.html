@@ -3095,12 +3095,6 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             return 'Units';
         }
 
-        window.addCustomSurface = function() {
-            const surfaceName = prompt('Enter custom surface name:');
-            if (!surfaceName || !surfaceName.trim()) return;
-            
-            openSurfaceConfig(surfaceName.trim());
-        };
 
         // NEW Step 4: Display all sides/rooms as cards
         function displaySidesRoomsCards() {
