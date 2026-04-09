@@ -567,6 +567,18 @@
                 </div>
             </div>
 
+            <!-- Credits Section -->
+            <div class="room-card">
+                <h3>Credits (Optional)</h3>
+                <p style="color:#666;margin-bottom:10px;font-size:13px;">Add credits that reduce the total (shown separately from discount)</p>
+                <div id="creditsList"></div>
+                <div style="display:flex;gap:8px;margin-top:10px;">
+                    <input type="text" id="creditNameInput" placeholder="Credit name" style="flex:2;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
+                    <input type="number" id="creditAmountInput" placeholder="$0.00" step="0.01" min="0" style="flex:1;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
+                    <button class="btn btn-success btn-small" onclick="addCredit()">+ Add</button>
+                </div>
+            </div>
+
             <!-- Project Summary Notes -->
             <div class="room-card">
                 <h3>Project Summary Notes (Optional)</h3>
@@ -582,6 +594,7 @@
                 <div class="room-stats" style="font-size: 18px;">
                     <p><strong>Base Price:</strong> <span id="reviewBasePrice" onclick="editBasePrice()" style="cursor:pointer;text-decoration:underline dotted #667eea;" title="Tap to edit">$0.00</span> <span style="font-size:11px;color:#999;">tap to edit</span></p>
                     <p id="discountRow" style="display: none;"><strong><span id="discountDisplayName">Discount</span>:</strong> <span id="reviewDiscountAmount" style="color: #e74c3c;">-$0.00</span></p>
+                    <div id="reviewCreditsRows"></div>
                     <hr style="margin: 10px 0;">
                     <p><strong>Subtotal:</strong> <span id="reviewSubtotal">$0.00</span></p>
                     <p><strong>Deposit Due (50%):</strong> <span id="reviewDeposit">$0.00</span></p>
@@ -2458,6 +2471,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 discountValue: job.discountValue,
                 discountName: job.discountName,
                 discountAmount: job.discountAmount || 0,
+                credits: job.credits || [],
                 projectSummaryNotes: job.projectSummaryNotes || '',
                 totalLabor: job.totalLabor,
                 totalMaterials: job.totalMaterials,
@@ -2533,6 +2547,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 discountValue: job.discountValue,
                 discountName: job.discountName,
                 discountAmount: job.discountAmount || 0,
+                credits: job.credits || [],
                 projectSummaryNotes: job.projectSummaryNotes || '',
                 totalLabor: job.totalLabor,
                 totalMaterials: job.totalMaterials,
@@ -4005,6 +4020,9 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             const nameInput = document.getElementById('proposalNameInput');
             if (nameInput) nameInput.value = currentEstimate.jobName || '';
 
+            // Display credits list
+            displayCredits();
+
             const content = document.getElementById('estimateReviewContent');
             const showRoomPrices = document.getElementById('showRoomPrices')?.checked === true;
 
@@ -4085,24 +4103,28 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 discountAmount = discountValue;
             }
             
-            const subtotal = basePrice - discountAmount;
+            // Calculate total credits
+            const credits = currentEstimate.credits || [];
+            const totalCredits = credits.reduce((sum, c) => sum + c.amount, 0);
+
+            const subtotal = basePrice - discountAmount - totalCredits;
             const deposit = subtotal * 0.5;
             const balance = subtotal * 0.5;
-            
+
             // Store in estimate object
             currentEstimate.discountType = discountType;
             currentEstimate.discountValue = discountValue;
             currentEstimate.discountName = discountName;
             currentEstimate.discountAmount = discountAmount;
             currentEstimate.grandTotal = subtotal;
-            
+
             // Update display
             document.getElementById('reviewBasePrice').textContent = `$${basePrice.toFixed(2)}`;
             document.getElementById('reviewSubtotal').textContent = `$${subtotal.toFixed(2)}`;
             document.getElementById('reviewDeposit').textContent = `$${deposit.toFixed(2)}`;
             document.getElementById('reviewBalance').textContent = `$${balance.toFixed(2)}`;
             document.getElementById('reviewGrandTotal').textContent = `$${subtotal.toFixed(2)}`;
-            
+
             // Show/hide discount row
             const discountRow = document.getElementById('discountRow');
             if (discountType && discountAmount > 0) {
@@ -4113,7 +4135,51 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             } else {
                 discountRow.style.display = 'none';
             }
+
+            // Show credits rows in price summary
+            const creditsContainer = document.getElementById('reviewCreditsRows');
+            if (creditsContainer) {
+                creditsContainer.innerHTML = credits.map(c =>
+                    `<p><strong>${c.name}:</strong> <span style="color:#e74c3c;">-$${c.amount.toFixed(2)}</span></p>`
+                ).join('');
+            }
         };
+
+        // === CREDITS ===
+        window.addCredit = function() {
+            const name = document.getElementById('creditNameInput').value.trim();
+            const amount = parseFloat(document.getElementById('creditAmountInput').value);
+            if (!name) { alert('Please enter a credit name'); return; }
+            if (!amount || amount <= 0) { alert('Please enter an amount'); return; }
+            if (!currentEstimate.credits) currentEstimate.credits = [];
+            currentEstimate.credits.push({ name, amount });
+            document.getElementById('creditNameInput').value = '';
+            document.getElementById('creditAmountInput').value = '';
+            displayCredits();
+            updateDiscountPreview();
+        };
+
+        window.deleteCredit = function(index) {
+            currentEstimate.credits.splice(index, 1);
+            displayCredits();
+            updateDiscountPreview();
+        };
+
+        function displayCredits() {
+            const container = document.getElementById('creditsList');
+            if (!container) return;
+            const credits = currentEstimate.credits || [];
+            if (credits.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+            container.innerHTML = credits.map((c, i) => `
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:#d4edda;border-radius:8px;margin-bottom:6px;">
+                    <span style="font-weight:600;color:#155724;">${c.name}: -$${c.amount.toFixed(2)}</span>
+                    <button class="btn btn-danger" onclick="deleteCredit(${i})" style="width:24px;height:24px;padding:0;font-size:14px;line-height:24px;border-radius:4px;">×</button>
+                </div>
+            `).join('');
+        }
 
         // Refresh review when toggles change
         document.addEventListener('change', function(e) {
@@ -4294,6 +4360,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 discountValue: currentEstimate.discountValue,
                 discountName: currentEstimate.discountName,
                 discountAmount: currentEstimate.discountAmount,
+                credits: currentEstimate.credits || [],
                 projectSummaryNotes: projectNotes,
                 totalLabor: currentEstimate.totalLabor,
                 totalMaterials: currentEstimate.totalMaterials,
@@ -4508,7 +4575,8 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             const bannerTime = now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
             const basePrice = currentEstimate.basePrice || currentEstimate.grandTotal || 0;
             const discountAmount = currentEstimate.discountAmount || 0;
-            const subtotal = basePrice - discountAmount;
+            const totalCredits = (currentEstimate.credits || []).reduce((sum, c) => sum + c.amount, 0);
+            const subtotal = basePrice - discountAmount - totalCredits;
             const depositAmount = subtotal * 0.5;
             const balanceAmount = subtotal * 0.5;
             const projectNotes = document.getElementById('projectSummaryNotes')?.value || '';
@@ -4566,6 +4634,11 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 discountHTML = priceRow(dd, '<span style="color:#e74c3c">-$'+discountAmount.toFixed(2)+'</span>');
             }
 
+            // Credits rows
+            const credits = currentEstimate.credits || [];
+            const totalCredits = credits.reduce((sum, c) => sum + c.amount, 0);
+            const creditsHTML = credits.map(c => priceRow(c.name, '<span style="color:#e74c3c">-$'+c.amount.toFixed(2)+'</span>')).join('');
+
             // Room price summary
             let roomPriceSummary = '';
             if (showRoomPrices) {
@@ -4622,6 +4695,7 @@ ${roomPriceSummary}
 ${roomPriceSummary ? '<div style="border-top:1px solid #ccc;margin:4px 0"></div>' : ''}
 ${priceRow('Base Price','$'+basePrice.toFixed(2))}
 ${discountHTML}
+${creditsHTML}
 ${priceRow('Subtotal','$'+subtotal.toFixed(2),'border-top:2px solid #1e3a8a;font-weight:bold;margin-top:6px;padding-top:6px')}
 ${priceRow('Deposit Due (50%)','$'+depositAmount.toFixed(2))}
 ${priceRow('Balance','$'+balanceAmount.toFixed(2))}
