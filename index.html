@@ -541,6 +541,10 @@
             <button class="btn btn-primary" onclick="showScreen('homeScreen')" style="margin-right:10px;">🏠 Home</button>
             <button class="btn btn-back" onclick="goToEstimateStep(4)">← Edit Rooms</button>
             <h2 class="screen-title" id="step6Title">Review Estimate</h2>
+            <div class="form-group" style="margin-bottom:15px;">
+                <label>Proposal Name</label>
+                <input type="text" id="proposalNameInput" style="font-size:16px;font-weight:600;padding:10px;" onchange="currentEstimate.jobName=this.value">
+            </div>
             <div id="estimateReviewContent"></div>
             <!-- Discount Section -->
             <div class="room-card">
@@ -1941,7 +1945,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                             <h3 style="margin:0;font-size:15px;">${job.jobName}</h3>
                             ${getStatusBadge(job.status)}
                         </div>
-                        <p style="margin:6px 0;font-size:13px;color:#666;">${job.jobType} • ${new Date(job.date).toLocaleDateString()}</p>
+                        <p style="margin:6px 0;font-size:13px;color:#666;">${job.jobType} • ${new Date(job.date).toLocaleDateString()} ${new Date(job.date).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true})}</p>
                         <p style="font-size:20px;color:#667eea;font-weight:600;margin:6px 0;">$${(job.grandTotal || 0).toFixed(2)}</p>
                         <div style="display:flex;gap:8px;margin-top:10px;" onclick="event.stopPropagation()">
                             <button class="btn btn-primary btn-small" onclick="viewJob('${job.id}')">👁️ View</button>
@@ -1988,7 +1992,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             currentEstimate = {
                 customerId: customer.id,
                 customerName: customer.name,
-                jobName: customer.name + ' - ' + new Date().toLocaleDateString(),
+                jobName: customer.name,
                 jobType: '',
                 profileId: null,
                 rooms: [],
@@ -2612,7 +2616,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             
             currentEstimate.customerId = customerId;
             currentEstimate.customerName = customer.name;
-            currentEstimate.jobName = `${customer.name} - ${new Date().toLocaleDateString()}`;
+            currentEstimate.jobName = customer.name;
             
             goToEstimateStep(2);
         };
@@ -2620,6 +2624,10 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
         // Step 2: Job Type Selection
         window.selectJobType = function(type) {
             currentEstimate.jobType = type;
+            // Auto-name: "Customer - Exterior 1" (incrementing)
+            const custJobs = jobs.filter(j => j.customerId === currentEstimate.customerId && j.jobType === type);
+            const num = custJobs.length + 1;
+            currentEstimate.jobName = `${currentEstimate.customerName} - ${type} ${num}`;
             goToEstimateStep(3);
         };
 
@@ -3993,6 +4001,10 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
         };
         // Step 6: Review Estimate
         function displayEstimateReview() {
+            // Populate proposal name
+            const nameInput = document.getElementById('proposalNameInput');
+            if (nameInput) nameInput.value = currentEstimate.jobName || '';
+
             const content = document.getElementById('estimateReviewContent');
             const showRoomPrices = document.getElementById('showRoomPrices')?.checked === true;
 
@@ -4293,9 +4305,15 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             };
             
             try {
-                // Always create NEW proposal (even when editing — keeps original intact)
-                const newDoc = await addDoc(collection(db, 'jobs'), job);
-                window.editingJobId = newDoc.id;
+                if (window.isEditMode && window.editingJobId) {
+                    // Update existing proposal
+                    await updateDoc(doc(db, 'jobs', window.editingJobId), job);
+                } else {
+                    // Create new proposal
+                    const newDoc = await addDoc(collection(db, 'jobs'), job);
+                    window.editingJobId = newDoc.id;
+                    window.isEditMode = true;
+                }
                 await loadJobs();
                 if (!silent) alert('Proposal saved!');
                 if (!silent) showScreen('homeScreen');
@@ -4456,10 +4474,14 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             });
 
             Promise.all(loaded).then(() => {
+                // Set document title for PDF filename
+                const origTitle = document.title;
+                document.title = currentEstimate.jobName || 'Northern Star Painters - Proposal';
                 // Give Safari a frame to settle layout
                 requestAnimationFrame(() => {
                     requestAnimationFrame(() => {
                         window.print();
+                        document.title = origTitle;
                         // Restore hidden screens
                         hidden.forEach(s => s.style.display = '');
                         btn.textContent = '🖨️ Print / Save PDF';
