@@ -4191,8 +4191,12 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
         // Save then generate PDF in one step
         window.saveAndGenerateProposal = async function() {
             // Show loading state INSTANTLY
-            document.getElementById('proposalContent').innerHTML = '<div style="text-align:center;padding:60px;color:#666;font-size:16px;">Generating proposal...</div>';
+            const content = document.getElementById('proposalContent');
+            content.innerHTML = '<div style="text-align:center;padding:60px;color:#666;font-size:16px;">Generating proposal...</div>';
             showScreen('proposalViewScreen');
+
+            // Let the loading screen paint before doing heavy work
+            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
             // Build proposal HTML (uses cached contract terms — fast)
             await generateProposal();
@@ -4744,9 +4748,19 @@ ${currentEstimate.customerSignature ? '<p>Signature:</p><img src="'+currentEstim
 <div style="background-color:#1e3a8a;height:16px;margin:20px 0 0 0;${pca}"></div>
 </div>`;
 
-            // Render in-app instead of popup (Safari PWA compatible)
-            document.getElementById('proposalContent').innerHTML = html;
+            // Render in-app — use lazy image loading for faster first paint
+            const proposalEl = document.getElementById('proposalContent');
+            // Replace img src with data-src for deferred loading
+            const lazyHtml = html.replace(/<img\s+src="(data:[^"]+)"/g, '<img data-src="$1" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"');
+            proposalEl.innerHTML = lazyHtml;
             showScreen('proposalViewScreen');
+            // Load images after paint
+            requestAnimationFrame(() => {
+                proposalEl.querySelectorAll('img[data-src]').forEach(img => {
+                    img.src = img.getAttribute('data-src');
+                    img.removeAttribute('data-src');
+                });
+            });
         };
 
         // ═══════════════════════════════════════════════════════
