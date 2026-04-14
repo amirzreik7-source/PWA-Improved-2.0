@@ -2197,8 +2197,8 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                             </div>
                             <p style="color:#666;font-size:12px;margin:4px 0;">${new Date(prop.date).toLocaleDateString()} ${new Date(prop.date).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true})}</p>
                             <div style="display:flex;gap:6px;margin-top:8px;">
-                                <button class="btn btn-primary btn-small" onclick="viewJob('${prop.id}')">View</button>
-                                <button class="btn btn-warning btn-small" onclick="regenerateProposal('${prop.id}')">PDF</button>
+                                <button class="btn btn-primary btn-small" onclick="regenerateProposal('${prop.id}')">👁️ View</button>
+                                <button class="btn btn-warning btn-small" onclick="viewJob('${prop.id}')">✏️ Edit</button>
                                 ${!isLanded ? `<button class="btn btn-success btn-small" onclick="markProposalLanded('${projectId}','${prop.id}')">Mark Landed</button>` : ''}
                                 <button class="btn btn-danger btn-small" onclick="deleteEstimate('${prop.id}','${project.customerId}')">Del</button>
                             </div>
@@ -2595,8 +2595,8 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                         <p style="margin:6px 0;font-size:13px;color:#666;">${job.jobType} • ${new Date(job.date).toLocaleDateString()} ${new Date(job.date).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true})}</p>
                         <p style="font-size:20px;color:#667eea;font-weight:600;margin:6px 0;">$${(job.grandTotal || 0).toFixed(2)}</p>
                         <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;" onclick="event.stopPropagation()">
-                            <button class="btn btn-primary btn-small" onclick="viewJob('${job.id}')">👁️ View</button>
-                            <button class="btn btn-warning btn-small" onclick="regenerateProposal('${job.id}')">📄 PDF</button>
+                            <button class="btn btn-primary btn-small" onclick="regenerateProposal('${job.id}')">👁️ View</button>
+                            <button class="btn btn-warning btn-small" onclick="viewJob('${job.id}')">✏️ Edit</button>
                             <button class="btn btn-success btn-small" onclick="moveToProject('${job.id}','${customerId}')">📁 Move to Project</button>
                             <button class="btn btn-danger btn-small" onclick="deleteEstimate('${job.id}','${customerId}')">🗑️</button>
                         </div>
