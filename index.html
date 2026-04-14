@@ -139,6 +139,7 @@
                 <button class="btn btn-info" onclick="showScreen('productsScreen')">🎨 Products</button>
                 <button class="btn btn-primary" onclick="showScreen('profilesScreen')">📦 Profiles</button>
                 <button class="btn btn-info" onclick="showScreen('settingsScreen')">⚙️ Settings</button>
+                <button class="btn btn-secondary" onclick="showDashboard()">📊 Dashboard</button>
             </div>
             <div style="margin-top:20px; text-align:center;">
                 <button class="btn btn-secondary btn-small" onclick="logout()">Sign Out</button>
@@ -385,38 +386,87 @@
             <h2 class="screen-title">Job Completed - Log Actuals</h2>
 
             <div class="room-card">
-                <h3>Enter Actuals</h3>
+                <h3>Crew & Time</h3>
+                <div class="form-group">
+                    <label>Crew Leader</label>
+                    <input type="text" id="actualCrewLeader" placeholder="e.g., Carlos" list="crewLeaderList">
+                    <datalist id="crewLeaderList"></datalist>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                    <div class="form-group">
+                        <label>Crew Size</label>
+                        <input type="number" id="actualCrewCount" min="1" step="1" placeholder="0" oninput="calculateProfit()">
+                    </div>
+                    <div class="form-group">
+                        <label>Hours/Day</label>
+                        <input type="number" id="actualHoursPerDay" min="1" max="16" step="0.5" value="8" oninput="calculateProfit()">
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                    <div class="form-group">
+                        <label>Start Date</label>
+                        <input type="date" id="actualStartDate">
+                    </div>
+                    <div class="form-group">
+                        <label>End Date</label>
+                        <input type="date" id="actualEndDate" onchange="autoCalcDays()">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Days Worked</label>
+                    <input type="number" id="actualDays" min="0.5" step="0.5" placeholder="0" oninput="calculateProfit()">
+                </div>
                 <div class="form-group">
                     <label>Total Crew Payout ($)</label>
                     <input type="number" id="actualCrewPayout" step="0.01" min="0" placeholder="0.00" oninput="calculateProfit()">
                 </div>
-                <div class="form-group">
-                    <label>Total Material Costs ($)</label>
-                    <input type="number" id="actualMaterialCost" step="0.01" min="0" placeholder="0.00" oninput="calculateProfit()">
-                </div>
-                <div class="form-group">
-                    <label>Days to Complete</label>
-                    <input type="number" id="actualDays" min="1" step="0.5" placeholder="0" oninput="calculateProfit()">
-                </div>
-                <div class="form-group">
-                    <label>Number of Crew Members</label>
-                    <input type="number" id="actualCrewCount" min="1" step="1" placeholder="0" oninput="calculateProfit()">
+            </div>
+
+            <div class="room-card">
+                <h3>Materials</h3>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                    <div class="form-group">
+                        <label>Material Cost ($)</label>
+                        <input type="number" id="actualMaterialCost" step="0.01" min="0" placeholder="0.00" oninput="calculateProfit()">
+                    </div>
+                    <div class="form-group">
+                        <label>Gallons Used</label>
+                        <input type="number" id="actualGallons" step="0.5" min="0" placeholder="0">
+                    </div>
                 </div>
             </div>
 
             <div class="room-card" id="profitResultsCard" style="display:none;">
-                <h3>Profit Analysis</h3>
-                <div class="room-stats" style="font-size:16px;">
-                    <p><strong>Hourly Rate / Employee:</strong> <span id="profitHourlyRate">$0.00</span>/hr</p>
-                    <p><strong>Total Costs:</strong> <span id="profitTotalCosts">$0.00</span></p>
-                    <p><strong>Estimate Total:</strong> <span id="profitEstimateTotal">$0.00</span></p>
-                    <hr style="margin:10px 0;">
-                    <p><strong>Net Profit:</strong> <span id="profitNetProfit">$0.00</span></p>
-                    <p style="font-size:28px;font-weight:700;text-align:center;margin:15px 0;"><span id="profitPercentDisplay">0%</span> Profit</p>
+                <h3>Profitability</h3>
+                <div style="font-size:15px;">
+                    <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Customer Paid:</span><span id="profitEstimateTotal">$0.00</span></div>
+                    <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Crew Payout:</span><span id="profitCrewCost">$0.00</span></div>
+                    <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Material Cost:</span><span id="profitMatCost">$0.00</span></div>
+                    <div style="display:flex;justify-content:space-between;padding:4px 0;border-top:2px solid #333;margin-top:6px;padding-top:8px;font-weight:700;"><span>Net Profit:</span><span id="profitNetProfit">$0.00</span></div>
+                    <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Hourly Rate/Person:</span><span id="profitHourlyRate">$0.00/hr</span></div>
+                    <p style="font-size:32px;font-weight:700;text-align:center;margin:12px 0;"><span id="profitPercentDisplay">0%</span></p>
                 </div>
             </div>
 
-            <button class="btn btn-success btn-large" onclick="saveProfitActuals()">Save Actuals</button>
+            <div class="room-card" id="varianceCard" style="display:none;">
+                <h3>Estimate vs Actual</h3>
+                <div id="varianceContent" style="font-size:14px;"></div>
+            </div>
+
+            <div class="room-card">
+                <h3>Job Details</h3>
+                <div class="form-group">
+                    <label>Difficulty (1-10)</label>
+                    <input type="range" id="actualDifficulty" min="1" max="10" value="5" oninput="document.getElementById('diffLabel').textContent=this.value">
+                    <span id="diffLabel" style="font-weight:700;font-size:18px;">5</span> / 10
+                </div>
+                <div class="form-group">
+                    <label>Notes (issues, delays, learnings)</label>
+                    <textarea id="actualNotes" rows="3" placeholder="e.g., Rain delay day 3, needed extra coat on north wall"></textarea>
+                </div>
+            </div>
+
+            <button class="btn btn-success btn-large" onclick="saveProfitActuals()">Save & Complete Job</button>
         </div>
 
         <!-- ADDITIONAL SERVICE MODAL -->
@@ -1018,6 +1068,13 @@
 
         <!-- Keep jobsScreen as alias -->
         <div id="jobsScreen" class="screen hidden"></div>
+
+        <!-- BUSINESS INTELLIGENCE DASHBOARD -->
+        <div id="dashboardScreen" class="screen">
+            <button class="btn btn-back" onclick="showScreen('homeScreen')">← Back</button>
+            <h2 class="screen-title">Business Intelligence</h2>
+            <div id="dashboardContent"></div>
+        </div>
     </div>
 
     <!-- Firebase SDK -->
@@ -4678,26 +4735,50 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
         // === PROFIT TRACKING ===
         window.currentJobIdForProfit = null;
 
+        window.autoCalcDays = function() {
+            const start = document.getElementById('actualStartDate').value;
+            const end = document.getElementById('actualEndDate').value;
+            if (start && end) {
+                const diff = Math.ceil((new Date(end) - new Date(start)) / (1000*60*60*24)) + 1;
+                if (diff > 0) document.getElementById('actualDays').value = diff;
+                calculateProfit();
+            }
+        };
+
         window.openProfitTracking = function() {
-            // Find the job ID if viewing an existing job
             const jobId = window.currentJobIdForProfit;
             const job = jobId ? jobs.find(j => j.id === jobId) : null;
 
-            // Pre-fill if actuals already exist
+            // Populate crew leader suggestions from past actuals
+            const leaders = [...new Set(jobs.filter(j => j.actuals?.crewLeader).map(j => j.actuals.crewLeader))];
+            const dlEl = document.getElementById('crewLeaderList');
+            if (dlEl) dlEl.innerHTML = leaders.map(l => `<option value="${l}">`).join('');
+
+            // Pre-fill if actuals exist
             if (job && job.actuals) {
-                document.getElementById('actualCrewPayout').value = job.actuals.crewPayout || '';
-                document.getElementById('actualMaterialCost').value = job.actuals.materialCost || '';
-                document.getElementById('actualDays').value = job.actuals.days || '';
-                document.getElementById('actualCrewCount').value = job.actuals.crewCount || '';
+                const a = job.actuals;
+                document.getElementById('actualCrewLeader').value = a.crewLeader || '';
+                document.getElementById('actualCrewCount').value = a.crewCount || '';
+                document.getElementById('actualHoursPerDay').value = a.hoursPerDay || 8;
+                document.getElementById('actualStartDate').value = a.startDate || '';
+                document.getElementById('actualEndDate').value = a.endDate || '';
+                document.getElementById('actualDays').value = a.days || '';
+                document.getElementById('actualCrewPayout').value = a.crewPayout || '';
+                document.getElementById('actualMaterialCost').value = a.materialCost || '';
+                document.getElementById('actualGallons').value = a.gallonsUsed || '';
+                document.getElementById('actualDifficulty').value = a.difficulty || 5;
+                document.getElementById('diffLabel').textContent = a.difficulty || 5;
+                document.getElementById('actualNotes').value = a.notes || '';
             } else {
-                document.getElementById('actualCrewPayout').value = '';
-                document.getElementById('actualMaterialCost').value = '';
-                document.getElementById('actualDays').value = '';
+                ['actualCrewLeader','actualCrewPayout','actualMaterialCost','actualDays','actualGallons','actualStartDate','actualEndDate','actualNotes'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
                 document.getElementById('actualCrewCount').value = '';
+                document.getElementById('actualHoursPerDay').value = 8;
+                document.getElementById('actualDifficulty').value = 5;
+                document.getElementById('diffLabel').textContent = '5';
             }
 
-            document.getElementById('profitEstimateTotal').textContent = '$' + (currentEstimate.grandTotal || 0).toFixed(2);
             document.getElementById('profitResultsCard').style.display = 'none';
+            document.getElementById('varianceCard').style.display = 'none';
             calculateProfit();
             showScreen('profitTrackingScreen');
         };
@@ -4707,9 +4788,11 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             const materialCost = parseFloat(document.getElementById('actualMaterialCost').value) || 0;
             const days = parseFloat(document.getElementById('actualDays').value) || 0;
             const crewCount = parseInt(document.getElementById('actualCrewCount').value) || 0;
+            const hrsPerDay = parseFloat(document.getElementById('actualHoursPerDay').value) || 8;
 
             if (crewPayout <= 0 && materialCost <= 0) {
                 document.getElementById('profitResultsCard').style.display = 'none';
+                document.getElementById('varianceCard').style.display = 'none';
                 return;
             }
 
@@ -4717,51 +4800,93 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             const estimateTotal = currentEstimate.grandTotal || 0;
             const netProfit = estimateTotal - totalCosts;
             const profitPct = estimateTotal > 0 ? (netProfit / estimateTotal) * 100 : 0;
-            const hourlyRate = (days > 0 && crewCount > 0) ? crewPayout / (days * 8 * crewCount) : 0;
+            const hourlyRate = (days > 0 && crewCount > 0) ? crewPayout / (days * hrsPerDay * crewCount) : 0;
 
-            // Color based on profit %
-            let profitColor = '#ef4444'; // red <30%
-            if (profitPct >= 50) profitColor = '#10b981'; // green
-            else if (profitPct >= 30) profitColor = '#f59e0b'; // yellow
+            let profitColor = '#ef4444';
+            if (profitPct >= 40) profitColor = '#10b981';
+            else if (profitPct >= 25) profitColor = '#f59e0b';
 
-            document.getElementById('profitHourlyRate').textContent = '$' + hourlyRate.toFixed(2);
-            document.getElementById('profitTotalCosts').textContent = '$' + totalCosts.toFixed(2);
+            document.getElementById('profitHourlyRate').textContent = '$' + hourlyRate.toFixed(2) + '/hr';
+            document.getElementById('profitCrewCost').textContent = '$' + crewPayout.toFixed(2);
+            document.getElementById('profitMatCost').textContent = '$' + materialCost.toFixed(2);
             document.getElementById('profitEstimateTotal').textContent = '$' + estimateTotal.toFixed(2);
             document.getElementById('profitNetProfit').textContent = '$' + netProfit.toFixed(2);
-            document.getElementById('profitPercentDisplay').textContent = profitPct.toFixed(1) + '%';
+            document.getElementById('profitPercentDisplay').textContent = profitPct.toFixed(1) + '% Profit';
             document.getElementById('profitPercentDisplay').style.color = profitColor;
             document.getElementById('profitResultsCard').style.display = 'block';
+
+            // Variance analysis
+            const estLabor = currentEstimate.totalLabor || 0;
+            const estMaterial = currentEstimate.totalMaterials || 0;
+            if (estLabor > 0 || estMaterial > 0) {
+                const laborVar = estLabor > 0 ? ((crewPayout - estLabor) / estLabor * 100) : 0;
+                const matVar = estMaterial > 0 ? ((materialCost - estMaterial) / estMaterial * 100) : 0;
+                const varIcon = (v) => v > 10 ? '⬆ OVER' : (v < -10 ? '⬇ UNDER' : '✓ OK');
+                const varColor = (v) => Math.abs(v) > 20 ? '#ef4444' : (Math.abs(v) > 10 ? '#f59e0b' : '#10b981');
+                document.getElementById('varianceContent').innerHTML = `
+                    <div style="display:grid;grid-template-columns:2fr 1fr 1fr 2fr;gap:4px;font-size:13px;">
+                        <div style="font-weight:600;"></div><div style="font-weight:600;color:#666;">Est.</div><div style="font-weight:600;color:#666;">Actual</div><div></div>
+                        <div>Labor</div><div>$${estLabor.toFixed(0)}</div><div>$${crewPayout.toFixed(0)}</div><div style="color:${varColor(laborVar)};font-weight:600;">${laborVar.toFixed(0)}% ${varIcon(laborVar)}</div>
+                        <div>Materials</div><div>$${estMaterial.toFixed(0)}</div><div>$${materialCost.toFixed(0)}</div><div style="color:${varColor(matVar)};font-weight:600;">${matVar.toFixed(0)}% ${varIcon(matVar)}</div>
+                    </div>
+                `;
+                document.getElementById('varianceCard').style.display = 'block';
+            }
         };
 
         window.saveProfitActuals = async function() {
             const jobId = window.currentJobIdForProfit;
-            if (!jobId) {
-                alert('Please save the estimate first, then log actuals from the job view.');
-                return;
-            }
+            if (!jobId) { alert('Please save the estimate first, then log actuals from the job view.'); return; }
+
+            const hrsPerDay = parseFloat(document.getElementById('actualHoursPerDay').value) || 8;
+            const days = parseFloat(document.getElementById('actualDays').value) || 0;
+            const crewCount = parseInt(document.getElementById('actualCrewCount').value) || 0;
+            const crewPayout = parseFloat(document.getElementById('actualCrewPayout').value) || 0;
+            const materialCost = parseFloat(document.getElementById('actualMaterialCost').value) || 0;
 
             const actuals = {
-                crewPayout: parseFloat(document.getElementById('actualCrewPayout').value) || 0,
-                materialCost: parseFloat(document.getElementById('actualMaterialCost').value) || 0,
-                days: parseFloat(document.getElementById('actualDays').value) || 0,
-                crewCount: parseInt(document.getElementById('actualCrewCount').value) || 0
+                crewLeader: document.getElementById('actualCrewLeader').value.trim(),
+                crewCount: crewCount,
+                hoursPerDay: hrsPerDay,
+                totalHours: days * hrsPerDay * crewCount,
+                startDate: document.getElementById('actualStartDate').value,
+                endDate: document.getElementById('actualEndDate').value,
+                days: days,
+                crewPayout: crewPayout,
+                materialCost: materialCost,
+                gallonsUsed: parseFloat(document.getElementById('actualGallons').value) || 0,
+                difficulty: parseInt(document.getElementById('actualDifficulty').value) || 5,
+                notes: document.getElementById('actualNotes').value.trim(),
+                totalCosts: crewPayout + materialCost,
+                netProfit: (currentEstimate.grandTotal || 0) - (crewPayout + materialCost),
+                profitMargin: 0,
+                hourlyRate: 0,
+                completedAt: new Date().toISOString()
             };
-            actuals.totalCosts = actuals.crewPayout + actuals.materialCost;
-            actuals.hourlyRate = (actuals.days > 0 && actuals.crewCount > 0) ? actuals.crewPayout / (actuals.days * 8 * actuals.crewCount) : 0;
-            actuals.netProfit = (currentEstimate.grandTotal || 0) - actuals.totalCosts;
-            actuals.profitPct = (currentEstimate.grandTotal > 0) ? (actuals.netProfit / currentEstimate.grandTotal) * 100 : 0;
+            actuals.profitMargin = currentEstimate.grandTotal > 0 ? (actuals.netProfit / currentEstimate.grandTotal) * 100 : 0;
+            actuals.hourlyRate = (days > 0 && crewCount > 0) ? crewPayout / (days * hrsPerDay * crewCount) : 0;
+            // Store estimate values for future variance analysis
+            actuals.estLabor = currentEstimate.totalLabor || 0;
+            actuals.estMaterial = currentEstimate.totalMaterials || 0;
+            actuals.estTotal = currentEstimate.grandTotal || 0;
 
             try {
-                await updateDoc(doc(db, 'jobs', jobId), { actuals: actuals });
-                // Update local data
+                await updateDoc(doc(db, 'jobs', jobId), { actuals: actuals, status: 'Complete' });
+                // Also update project status if linked
                 const job = jobs.find(j => j.id === jobId);
-                if (job) job.actuals = actuals;
-                alert('Actuals saved!');
+                if (job) {
+                    job.actuals = actuals;
+                    job.status = 'Complete';
+                    if (job.projectId) {
+                        await updateDoc(doc(db, 'projects', job.projectId), { status: 'Complete' });
+                        const p = projects.find(pr => pr.id === job.projectId);
+                        if (p) p.status = 'Complete';
+                    }
+                }
+                alert('Job completed! Actuals saved.');
                 showProfitDisplay(actuals);
                 showScreen('estimateStep6Screen');
-            } catch (error) {
-                alert('Error saving actuals: ' + error.message);
-            }
+            } catch (error) { alert('Error saving actuals: ' + error.message); }
         };
 
         window.closeProfitTracking = function() {
@@ -4789,6 +4914,149 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 <p style="font-size:24px;font-weight:700;text-align:center;margin:10px 0;color:${profitColor}">${actuals.profitPct.toFixed(1)}% Profit</p>
             `;
         }
+
+        // === BUSINESS INTELLIGENCE DASHBOARD ===
+        window.showDashboard = function() {
+            const completed = jobs.filter(j => j.actuals && j.actuals.completedAt);
+            const content = document.getElementById('dashboardContent');
+
+            if (completed.length === 0) {
+                content.innerHTML = '<div style="text-align:center;padding:40px;color:#999;"><p style="font-size:48px;">📊</p><p>No completed jobs yet.</p><p style="font-size:13px;">Complete jobs and log actuals to see your business intelligence here.</p></div>';
+                showScreen('dashboardScreen');
+                return;
+            }
+
+            // KPIs
+            const totalRevenue = completed.reduce((s, j) => s + (j.actuals.estTotal || j.grandTotal || 0), 0);
+            const totalProfit = completed.reduce((s, j) => s + (j.actuals.netProfit || 0), 0);
+            const avgMargin = completed.reduce((s, j) => s + (j.actuals.profitMargin || 0), 0) / completed.length;
+            const totalCosts = completed.reduce((s, j) => s + (j.actuals.totalCosts || 0), 0);
+
+            // By job type
+            const byType = {};
+            completed.forEach(j => {
+                const t = j.jobType || 'Other';
+                if (!byType[t]) byType[t] = { count: 0, profit: 0, margin: 0 };
+                byType[t].count++;
+                byType[t].profit += j.actuals.netProfit || 0;
+                byType[t].margin += j.actuals.profitMargin || 0;
+            });
+            Object.values(byType).forEach(v => v.margin = v.margin / v.count);
+
+            // Estimation accuracy
+            const withVariance = completed.filter(j => j.actuals.estLabor > 0);
+            let avgLaborVar = 0, avgMatVar = 0;
+            if (withVariance.length > 0) {
+                avgLaborVar = withVariance.reduce((s, j) => s + ((j.actuals.crewPayout - j.actuals.estLabor) / j.actuals.estLabor * 100), 0) / withVariance.length;
+                avgMatVar = withVariance.reduce((s, j) => {
+                    if (!j.actuals.estMaterial || j.actuals.estMaterial === 0) return s;
+                    return s + ((j.actuals.materialCost - j.actuals.estMaterial) / j.actuals.estMaterial * 100);
+                }, 0) / withVariance.filter(j => j.actuals.estMaterial > 0).length || 0;
+            }
+
+            // Crew leader performance
+            const byLeader = {};
+            completed.filter(j => j.actuals.crewLeader).forEach(j => {
+                const l = j.actuals.crewLeader;
+                if (!byLeader[l]) byLeader[l] = { count: 0, margin: 0, profit: 0 };
+                byLeader[l].count++;
+                byLeader[l].margin += j.actuals.profitMargin || 0;
+                byLeader[l].profit += j.actuals.netProfit || 0;
+            });
+            Object.values(byLeader).forEach(v => v.margin = v.margin / v.count);
+
+            // Profit per month (last 6 months)
+            const monthlyProfit = {};
+            completed.forEach(j => {
+                const d = new Date(j.actuals.completedAt);
+                const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+                monthlyProfit[key] = (monthlyProfit[key] || 0) + (j.actuals.netProfit || 0);
+            });
+            const months = Object.entries(monthlyProfit).sort((a, b) => a[0].localeCompare(b[0])).slice(-6);
+            const maxMonthly = Math.max(...months.map(m => m[1]), 1);
+
+            const profitColor = (m) => m >= 40 ? '#10b981' : (m >= 25 ? '#f59e0b' : '#ef4444');
+
+            content.innerHTML = `
+                <!-- KPI Cards -->
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:15px;">
+                    <div style="text-align:center;padding:15px;background:#f0fdf4;border-radius:12px;">
+                        <div style="font-size:24px;font-weight:700;color:#10b981;">$${totalProfit.toFixed(0)}</div>
+                        <div style="font-size:12px;color:#666;">Total Profit</div>
+                    </div>
+                    <div style="text-align:center;padding:15px;background:#eff6ff;border-radius:12px;">
+                        <div style="font-size:24px;font-weight:700;color:${profitColor(avgMargin)};">${avgMargin.toFixed(1)}%</div>
+                        <div style="font-size:12px;color:#666;">Avg Margin</div>
+                    </div>
+                    <div style="text-align:center;padding:15px;background:#fef3c7;border-radius:12px;">
+                        <div style="font-size:24px;font-weight:700;color:#f59e0b;">$${totalRevenue.toFixed(0)}</div>
+                        <div style="font-size:12px;color:#666;">Revenue</div>
+                    </div>
+                    <div style="text-align:center;padding:15px;background:#f8f9fa;border-radius:12px;">
+                        <div style="font-size:24px;font-weight:700;color:#667eea;">${completed.length}</div>
+                        <div style="font-size:12px;color:#666;">Jobs Done</div>
+                    </div>
+                </div>
+
+                <!-- Monthly Profit Trend -->
+                ${months.length > 1 ? `<div class="room-card">
+                    <h3>Monthly Profit</h3>
+                    ${months.map(([month, profit]) => {
+                        const pct = Math.max(profit / maxMonthly * 100, 2);
+                        const label = new Date(month + '-01').toLocaleDateString('en-US', {month: 'short', year: '2-digit'});
+                        return `<div style="display:flex;align-items:center;gap:8px;margin:6px 0;">
+                            <span style="width:50px;font-size:12px;color:#666;">${label}</span>
+                            <div style="flex:1;background:#e5e7eb;border-radius:4px;height:20px;">
+                                <div style="width:${pct}%;background:${profit >= 0 ? '#10b981' : '#ef4444'};height:100%;border-radius:4px;"></div>
+                            </div>
+                            <span style="width:60px;text-align:right;font-size:12px;font-weight:600;">$${profit.toFixed(0)}</span>
+                        </div>`;
+                    }).join('')}
+                </div>` : ''}
+
+                <!-- By Job Type -->
+                <div class="room-card">
+                    <h3>By Job Type</h3>
+                    ${Object.entries(byType).map(([type, data]) => `
+                        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e5e7eb;">
+                            <div><strong>${type}</strong> (${data.count} jobs)</div>
+                            <div style="text-align:right;">
+                                <span style="color:${profitColor(data.margin)};font-weight:600;">${data.margin.toFixed(1)}%</span>
+                                <span style="color:#666;font-size:12px;"> | $${data.profit.toFixed(0)}</span>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+
+                <!-- Estimation Accuracy -->
+                ${withVariance.length > 0 ? `<div class="room-card">
+                    <h3>Estimation Accuracy</h3>
+                    <p style="font-size:13px;color:#666;margin-bottom:8px;">Based on ${withVariance.length} completed jobs</p>
+                    <div style="display:flex;justify-content:space-between;padding:8px 0;">
+                        <span>Labor Estimates</span>
+                        <span style="color:${Math.abs(avgLaborVar) > 15 ? '#ef4444' : '#10b981'};font-weight:600;">${avgLaborVar > 0 ? '+' : ''}${avgLaborVar.toFixed(1)}%</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;padding:8px 0;">
+                        <span>Material Estimates</span>
+                        <span style="color:${Math.abs(avgMatVar) > 15 ? '#ef4444' : '#10b981'};font-weight:600;">${avgMatVar > 0 ? '+' : ''}${avgMatVar.toFixed(1)}%</span>
+                    </div>
+                    ${avgLaborVar > 15 ? '<p style="background:#fef3c7;padding:8px;border-radius:6px;font-size:12px;margin-top:8px;">Your labor estimates are consistently ' + avgLaborVar.toFixed(0) + '% low. Consider increasing labor rates in pricing settings.</p>' : ''}
+                </div>` : ''}
+
+                <!-- Crew Leaders -->
+                ${Object.keys(byLeader).length > 0 ? `<div class="room-card">
+                    <h3>Crew Leader Performance</h3>
+                    ${Object.entries(byLeader).sort((a, b) => b[1].margin - a[1].margin).map(([leader, data]) => `
+                        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e5e7eb;">
+                            <div><strong>${leader}</strong> (${data.count} jobs)</div>
+                            <span style="color:${profitColor(data.margin)};font-weight:600;">${data.margin.toFixed(1)}% avg margin</span>
+                        </div>
+                    `).join('')}
+                </div>` : ''}
+            `;
+
+            showScreen('dashboardScreen');
+        };
 
         // Save Estimate
         window.saveEstimate = async function(opts) {
