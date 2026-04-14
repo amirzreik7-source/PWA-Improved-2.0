@@ -2393,6 +2393,75 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             return colors[status] || '#6b7280';
         }
 
+        window.moveToProject = async function(jobId, customerId) {
+            const job = jobs.find(j => j.id === jobId);
+            if (!job) return;
+            const customer = customers.find(c => c.id === customerId);
+            const customerProjects = projects.filter(p => p.customerId === customerId);
+
+            let projectId;
+            if (customerProjects.length > 0) {
+                // Show existing projects + option to create new
+                const options = customerProjects.map((p, i) => `${i + 1}. ${p.jobNumber} - ${p.projectName}`).join('\n');
+                const choice = prompt(`Move "${job.jobName}" to which project?\n\n${options}\n\nOr type NEW to create a new project:`);
+                if (!choice) return;
+
+                if (choice.toUpperCase() === 'NEW') {
+                    projectId = await createProjectForMove(customerId, customer?.name || '');
+                } else {
+                    const idx = parseInt(choice) - 1;
+                    if (idx >= 0 && idx < customerProjects.length) {
+                        projectId = customerProjects[idx].id;
+                    } else { alert('Invalid selection'); return; }
+                }
+            } else {
+                // No projects exist — create one
+                projectId = await createProjectForMove(customerId, customer?.name || '');
+            }
+
+            if (!projectId) return;
+
+            // Count existing proposals in target project to assign label
+            const existingProps = jobs.filter(j => j.projectId === projectId && !j.deleted);
+            const nextLabel = String.fromCharCode(65 + existingProps.length);
+
+            try {
+                await updateDoc(doc(db, 'jobs', jobId), { projectId: projectId, proposalLabel: nextLabel });
+                job.projectId = projectId;
+                job.proposalLabel = nextLabel;
+                await loadJobs();
+                viewCustomerDetail(customerId);
+                alert(`Moved as Proposal ${nextLabel}!`);
+            } catch(e) { alert('Error: ' + e.message); }
+        };
+
+        async function createProjectForMove(customerId, customerName) {
+            const projectName = prompt('New project name (e.g., "Exterior", "Kitchen Remodel"):');
+            if (!projectName || !projectName.trim()) return null;
+            try {
+                const jobNumber = await generateJobNumber();
+                const projectData = {
+                    userId: currentUser.uid,
+                    customerId: customerId,
+                    customerName: customerName,
+                    jobNumber: jobNumber,
+                    projectName: projectName.trim(),
+                    status: 'New Lead',
+                    leadSource: '',
+                    appointmentDate: null,
+                    appointmentNotes: '',
+                    deadReason: '',
+                    landedProposalId: null,
+                    statusHistory: [{ status: 'New Lead', date: new Date().toISOString(), note: 'Project created' }],
+                    createdAt: new Date().toISOString(),
+                    deleted: false
+                };
+                const ref = await addDoc(collection(db, 'projects'), projectData);
+                await loadProjects();
+                return ref.id;
+            } catch(e) { alert('Error creating project: ' + e.message); return null; }
+        }
+
         window.saveCustomerNotes = async function(customerId) {
             try {
                 const notes = document.getElementById('customerNotes_' + customerId)?.value || '';
@@ -2525,9 +2594,10 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                         </div>
                         <p style="margin:6px 0;font-size:13px;color:#666;">${job.jobType} • ${new Date(job.date).toLocaleDateString()} ${new Date(job.date).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true})}</p>
                         <p style="font-size:20px;color:#667eea;font-weight:600;margin:6px 0;">$${(job.grandTotal || 0).toFixed(2)}</p>
-                        <div style="display:flex;gap:8px;margin-top:10px;" onclick="event.stopPropagation()">
+                        <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;" onclick="event.stopPropagation()">
                             <button class="btn btn-primary btn-small" onclick="viewJob('${job.id}')">👁️ View</button>
                             <button class="btn btn-warning btn-small" onclick="regenerateProposal('${job.id}')">📄 PDF</button>
+                            <button class="btn btn-success btn-small" onclick="moveToProject('${job.id}','${customerId}')">📁 Move to Project</button>
                             <button class="btn btn-danger btn-small" onclick="deleteEstimate('${job.id}','${customerId}')">🗑️</button>
                         </div>
                     </div>
