@@ -142,7 +142,7 @@
         <div id="estimateStep1Screen" class="screen">
             <div class="step-indicator">Step 1 of 6</div>
             <div class="progress-bar"><div class="progress-fill" style="width: 16.6%"></div></div>
-            <button class="btn btn-primary" onclick="showScreen('homeScreen')" style="margin-right:10px;">🏠 Home</button>
+            <button class="btn btn-primary" onclick="navigateHome()" style="margin-right:10px;">🏠 Home</button>
             <button class="btn btn-back" onclick="showScreen('homeScreen')">← Cancel</button>
             <h2 class="screen-title">Select Customer</h2>
             <p class="screen-subtitle">Choose a customer or create a new one</p>
@@ -154,7 +154,7 @@
         <div id="estimateStep2Screen" class="screen">
             <div class="step-indicator">Step 2 of 6</div>
             <div class="progress-bar"><div class="progress-fill" style="width: 33.3%"></div></div>
-            <button class="btn btn-primary" onclick="showScreen('homeScreen')" style="margin-right:10px;">🏠 Home</button>
+            <button class="btn btn-primary" onclick="navigateHome()" style="margin-right:10px;">🏠 Home</button>
             <button class="btn btn-back" onclick="goToEstimateStep(1)">← Back</button>
             <h2 class="screen-title">Select Job Type</h2>
             <p class="screen-subtitle">⚠️ This cannot be changed after continuing</p>
@@ -174,7 +174,7 @@
         <div id="estimateStep3Screen" class="screen">
             <div class="step-indicator">Step 3 of 6</div>
             <div class="progress-bar"><div class="progress-fill" style="width: 50%"></div></div>
-            <button class="btn btn-primary" onclick="showScreen('homeScreen')" style="margin-right:10px;">🏠 Home</button>
+            <button class="btn btn-primary" onclick="navigateHome()" style="margin-right:10px;">🏠 Home</button>
             <button class="btn btn-back" onclick="goToEstimateStep(2)">← Back</button>
             <h2 class="screen-title">Select Product Profile</h2>
             <p class="screen-subtitle">Choose a profile or select products manually</p>
@@ -186,7 +186,7 @@
         <div id="estimateStep4Screen" class="screen">
             <div class="step-indicator">Step 4 of 6</div>
             <div class="progress-bar"><div class="progress-fill" style="width: 66.6%"></div></div>
-            <button class="btn btn-primary" onclick="showScreen('homeScreen')" style="margin-right:10px;">🏠 Home</button>
+            <button class="btn btn-primary" onclick="navigateHome()" style="margin-right:10px;">🏠 Home</button>
             <button class="btn btn-back" onclick="goToEstimateStep(3)">← Back</button>
             <h2 class="screen-title" id="step4Title">Select Sides/Rooms</h2>
             <p class="screen-subtitle" id="step4Subtitle">Click each side/room to add surfaces</p>
@@ -215,7 +215,7 @@
         <!-- SURFACE SELECTION SCREEN (for one side/room) -->
         <div id="surfaceSelectionScreen" class="screen">
             <div style="display:flex;gap:10px;margin-bottom:15px;">
-                <button class="btn btn-primary" onclick="showScreen('homeScreen')" style="flex:0 0 auto;">🏠 Home</button>
+                <button class="btn btn-primary" onclick="navigateHome()" style="flex:0 0 auto;">🏠 Home</button>
                 <button class="btn btn-back" onclick="backToSidesRooms()" style="flex:1;">← Back to Sides/Rooms</button>
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
@@ -239,7 +239,7 @@
 
         <!-- ROOM/SIDE DETAIL HUB -->
         <div id="roomDetailScreen" class="screen">
-            <button class="btn btn-primary" onclick="showScreen('homeScreen')" style="margin-right:10px;">🏠 Home</button>
+            <button class="btn btn-primary" onclick="navigateHome()" style="margin-right:10px;">🏠 Home</button>
             <button class="btn btn-back" onclick="backToOverview()">← Back to Overview</button>
             <div class="form-group" style="margin-bottom:15px;">
                 <input type="text" id="roomNameInput" style="font-size:20px;font-weight:700;padding:10px;border:2px solid #e0e0e0;border-radius:8px;width:100%;text-align:center;" onchange="renameCurrentRoom(this.value)" onkeydown="if(event.key==='Enter'){this.blur();}">
@@ -538,7 +538,7 @@
         <div id="estimateStep6Screen" class="screen">
             <div id="step6StepIndicator" class="step-indicator">Step 6 of 6</div>
             <div id="step6ProgressBar" class="progress-bar"><div class="progress-fill" style="width: 100%"></div></div>
-            <button class="btn btn-primary" onclick="showScreen('homeScreen')" style="margin-right:10px;">🏠 Home</button>
+            <button class="btn btn-primary" onclick="navigateHome()" style="margin-right:10px;">🏠 Home</button>
             <button class="btn btn-back" onclick="goToEstimateStep(4)">← Edit Rooms</button>
             <h2 class="screen-title" id="step6Title">Review Estimate</h2>
             <div class="form-group" style="margin-bottom:15px;">
@@ -1011,7 +1011,7 @@
         // Import Firebase modules
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
-        import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where, enableIndexedDbPersistence, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
         import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js';
 
         // Firebase configuration
@@ -1028,6 +1028,10 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+        enableIndexedDbPersistence(db).catch(err => {
+            if (err.code === 'failed-precondition') console.warn('Offline persistence failed: multiple tabs open');
+            else if (err.code === 'unimplemented') console.warn('Offline persistence not supported in this browser');
+        });
         const storage = getStorage(app);
 
         // Global state
@@ -1059,6 +1063,23 @@
         window.isEditMode = false; // true when viewing existing proposal
         window.editingJobId = null; // Firestore doc ID of proposal being viewed
         window.hasChanges = false; // true if user made edits to an existing proposal
+        window._unsavedEstimate = false; // true when building/editing estimate with unsaved work
+
+        // Navigation guard — warn before losing unsaved estimate work
+        window.addEventListener('beforeunload', (e) => {
+            if (window._unsavedEstimate) { e.preventDefault(); e.returnValue = ''; }
+        });
+
+        window.navigateHome = function() {
+            if (window._unsavedEstimate) {
+                if (!confirm('You have unsaved changes. Leave without saving?')) return;
+            }
+            window._unsavedEstimate = false;
+            showScreen('homeScreen');
+        };
+
+        // Mark estimate as having unsaved work
+        function markUnsaved() { window._unsavedEstimate = true; }
         window._originalEstimateSnapshot = null; // JSON snapshot for change detection
 
         // Pricing constants (keep existing pricing)
@@ -1189,6 +1210,43 @@
                 loadProfiles(),
                 loadJobs()
             ]);
+
+            // Check for unsaved draft
+            checkForDraft();
+
+            // Start auto-save timer
+            setInterval(() => {
+                if (window._unsavedEstimate && currentEstimate.customerId) {
+                    localStorage.setItem('nsp_draft', JSON.stringify({
+                        estimate: currentEstimate,
+                        timestamp: Date.now()
+                    }));
+                }
+            }, 30000); // Every 30 seconds
+        }
+
+        function checkForDraft() {
+            try {
+                const raw = localStorage.getItem('nsp_draft');
+                if (!raw) return;
+                const draft = JSON.parse(raw);
+                const age = Date.now() - draft.timestamp;
+                // Discard if older than 24 hours
+                if (age > 24 * 60 * 60 * 1000) { localStorage.removeItem('nsp_draft'); return; }
+                const mins = Math.round(age / 60000);
+                if (confirm(`You have an unsaved draft from ${mins} minutes ago. Resume it?`)) {
+                    window.currentEstimate = draft.estimate;
+                    window._unsavedEstimate = true;
+                    if (draft.estimate.rooms && draft.estimate.rooms.length > 0) {
+                        goToEstimateStep(4);
+                    } else if (draft.estimate.jobType) {
+                        goToEstimateStep(3);
+                    } else {
+                        goToEstimateStep(2);
+                    }
+                }
+                localStorage.removeItem('nsp_draft');
+            } catch(e) { localStorage.removeItem('nsp_draft'); }
         }
 
         // Debounce utility - prevents rapid-fire function calls
@@ -1878,9 +1936,11 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
         // Customers
         async function loadCustomers() {
-            const snapshot = await getDocs(query(collection(db, 'customers'), where('userId', '==', currentUser.uid)));
-            window.customers = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
-            displayCustomerList();
+            try {
+                const snapshot = await getDocs(query(collection(db, 'customers'), where('userId', '==', currentUser.uid)));
+                window.customers = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
+                displayCustomerList();
+            } catch(e) { console.error('Error loading customers:', e); }
         }
 
         function displayCustomerList() {
@@ -1984,7 +2044,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
         window.deleteEstimate = async function(jobId, customerId) {
             if (!confirm('Delete this proposal? This cannot be undone.')) return;
             try {
-                await deleteDoc(doc(db, 'jobs', jobId));
+                await updateDoc(doc(db, 'jobs', jobId), { deleted: true, deletedAt: new Date().toISOString() });
                 await loadJobs();
                 viewCustomerDetail(customerId); // Refresh customer detail
             } catch (e) {
@@ -2035,9 +2095,11 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
         // Products
         async function loadProducts() {
-            const snapshot = await getDocs(query(collection(db, 'products'), where('userId', '==', currentUser.uid)));
-            window.products = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
-            displayProductList();
+            try {
+                const snapshot = await getDocs(query(collection(db, 'products'), where('userId', '==', currentUser.uid)));
+                window.products = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()})).filter(p => !p.deleted);
+                displayProductList();
+            } catch(e) { console.error('Error loading products:', e); }
         }
 
         function displayProductList() {
@@ -2096,8 +2158,10 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
         window.deleteProduct = async function(id) {
             if (!confirm('Delete this product?')) return;
-            await deleteDoc(doc(db, 'products', id));
-            await loadProducts();
+            try {
+                await updateDoc(doc(db, 'products', id), { deleted: true });
+                await loadProducts();
+            } catch(e) { alert('Error deleting product: ' + e.message); }
         };
 
         window.cancelProductEdit = function() {
@@ -2189,9 +2253,11 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
         // Profiles
         async function loadProfiles() {
-            const snapshot = await getDocs(query(collection(db, 'profiles'), where('userId', '==', currentUser.uid)));
-            window.profiles = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
-            displayProfileList();
+            try {
+                const snapshot = await getDocs(query(collection(db, 'profiles'), where('userId', '==', currentUser.uid)));
+                window.profiles = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()})).filter(p => !p.deleted);
+                displayProfileList();
+            } catch(e) { console.error('Error loading profiles:', e); }
         }
 
         function displayProfileList() {
@@ -2334,8 +2400,10 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
         window.deleteProfile = async function(id) {
             if (!confirm('Delete this profile?')) return;
-            await deleteDoc(doc(db, 'profiles', id));
-            await loadProfiles();
+            try {
+                await updateDoc(doc(db, 'profiles', id), { deleted: true });
+                await loadProfiles();
+            } catch(e) { alert('Error deleting profile: ' + e.message); }
         };
 
         window.cancelProfileEdit = function() {
@@ -2367,10 +2435,12 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
         // Jobs
         async function loadJobs() {
-            const snapshot = await getDocs(query(collection(db, 'jobs'), where('userId', '==', currentUser.uid)));
-            window.jobs = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
-            displayJobList();
-            updateLeadCounts();
+            try {
+                const snapshot = await getDocs(query(collection(db, 'jobs'), where('userId', '==', currentUser.uid)));
+                window.jobs = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()})).filter(j => !j.deleted);
+                displayJobList();
+                updateLeadCounts();
+            } catch(e) { console.error('Error loading jobs:', e); }
         }
 
         function updateLeadCounts() {
@@ -2638,6 +2708,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
         // Step 2: Job Type Selection
         window.selectJobType = function(type) {
+            markUnsaved();
             currentEstimate.jobType = type;
             // Auto-name: "Customer - Exterior 1" (incrementing)
             const custJobs = jobs.filter(j => j.customerId === currentEstimate.customerId && j.jobType === type);
@@ -3642,6 +3713,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
         };
 
         window.saveSurface = function() {
+            markUnsaved();
             console.log('saveSurface called');
             const surfaceType = window.currentSurfaceType;
 
@@ -3743,6 +3815,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
         };
 
         window.saveService = function() {
+            markUnsaved();
             const selectVal = document.getElementById('serviceNameSelect').value;
             let name = selectVal === 'Custom' ? document.getElementById('customServiceName').value.trim() : selectVal;
             const description = document.getElementById('serviceDescription').value.trim();
@@ -3768,6 +3841,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
         window.deleteService = function(index) {
             if (!confirm('Delete this service?')) return;
+            markUnsaved();
             window.currentRoom.additionalServices.splice(index, 1);
             displayRoomDetail();
         };
@@ -3973,6 +4047,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
         
         window.deleteEntireSideRoom = function(name) {
             if (!confirm('Delete ' + name + ' and all its surfaces?')) return;
+            markUnsaved();
             
             const index = currentEstimate.rooms.findIndex(r => r.name === name);
             if (index >= 0) {
@@ -3989,6 +4064,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
         
         // Add custom side/room
         window.addCustomSideRoom = function() {
+            markUnsaved();
             const name = document.getElementById('customRoomInput').value.trim();
             if (!name) {
                 alert('Please enter a name');
@@ -4386,6 +4462,8 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                     window.isEditMode = true;
                 }
                 await loadJobs();
+                window._unsavedEstimate = false;
+                localStorage.removeItem('nsp_draft');
                 if (!silent) alert('Proposal saved!');
                 if (!silent) showScreen('homeScreen');
             } catch (error) {
