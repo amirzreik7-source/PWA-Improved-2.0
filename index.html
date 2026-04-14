@@ -2177,8 +2177,9 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 <div class="room-card">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
                         <h3>Proposals (${projectProposals.length})</h3>
-                        <button class="btn btn-success btn-small" onclick="addProposalToProject('${projectId}')">+ New Variation</button>
+                        <button class="btn btn-success btn-small" onclick="addProposalToProject('${projectId}')">+ New</button>
                     </div>
+                    <button onclick="openAIEstimateForProject('${projectId}')" style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;font-size:14px;padding:10px 16px;border:none;border-radius:8px;cursor:pointer;width:100%;margin-bottom:10px;">🤖 AI Estimate Generator</button>
             `;
 
             if (projectProposals.length === 0) {
@@ -2559,8 +2560,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 </div>
 
                 <button class="btn btn-success" onclick="createNewProject('${customerId}','${customer.name.replace(/'/g, "\\'")}')" style="width:100%;margin:10px 0;">➕ New Project</button>
-                <button class="btn btn-info" onclick="createNewEstimateForCustomer('${customerId}')" style="width:100%;margin-bottom:5px;">📝 Quick Estimate (no project)</button>
-                <button onclick="openAIEstimateGenerator('${customerId}')" style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;font-size:16px;padding:14px 20px;border:none;border-radius:12px;cursor:pointer;box-shadow:0 4px 6px rgba(0,0,0,0.1);width:100%;margin-bottom:15px;">🤖 AI Estimate Generator</button>
+                <button class="btn btn-info" onclick="createNewEstimateForCustomer('${customerId}')" style="width:100%;margin-bottom:15px;">📝 Quick Estimate (no project)</button>
             `;
 
             // Show projects
@@ -5825,6 +5825,15 @@ ${currentEstimate.customerSignature ? '<p>Signature:</p><img src="'+currentEstim
 
         window._aiCustomerId = null;
 
+        window.openAIEstimateForProject = function(projectId) {
+            const project = projects.find(p => p.id === projectId);
+            if (!project) return;
+            // Store project context so AI estimate gets linked to this project
+            window._aiProjectId = projectId;
+            window._aiCustomerId = project.customerId;
+            openAIEstimateGenerator(project.customerId);
+        };
+
         window.openAIEstimateGenerator = function(customerId) {
             window._aiCustomerId = customerId;
             // Reset chat and conversation history
@@ -6150,13 +6159,24 @@ IMPORTANT: Return ONLY the JSON object. No other text.`;
                 };
             });
 
+            // Link to project if AI was opened from a project
+            const aiProjectId = window._aiProjectId || null;
+            let proposalLabel = '';
+            if (aiProjectId) {
+                const existingProps = jobs.filter(j => j.projectId === aiProjectId && !j.deleted);
+                proposalLabel = String.fromCharCode(65 + existingProps.length);
+            }
+            window._aiProjectId = null; // Clear after use
+
             // Set up currentEstimate
             currentEstimate = {
                 customerId: customer.id,
                 customerName: customer.name,
-                jobName: customer.name + ' - ' + aiEstimate.jobType + ' - ' + new Date().toLocaleDateString(),
+                jobName: customer.name + ' - ' + aiEstimate.jobType,
                 jobType: aiEstimate.jobType,
                 profileId: null,
+                projectId: aiProjectId,
+                proposalLabel: proposalLabel,
                 rooms: rooms,
                 totalLabor: 0,
                 totalMaterials: 0,
