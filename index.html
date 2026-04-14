@@ -5014,41 +5014,62 @@ Only return JSON, no other text.`;
         };
 
         // Crew Proposal — simplified PDF at % of customer price
-        window.generateCrewProposal = function() {
-            const crewPct = 0.40; // 40% of base price
+        window.generateCrewProposal = async function() {
+            // Generate the full customer proposal first
+            window._crewMode = true;
+            document.getElementById('proposalContent').innerHTML = '<div style="text-align:center;padding:60px;color:#666;">Generating crew work order...</div>';
+            showScreen('proposalViewScreen');
+            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+            await generateProposal();
+
+            // Now modify the rendered HTML for crew version
+            const el = document.getElementById('proposalContent');
+            let html = el.innerHTML;
+
+            // Replace header
+            html = html.replace('Northern Star Painters &mdash; Proposal', 'Northern Star Painters &mdash; CREW WORK ORDER');
+
+            // Replace pricing section with crew pricing
+            const crewPct = 0.40;
             const basePrice = currentEstimate.basePrice || 0;
             const crewPrice = basePrice * crewPct;
-            const customer = customers.find(c => c.id === currentEstimate.customerId);
             const pca = '-webkit-print-color-adjust:exact;print-color-adjust:exact';
 
-            let roomsHTML = currentEstimate.rooms.map(room => {
-                let surfaceList = room.surfaces.map(s => {
-                    const product = products.find(p => p.id === s.productId);
-                    return `<div style="padding:4px 0 4px 15px;font-size:13px;">${s.surfaceType} — ${product ? product.brand + ' ' + product.name : 'Product'} ${s.sheen} ${s.color} • ${s.coats} coat(s)${s.usePrimer ? ' + primer' : ''}</div>`;
-                }).join('');
-                const svcList = (room.additionalServices || []).map(svc => `<div style="padding:4px 0 4px 15px;font-size:13px;">${svc.name}${svc.description ? ' — ' + svc.description : ''}</div>`).join('');
-                return `<div style="margin-bottom:12px;"><div style="font-weight:700;color:#1e3a8a;font-size:14px;border-bottom:1px solid #ddd;padding-bottom:4px;">${room.name}</div>${surfaceList}${svcList}${room.notes ? '<div style="font-style:italic;color:#666;font-size:12px;padding:4px 0 0 15px;">Note: ' + room.notes + '</div>' : ''}</div>`;
-            }).join('');
+            // Find and replace the PRICE SUMMARY section
+            const priceStart = html.indexOf('PRICE SUMMARY');
+            const signatureStart = html.indexOf('SIGNATURE');
+            if (priceStart > -1 && signatureStart > -1) {
+                // Find the div that contains the price summary content
+                const beforePrice = html.lastIndexOf('<div', priceStart);
+                const afterPrice = html.lastIndexOf('</div>', signatureStart);
+                const crewPriceHTML = `<div style="color:#1e3a8a;padding:6px 0 4px 0;margin:15px 0 0;font-weight:700;font-size:11pt;letter-spacing:0.5px;border-bottom:2px solid #2563eb">LABOR & MATERIALS</div><div style="height:2px;width:50px;background-color:#f4a624;margin-top:-2px;${pca}"></div>
+<div style="margin:8px 0">
+<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:12pt;font-weight:700;border-bottom:2px solid #1e3a8a;"><span>Total Labor & Materials</span><span>$${crewPrice.toFixed(2)}</span></div>
+</div>`;
+                html = html.substring(0, beforePrice) + crewPriceHTML + html.substring(afterPrice);
+            }
 
-            const html = `<div style="font-family:-apple-system,Arial,sans-serif;padding:20px;max-width:100%;">
-                <div style="background:#1e3a8a;color:white;padding:15px;text-align:center;border-radius:8px;${pca}">
-                    <h2 style="margin:0;">CREW WORK ORDER</h2>
-                    <p style="margin:4px 0 0;opacity:0.8;">Northern Star Painters</p>
-                </div>
-                <div style="margin:15px 0;">
-                    <p><strong>Customer:</strong> ${customer ? customer.name : ''}</p>
-                    <p><strong>Address:</strong> ${customer?.address || 'N/A'}</p>
-                    <p><strong>Job Type:</strong> ${currentEstimate.jobType}</p>
-                    <p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
-                    <p style="font-size:20px;font-weight:700;color:#1e3a8a;margin-top:10px;">Crew Price: $${crewPrice.toFixed(2)}</p>
-                </div>
-                <h3 style="color:#1e3a8a;border-bottom:2px solid #2563eb;padding-bottom:4px;">Scope of Work</h3>
-                ${roomsHTML}
-            </div>`;
+            // Remove contract terms for crew version
+            const contractStart = html.indexOf('PAINTING CONTRACT TERMS');
+            if (contractStart > -1) {
+                const contractSection = html.lastIndexOf('<div', contractStart);
+                const miscStart = html.indexOf('MISCELLANEOUS');
+                if (contractSection > -1 && miscStart > -1) {
+                    const miscSection = html.lastIndexOf('<div', miscStart);
+                    html = html.substring(0, contractSection) + html.substring(miscSection);
+                }
+            }
 
-            document.getElementById('proposalContent').innerHTML = html;
-            document.title = (currentEstimate.jobName || 'Crew Proposal') + ' - CREW';
-            showScreen('proposalViewScreen');
+            // Remove signature section for crew
+            const sigSection = html.indexOf('SIGNATURE');
+            if (sigSection > -1) {
+                const sigDiv = html.lastIndexOf('<div', sigSection);
+                if (sigDiv > -1) html = html.substring(0, sigDiv) + '</div>';
+            }
+
+            el.innerHTML = html;
+            document.title = (currentEstimate.jobName || 'Work Order') + ' - CREW';
+            window._crewMode = false;
         };
 
         // Manual price edit — tap base price to override
