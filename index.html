@@ -199,7 +199,10 @@
             <h2 class="screen-title" id="step4Title">Select Sides/Rooms</h2>
             <p class="screen-subtitle" id="step4Subtitle">Click each side/room to add surfaces</p>
             
-            <button class="btn btn-info" onclick="openBulkChangeModal()" style="width:100%;margin-bottom:15px;">🔄 Bulk Change</button>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:15px;">
+                <button class="btn btn-info" onclick="openBulkChangeModal()">🔄 Bulk Change</button>
+                <button class="btn btn-primary" onclick="openAIBulkEdit()">🤖 AI Edit</button>
+            </div>
             <div id="sidesRoomsCards"></div>
 
             <div class="form-group" style="margin-top:20px;">
@@ -665,6 +668,11 @@
             <div class="room-card">
                 <h3>Cost Breakdown (internal)</h3>
                 <div id="costBreakdownContent" style="font-size:14px;color:#666;"></div>
+            </div>
+
+            <div class="room-card">
+                <h3 style="margin-top:0;">Smart Insights</h3>
+                <div id="smartInsightsContent" style="font-size:13px;"></div>
             </div>
 
             <div class="room-card">
@@ -4487,6 +4495,86 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             showScreen('estimateStep4Screen');
         };
 
+        // AI Bulk Edit — natural language commands to modify rooms
+        window.openAIBulkEdit = function() {
+            const command = prompt('Describe the change (e.g., "Remove ceiling from all rooms", "Add primer to all walls", "Change all siding to 3 coats")');
+            if (!command || !command.trim()) return;
+            processAIBulkEdit(command.trim());
+        };
+
+        async function processAIBulkEdit(command) {
+            const roomsSummary = currentEstimate.rooms.map(r => ({
+                name: r.name,
+                surfaces: r.surfaces.map(s => ({ type: s.surfaceType, coats: s.coats, sheen: s.sheen, color: s.color, usePrimer: s.usePrimer })),
+                services: (r.additionalServices || []).map(svc => svc.name)
+            }));
+
+            const prompt_text = `You are an assistant for a painting estimating app. The user wants to bulk-edit their estimate.
+
+Current estimate rooms:
+${JSON.stringify(roomsSummary, null, 2)}
+
+User command: "${command}"
+
+Respond with a JSON object containing an array of operations to perform:
+{
+  "operations": [
+    { "action": "remove_surface", "room": "*" or "Room Name", "surfaceType": "Ceiling" },
+    { "action": "add_primer", "room": "*", "surfaceType": "Walls" },
+    { "action": "set_coats", "room": "*", "surfaceType": "Siding", "coats": 3 },
+    { "action": "set_sheen", "room": "*", "surfaceType": "Walls", "sheen": "Eggshell" }
+  ],
+  "summary": "Human-readable description of what will change"
+}
+
+Only return JSON, no other text.`;
+
+            try {
+                const proxyUrl = 'https://damp-moon-203c.amirzreik7.workers.dev';
+                const response = await fetch(proxyUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: 'claude-sonnet-4-20250514',
+                        max_tokens: 1024,
+                        messages: [{ role: 'user', content: prompt_text }]
+                    })
+                });
+                if (!response.ok) throw new Error('API error ' + response.status);
+                const data = await response.json();
+                const text = data.content[0].text;
+                const parsed = JSON.parse(text.replace(/```json?\n?/g, '').replace(/```/g, '').trim());
+
+                if (!confirm('AI will: ' + parsed.summary + '\n\nProceed?')) return;
+
+                let changes = 0;
+                (parsed.operations || []).forEach(op => {
+                    const targetRooms = op.room === '*' ? currentEstimate.rooms : currentEstimate.rooms.filter(r => r.name === op.room);
+                    targetRooms.forEach(room => {
+                        if (op.action === 'remove_surface') {
+                            const idx = room.surfaces.findIndex(s => s.surfaceType === op.surfaceType);
+                            if (idx >= 0) { room.surfaces.splice(idx, 1); changes++; }
+                        } else if (op.action === 'add_primer') {
+                            const surf = room.surfaces.find(s => s.surfaceType === op.surfaceType);
+                            if (surf) { surf.usePrimer = true; surf.primerCoats = surf.primerCoats || 1; changes++; }
+                        } else if (op.action === 'set_coats') {
+                            const surf = room.surfaces.find(s => s.surfaceType === op.surfaceType);
+                            if (surf) { surf.coats = op.coats; changes++; }
+                        } else if (op.action === 'set_sheen') {
+                            const surf = room.surfaces.find(s => s.surfaceType === op.surfaceType);
+                            if (surf) { surf.sheen = op.sheen; changes++; }
+                        }
+                    });
+                });
+
+                markUnsaved();
+                alert(`Done! ${changes} change(s) applied.`);
+                displaySidesRoomsCards();
+            } catch(e) {
+                alert('AI edit failed: ' + e.message);
+            }
+        }
+
         // Delete individual surface
         window.deleteSurface = function(surfaceType) {
             if (!confirm('Delete this surface?')) return;
@@ -4639,6 +4727,31 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             }
 
             updateDiscountPreview();
+
+            // Smart insights from completed jobs
+            const insightsEl = document.getElementById('smartInsightsContent');
+            if (insightsEl) {
+                const completed = jobs.filter(j => j.actuals && j.actuals.completedAt && j.jobType === currentEstimate.jobType);
+                if (completed.length >= 3) {
+                    const insights = [];
+                    // Labor accuracy
+                    const withLabor = completed.filter(j => j.actuals.estLabor > 0);
+                    if (withLabor.length >= 3) {
+                        const avgLaborVar = withLabor.reduce((s, j) => s + ((j.actuals.crewPayout - j.actuals.estLabor) / j.actuals.estLabor * 100), 0) / withLabor.length;
+                        if (avgLaborVar > 15) insights.push(`<div style="background:#fef3c7;padding:8px;border-radius:6px;margin:4px 0;">Your ${currentEstimate.jobType.toLowerCase()} labor estimates are <strong>${avgLaborVar.toFixed(0)}% low</strong> on average. This job's labor ($${totalLabor.toFixed(0)}) may actually cost ~$${(totalLabor * (1 + avgLaborVar/100)).toFixed(0)}.</div>`);
+                        else if (avgLaborVar < -15) insights.push(`<div style="background:#d1fae5;padding:8px;border-radius:6px;margin:4px 0;">Your labor estimates are ${Math.abs(avgLaborVar).toFixed(0)}% high — room to be more competitive on pricing.</div>`);
+                    }
+                    // Avg margin
+                    const avgMargin = completed.reduce((s, j) => s + (j.actuals.profitMargin || 0), 0) / completed.length;
+                    insights.push(`<div style="background:#eff6ff;padding:8px;border-radius:6px;margin:4px 0;">Your avg ${currentEstimate.jobType.toLowerCase()} profit margin is <strong>${avgMargin.toFixed(1)}%</strong> across ${completed.length} jobs.</div>`);
+                    // Confidence
+                    const confidence = Math.min(100, 50 + completed.length * 5);
+                    insights.push(`<div style="background:#f8f9fa;padding:8px;border-radius:6px;margin:4px 0;">Quote confidence: <strong>${confidence}%</strong> (based on ${completed.length} similar completed jobs)</div>`);
+                    insightsEl.innerHTML = insights.join('');
+                } else {
+                    insightsEl.innerHTML = '<p style="color:#999;">Complete 3+ ${currentEstimate.jobType?.toLowerCase() || ""} jobs to see smart insights here.</p>';
+                }
+            }
         }
 
         // Update discount preview and totals
