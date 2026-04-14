@@ -3222,6 +3222,12 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 notesElement.value = job.projectSummaryNotes;
             }
             
+            // Set snapshot so we don't accidentally save when just viewing PDF
+            window._originalEstimateSnapshot = JSON.stringify(currentEstimate.rooms);
+            window.isEditMode = true;
+            window.editingJobId = jobId;
+            window._unsavedEstimate = false;
+
             // Generate proposal view (pass return screen so Back works correctly)
             generateProposal('customerDetailScreen');
         };
@@ -4868,9 +4874,10 @@ Only return JSON, no other text.`;
 
         // Update discount preview and totals
         window.updateDiscountPreview = function() {
-            const discountType = document.getElementById('discountType').value;
-            const discountValue = parseFloat(document.getElementById('discountValue').value) || 0;
-            const discountName = document.getElementById('discountName').value || 'Discount';
+            const discountTypeEl = document.getElementById('discountType');
+            const discountType = discountTypeEl?.value || currentEstimate.discountType || '';
+            const discountValue = parseFloat(document.getElementById('discountValue')?.value) || currentEstimate.discountValue || 0;
+            const discountName = document.getElementById('discountName')?.value || currentEstimate.discountName || 'Discount';
             
             // Show/hide discount value field
             const valueGroup = document.getElementById('discountValueGroup');
@@ -5000,11 +5007,8 @@ Only return JSON, no other text.`;
             // Build proposal HTML (uses cached contract terms — fast)
             await generateProposal();
 
-            // Smart edit detection + background save
-            const currentSnapshot = JSON.stringify(currentEstimate.rooms);
-            const changed = !window.isEditMode || !window._originalEstimateSnapshot ||
-                            currentSnapshot !== window._originalEstimateSnapshot;
-            if (changed) {
+            // Only save if there are actual unsaved changes
+            if (window._unsavedEstimate) {
                 saveEstimate({silent: true}); // fire-and-forget
             }
         };
