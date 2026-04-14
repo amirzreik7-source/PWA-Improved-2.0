@@ -2264,6 +2264,51 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             }
             html += '</div>';
 
+            // Crew Proposals Section
+            const crewProposals = project.crewProposals || [];
+            html += `
+                <div class="room-card">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                        <h3>👷 Crew Proposals (${crewProposals.length})</h3>
+                    </div>
+                    <div style="display:flex;gap:8px;margin-bottom:10px;">
+                        <input type="number" id="crewPctInput_${projectId}" value="40" min="1" max="100" step="1" style="width:70px;padding:8px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;">
+                        <span style="align-self:center;color:#666;">%</span>
+                        <button class="btn btn-success btn-small" onclick="addCrewProposal('${projectId}')" style="flex:1;">+ New Crew Proposal</button>
+                    </div>`;
+
+            if (crewProposals.length === 0) {
+                html += '<p style="color:#999;text-align:center;padding:10px;">No crew proposals yet.</p>';
+            } else {
+                // Get the landed customer proposal to calculate crew amounts
+                const landedProp = project.landedProposalId ? jobs.find(j => j.id === project.landedProposalId) : projectProposals[0];
+                const customerPrice = landedProp ? (landedProp.basePrice || landedProp.grandTotal || 0) : 0;
+
+                crewProposals.forEach((cp, idx) => {
+                    const crewAmount = customerPrice * (cp.percentage / 100);
+                    const isAccepted = cp.accepted;
+                    html += `
+                        <div style="padding:12px;margin-bottom:8px;border-radius:8px;border:2px solid ${isAccepted ? '#28a745' : '#e0e0e0'};background:${isAccepted ? '#d4edda' : '#f8f9fa'};">
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <div>
+                                    <strong>${cp.percentage}%</strong> — $${crewAmount.toFixed(2)}
+                                    ${isAccepted ? '<span style="color:#28a745;font-weight:700;"> ACCEPTED</span>' : ''}
+                                </div>
+                            </div>
+                            ${cp.notes ? '<p style="color:#666;font-size:12px;margin:4px 0;">Notes: ' + cp.notes + '</p>' : ''}
+                            <p style="color:#999;font-size:11px;margin:2px 0;">${new Date(cp.createdAt).toLocaleDateString()}</p>
+                            <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+                                <button class="btn btn-primary btn-small" onclick="viewCrewProposalPDF('${projectId}',${idx})">👁️ View</button>
+                                <button class="btn btn-info btn-small" onclick="editCrewProposalNotes('${projectId}',${idx})">📝 Notes</button>
+                                ${!isAccepted ? `<button class="btn btn-success btn-small" onclick="acceptCrewProposal('${projectId}',${idx})">✓ Accepted</button>` : ''}
+                                <button class="btn btn-danger btn-small" onclick="deleteCrewProposal('${projectId}',${idx})">Del</button>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+            html += '</div>';
+
             const detailScreen = document.getElementById('customerDetailScreen');
             if (!detailScreen) {
                 const screen = document.createElement('div');
@@ -2568,6 +2613,96 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 await updateDoc(doc(db, 'crewMembers', id), { deleted: true });
                 await loadCrewMembers();
             } catch(e) { alert('Error: ' + e.message); }
+        };
+
+        // ═══════════════════════════════════════
+        // CREW PROPOSAL MANAGEMENT
+        // ═══════════════════════════════════════
+        window.addCrewProposal = async function(projectId) {
+            const pct = parseInt(document.getElementById('crewPctInput_' + projectId)?.value) || 40;
+            const notes = prompt('Notes for this crew proposal (optional):') || '';
+            try {
+                const project = projects.find(p => p.id === projectId);
+                const crewProposals = project?.crewProposals || [];
+                crewProposals.push({ percentage: pct, notes: notes.trim(), accepted: false, createdAt: new Date().toISOString() });
+                await updateDoc(doc(db, 'projects', projectId), { crewProposals });
+                if (project) project.crewProposals = crewProposals;
+                viewProjectDetail(projectId);
+            } catch(e) { alert('Error: ' + e.message); }
+        };
+
+        window.deleteCrewProposal = async function(projectId, idx) {
+            if (!confirm('Delete this crew proposal?')) return;
+            try {
+                const project = projects.find(p => p.id === projectId);
+                const crewProposals = [...(project?.crewProposals || [])];
+                crewProposals.splice(idx, 1);
+                await updateDoc(doc(db, 'projects', projectId), { crewProposals });
+                if (project) project.crewProposals = crewProposals;
+                viewProjectDetail(projectId);
+            } catch(e) { alert('Error: ' + e.message); }
+        };
+
+        window.acceptCrewProposal = async function(projectId, idx) {
+            try {
+                const project = projects.find(p => p.id === projectId);
+                const crewProposals = [...(project?.crewProposals || [])];
+                // Unaccept all others, accept this one
+                crewProposals.forEach((cp, i) => cp.accepted = (i === idx));
+                await updateDoc(doc(db, 'projects', projectId), { crewProposals });
+                if (project) project.crewProposals = crewProposals;
+                viewProjectDetail(projectId);
+            } catch(e) { alert('Error: ' + e.message); }
+        };
+
+        window.editCrewProposalNotes = async function(projectId, idx) {
+            const project = projects.find(p => p.id === projectId);
+            const crewProposals = [...(project?.crewProposals || [])];
+            const current = crewProposals[idx]?.notes || '';
+            const newNotes = prompt('Crew proposal notes:', current);
+            if (newNotes === null) return;
+            try {
+                crewProposals[idx].notes = newNotes.trim();
+                await updateDoc(doc(db, 'projects', projectId), { crewProposals });
+                if (project) project.crewProposals = crewProposals;
+                viewProjectDetail(projectId);
+            } catch(e) { alert('Error: ' + e.message); }
+        };
+
+        window.viewCrewProposalPDF = async function(projectId, idx) {
+            const project = projects.find(p => p.id === projectId);
+            if (!project) return;
+            const cp = project.crewProposals?.[idx];
+            if (!cp) return;
+
+            // Find the landed proposal (or first proposal) to use as base
+            const landedProp = project.landedProposalId ? jobs.find(j => j.id === project.landedProposalId) : jobs.find(j => j.projectId === projectId && !j.deleted);
+            if (!landedProp) { alert('No customer proposal found to generate crew version from.'); return; }
+
+            // Load into currentEstimate temporarily
+            const savedEstimate = { ...currentEstimate };
+            currentEstimate = {
+                customerId: landedProp.customerId,
+                customerName: landedProp.customerName,
+                jobName: landedProp.jobName,
+                jobType: landedProp.jobType,
+                profileId: landedProp.profileId,
+                projectId: projectId,
+                rooms: landedProp.rooms || [],
+                basePrice: (landedProp.basePrice || landedProp.grandTotal || 0) * (cp.percentage / 100),
+                priceOverride: true,
+                discountType: '',
+                discountValue: 0,
+                discountAmount: 0,
+                credits: [],
+                projectSummaryNotes: landedProp.projectSummaryNotes || '',
+                totalLabor: landedProp.totalLabor,
+                totalMaterials: landedProp.totalMaterials,
+                grandTotal: (landedProp.basePrice || landedProp.grandTotal || 0) * (cp.percentage / 100)
+            };
+
+            window._unsavedEstimate = false;
+            await generateCrewProposal();
         };
 
         window.saveCustomerNotes = async function(customerId) {
