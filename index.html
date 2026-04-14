@@ -843,6 +843,13 @@
             <div style="margin-bottom:20px;">
                 <button class="btn btn-warning" onclick="showScreen('priceSettingsScreen')" style="width:100%;font-size:16px;">💰 Price Settings</button>
             </div>
+
+            <!-- MIGRATION TOOL -->
+            <div class="room-card" style="margin-bottom:20px;border:2px solid #f59e0b;">
+                <h3>Migrate Estimates to Projects</h3>
+                <p style="color:#666;font-size:13px;margin-bottom:10px;">Convert standalone estimates into projects with job numbers. Safe to run multiple times — skips already-migrated estimates.</p>
+                <button class="btn btn-info" onclick="migrateEstimatesToProjects()" style="width:100%;">🔄 Run Migration</button>
+            </div>
             
             <div class="room-card">
                 <h3>Company Information</h3>
@@ -1011,7 +1018,7 @@
         // Import Firebase modules
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
-        import { getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where, enableIndexedDbPersistence, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        import { getFirestore, collection, addDoc, getDocs, getDoc, doc, updateDoc, deleteDoc, query, where, orderBy, enableIndexedDbPersistence, serverTimestamp, runTransaction } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
         import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js';
 
         // Firebase configuration
@@ -1208,7 +1215,8 @@
                 loadCustomers(),
                 loadProducts(),
                 loadProfiles(),
-                loadJobs()
+                loadJobs(),
+                loadProjects()
             ]);
 
             // Check for unsaved draft
@@ -1934,6 +1942,252 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             }
         }
 
+        // ═══════════════════════════════════════
+        // PROJECT MANAGEMENT SYSTEM
+        // ═══════════════════════════════════════
+        window.projects = [];
+
+        async function loadProjects() {
+            try {
+                const snapshot = await getDocs(query(collection(db, 'projects'), where('userId', '==', currentUser.uid)));
+                window.projects = snapshot.docs.map(d => ({id: d.id, ...d.data()})).filter(p => !p.deleted);
+            } catch(e) { console.error('Error loading projects:', e); }
+        }
+
+        async function generateJobNumber() {
+            const counterRef = doc(db, 'counters', 'jobNumber_' + currentUser.uid);
+            let jobNumber = '';
+            await runTransaction(db, async (transaction) => {
+                const counterDoc = await transaction.get(counterRef);
+                let current = 0;
+                if (counterDoc.exists()) current = counterDoc.data().current || 0;
+                current++;
+                transaction.set(counterRef, { current });
+                const year = new Date().getFullYear();
+                jobNumber = 'NSP-' + year + '-' + String(current).padStart(3, '0');
+            });
+            return jobNumber;
+        }
+
+        window.createNewProject = async function(customerId, customerName) {
+            const projectName = prompt('Project name (e.g., "Whole House Interior"):');
+            if (!projectName || !projectName.trim()) return;
+            try {
+                const jobNumber = await generateJobNumber();
+                const projectData = {
+                    userId: currentUser.uid,
+                    customerId: customerId,
+                    customerName: customerName,
+                    jobNumber: jobNumber,
+                    projectName: projectName.trim(),
+                    status: 'New Lead',
+                    leadSource: '',
+                    appointmentDate: null,
+                    appointmentNotes: '',
+                    deadReason: '',
+                    landedProposalId: null,
+                    statusHistory: [{ status: 'New Lead', date: new Date().toISOString(), note: 'Project created' }],
+                    createdAt: new Date().toISOString(),
+                    deleted: false
+                };
+                const projectRef = await addDoc(collection(db, 'projects'), projectData);
+                await loadProjects();
+                // Go straight to creating first proposal
+                startProposalForProject(projectRef.id, projectData, customerId, customerName);
+            } catch(e) { alert('Error creating project: ' + e.message); }
+        };
+
+        window.startProposalForProject = function(projectId, project, customerId, customerName) {
+            // Count existing proposals for this project
+            const existing = jobs.filter(j => j.projectId === projectId && !j.deleted);
+            const nextLabel = String.fromCharCode(65 + existing.length); // A, B, C...
+
+            window.isEditMode = false;
+            window.editingJobId = null;
+            window._unsavedEstimate = true;
+
+            currentEstimate = {
+                projectId: projectId,
+                proposalLabel: nextLabel,
+                customerId: customerId,
+                customerName: customerName,
+                jobName: customerName + ' - ' + (project.projectName || 'Project'),
+                jobType: '',
+                profileId: null,
+                rooms: [],
+                totalLabor: 0,
+                totalMaterials: 0,
+                grandTotal: 0
+            };
+            goToEstimateStep(2); // Job type selection
+        };
+
+        window.addProposalToProject = function(projectId) {
+            const project = projects.find(p => p.id === projectId);
+            if (!project) return;
+            startProposalForProject(projectId, project, project.customerId, project.customerName);
+        };
+
+        window.markProposalLanded = async function(projectId, proposalId) {
+            if (!confirm('Mark this proposal as the landed (won) proposal?')) return;
+            try {
+                await updateDoc(doc(db, 'projects', projectId), {
+                    landedProposalId: proposalId,
+                    status: 'Landed Job'
+                });
+                await loadProjects();
+                viewProjectDetail(projectId);
+            } catch(e) { alert('Error: ' + e.message); }
+        };
+
+        window.viewProjectDetail = function(projectId) {
+            const project = projects.find(p => p.id === projectId);
+            if (!project) return;
+
+            const projectProposals = jobs.filter(j => j.projectId === projectId && !j.deleted)
+                .sort((a, b) => (a.proposalLabel || 'A').localeCompare(b.proposalLabel || 'A'));
+
+            let html = `
+                <button class="btn btn-back" onclick="viewCustomerDetail('${project.customerId}')">← Back</button>
+                <div style="text-align:center;margin-bottom:15px;">
+                    <p style="color:#667eea;font-weight:700;font-size:13px;margin:0;">${project.jobNumber}</p>
+                    <h2 style="margin:4px 0;">${project.projectName}</h2>
+                    <span style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;color:white;background:${getStatusColor(project.status)}">${project.status}</span>
+                </div>
+
+                <div class="room-card">
+                    <h3>Project Info</h3>
+                    <div class="form-group" style="margin-bottom:10px;">
+                        <label>Status</label>
+                        <select id="projectStatusSelect" onchange="updateProjectStatus('${projectId}', this.value)" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
+                            ${['New Lead','Appointment Set','Current Estimate','Landed Job','Scheduled','In Progress','Complete','Dead'].map(s => `<option value="${s}" ${s === project.status ? 'selected' : ''}>${s}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom:10px;">
+                        <label>Lead Source</label>
+                        <select id="projectLeadSource" onchange="updateProjectField('${projectId}','leadSource',this.value)" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
+                            <option value="">-- Select --</option>
+                            ${['Google','Referral','Yard Sign','Facebook','Repeat Customer','Nextdoor','Yelp','Other'].map(s => `<option value="${s}" ${s === project.leadSource ? 'selected' : ''}>${s}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="room-card">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                        <h3>Proposals (${projectProposals.length})</h3>
+                        <button class="btn btn-success btn-small" onclick="addProposalToProject('${projectId}')">+ New Variation</button>
+                    </div>
+            `;
+
+            if (projectProposals.length === 0) {
+                html += '<p style="color:#999;text-align:center;padding:20px;">No proposals yet.</p>';
+            } else {
+                projectProposals.forEach(prop => {
+                    const isLanded = prop.id === project.landedProposalId;
+                    html += `
+                        <div style="padding:12px;margin-bottom:8px;border-radius:8px;border:2px solid ${isLanded ? '#28a745' : '#e0e0e0'};background:${isLanded ? '#d4edda' : '#f8f9fa'};">
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <div>
+                                    <strong>Proposal ${prop.proposalLabel || 'A'}</strong> — ${prop.jobType || ''}
+                                    ${isLanded ? '<span style="color:#28a745;font-weight:700;"> LANDED</span>' : ''}
+                                </div>
+                                <strong style="color:#11998e;font-size:16px;">$${(prop.grandTotal || 0).toFixed(2)}</strong>
+                            </div>
+                            <p style="color:#666;font-size:12px;margin:4px 0;">${new Date(prop.date).toLocaleDateString()} ${new Date(prop.date).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true})}</p>
+                            <div style="display:flex;gap:6px;margin-top:8px;">
+                                <button class="btn btn-primary btn-small" onclick="viewJob('${prop.id}')">View</button>
+                                <button class="btn btn-warning btn-small" onclick="regenerateProposal('${prop.id}')">PDF</button>
+                                ${!isLanded ? `<button class="btn btn-success btn-small" onclick="markProposalLanded('${projectId}','${prop.id}')">Mark Landed</button>` : ''}
+                                <button class="btn btn-danger btn-small" onclick="deleteEstimate('${prop.id}','${project.customerId}')">Del</button>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+            html += '</div>';
+
+            const detailScreen = document.getElementById('customerDetailScreen');
+            if (!detailScreen) {
+                const screen = document.createElement('div');
+                screen.id = 'customerDetailScreen';
+                screen.className = 'screen';
+                document.getElementById('appContainer').appendChild(screen);
+            }
+            document.getElementById('customerDetailScreen').innerHTML = html;
+            showScreen('customerDetailScreen');
+        };
+
+        window.updateProjectStatus = async function(projectId, newStatus) {
+            try {
+                const project = projects.find(p => p.id === projectId);
+                const history = project?.statusHistory || [];
+                history.push({ status: newStatus, date: new Date().toISOString(), note: '' });
+
+                const updates = { status: newStatus, statusHistory: history };
+
+                if (newStatus === 'Dead') {
+                    const reason = prompt('Why was this job lost? (Competition, Price, Timing, Changed mind, Other)');
+                    if (reason) updates.deadReason = reason;
+                }
+
+                await updateDoc(doc(db, 'projects', projectId), updates);
+                await loadProjects();
+                viewProjectDetail(projectId);
+            } catch(e) { alert('Error updating status: ' + e.message); }
+        };
+
+        window.updateProjectField = async function(projectId, field, value) {
+            try {
+                await updateDoc(doc(db, 'projects', projectId), { [field]: value });
+                const p = projects.find(p => p.id === projectId);
+                if (p) p[field] = value;
+            } catch(e) { console.error('Error updating project:', e); }
+        };
+
+        // Migration: convert standalone estimates to projects
+        window.migrateEstimatesToProjects = async function() {
+            const standalone = jobs.filter(j => !j.projectId && !j.deleted);
+            if (standalone.length === 0) { alert('No standalone estimates to migrate. All done!'); return; }
+            if (!confirm(`Migrate ${standalone.length} standalone estimate(s) to projects? This is safe and additive.`)) return;
+
+            let success = 0, errors = 0;
+            for (const est of standalone) {
+                try {
+                    const jobNumber = await generateJobNumber();
+                    const projectData = {
+                        userId: currentUser.uid,
+                        customerId: est.customerId,
+                        customerName: est.customerName,
+                        jobNumber: jobNumber,
+                        projectName: (est.jobType || 'Job') + ' - ' + (est.customerName || 'Customer'),
+                        status: est.status || 'New Lead',
+                        leadSource: '',
+                        appointmentDate: null,
+                        appointmentNotes: '',
+                        deadReason: '',
+                        landedProposalId: est.id,
+                        statusHistory: [{ status: est.status || 'New Lead', date: est.date || new Date().toISOString(), note: 'Migrated from standalone estimate' }],
+                        createdAt: est.date || new Date().toISOString(),
+                        deleted: false
+                    };
+                    const projectRef = await addDoc(collection(db, 'projects'), projectData);
+                    await updateDoc(doc(db, 'jobs', est.id), { projectId: projectRef.id, proposalLabel: 'A' });
+                    success++;
+                } catch(e) { console.error('Migration error for', est.id, e); errors++; }
+            }
+            await Promise.all([loadJobs(), loadProjects()]);
+            alert(`Migration complete! ${success} migrated, ${errors} errors.`);
+        };
+
+        function getStatusColor(status) {
+            const colors = {
+                'New Lead': '#3b82f6', 'Appointment Set': '#8b5cf6', 'Current Estimate': '#f59e0b',
+                'Landed Job': '#10b981', 'Scheduled': '#06b6d4', 'In Progress': '#f97316',
+                'Complete': '#6b7280', 'Dead': '#ef4444'
+            };
+            return colors[status] || '#6b7280';
+        }
+
         // Customers
         async function loadCustomers() {
             try {
@@ -1986,7 +2240,10 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             if (!customer) return;
 
             const customerJobs = jobs.filter(j => j.customerId === customerId);
+            const customerProjects = projects.filter(p => p.customerId === customerId);
             const totalValue = customerJobs.reduce((sum, j) => sum + (j.grandTotal || 0), 0);
+            // Standalone estimates (not linked to a project)
+            const standaloneJobs = customerJobs.filter(j => !j.projectId);
 
             let html = `
                 <button class="btn btn-back" onclick="showScreen('customersScreen')">← Back to Customers</button>
@@ -1998,21 +2255,40 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                         ${customer.phone ? '<p style="margin:2px 0;font-size:13px;">☎ ' + customer.phone + '</p>' : ''}
                     </div>
                     <div style="display:flex;gap:20px;margin-top:12px;padding-top:12px;border-top:1px solid #e5e7eb;">
-                        <div><span style="font-size:22px;font-weight:700;color:#667eea;">${customerJobs.length}</span><br><span style="font-size:11px;color:#666;">Estimates</span></div>
+                        <div><span style="font-size:22px;font-weight:700;color:#667eea;">${customerProjects.length}</span><br><span style="font-size:11px;color:#666;">Projects</span></div>
                         <div><span style="font-size:22px;font-weight:700;color:#10b981;">$${totalValue.toFixed(2)}</span><br><span style="font-size:11px;color:#666;">Total Value</span></div>
                     </div>
                 </div>
 
-                <button class="btn btn-success" onclick="createNewEstimateForCustomer('${customerId}')" style="width:100%;margin:10px 0;">➕ New Estimate</button>
+                <button class="btn btn-success" onclick="createNewProject('${customerId}','${customer.name.replace(/'/g, "\\'")}')" style="width:100%;margin:10px 0;">➕ New Project</button>
+                <button class="btn btn-info" onclick="createNewEstimateForCustomer('${customerId}')" style="width:100%;margin-bottom:5px;">📝 Quick Estimate (no project)</button>
                 <button onclick="openAIEstimateGenerator('${customerId}')" style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;font-size:16px;padding:14px 20px;border:none;border-radius:12px;cursor:pointer;box-shadow:0 4px 6px rgba(0,0,0,0.1);width:100%;margin-bottom:15px;">🤖 AI Estimate Generator</button>
-
-                <h3 style="margin:10px 0 12px 0;">Estimates (${customerJobs.length})</h3>
             `;
 
-            if (customerJobs.length === 0) {
-                html += '<p style="color:#999;text-align:center;padding:30px;">No estimates yet.</p>';
-            } else {
-                html += customerJobs.sort((a, b) => new Date(b.date) - new Date(a.date)).map(job => `
+            // Show projects
+            if (customerProjects.length > 0) {
+                html += '<h3 style="margin:10px 0 12px 0;">Projects</h3>';
+                customerProjects.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).forEach(project => {
+                    const propCount = customerJobs.filter(j => j.projectId === project.id).length;
+                    html += `
+                        <div class="room-card" style="cursor:pointer;border-left:4px solid ${getStatusColor(project.status)};" onclick="viewProjectDetail('${project.id}')">
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <div>
+                                    <p style="margin:0;font-size:12px;color:#667eea;font-weight:700;">${project.jobNumber}</p>
+                                    <h3 style="margin:2px 0;font-size:15px;">${project.projectName}</h3>
+                                </div>
+                                <span style="display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;color:white;background:${getStatusColor(project.status)}">${project.status}</span>
+                            </div>
+                            <p style="margin:4px 0;font-size:13px;color:#666;">${propCount} proposal(s) • ${new Date(project.createdAt).toLocaleDateString()}</p>
+                        </div>
+                    `;
+                });
+            }
+
+            // Show standalone estimates (not linked to projects — pre-migration or quick estimates)
+            if (standaloneJobs.length > 0) {
+                html += '<h3 style="margin:15px 0 12px 0;">Standalone Estimates</h3>';
+                html += standaloneJobs.sort((a, b) => new Date(b.date) - new Date(a.date)).map(job => `
                     <div class="room-card" style="cursor:pointer;" onclick="viewJob('${job.id}')">
                         <div style="display:flex;justify-content:space-between;align-items:center;">
                             <h3 style="margin:0;font-size:15px;">${job.jobName}</h3>
@@ -2027,6 +2303,10 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                         </div>
                     </div>
                 `).join('');
+            }
+
+            if (customerProjects.length === 0 && standaloneJobs.length === 0) {
+                html += '<p style="color:#999;text-align:center;padding:30px;">No projects or estimates yet.</p>';
             }
 
             // Show in a custom screen
@@ -2534,6 +2814,8 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 jobName: job.jobName,
                 jobType: job.jobType,
                 profileId: job.profileId,
+                projectId: job.projectId || null,
+                proposalLabel: job.proposalLabel || '',
                 rooms: job.rooms || [],
                 basePrice: job.basePrice || job.grandTotal,
                 priceOverride: job.priceOverride || false,
@@ -2610,6 +2892,8 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 jobName: job.jobName,
                 jobType: job.jobType,
                 profileId: job.profileId,
+                projectId: job.projectId || null,
+                proposalLabel: job.proposalLabel || '',
                 rooms: job.rooms || [],
                 basePrice: job.basePrice || job.grandTotal,
                 priceOverride: job.priceOverride || false,
@@ -4433,6 +4717,8 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 jobName: currentEstimate.jobName,
                 jobType: currentEstimate.jobType,
                 profileId: currentEstimate.profileId,
+                projectId: currentEstimate.projectId || null,
+                proposalLabel: currentEstimate.proposalLabel || '',
                 rooms: currentEstimate.rooms,
                 basePrice: currentEstimate.basePrice,
                 priceOverride: currentEstimate.priceOverride || false,
