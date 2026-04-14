@@ -2248,14 +2248,20 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
         // Dashboard: pipeline summary + appointments
         function refreshDashboard() {
-            // Pipeline summary
+            // Pipeline summary — count from jobs (unique customers per status), same source as leads screen
             const pipeline = document.getElementById('homePipelineSummary');
-            if (pipeline && projects.length > 0) {
+            if (pipeline && jobs.length > 0) {
                 const counts = {};
-                projects.forEach(p => { counts[p.status] = (counts[p.status] || 0) + 1; });
+                const customersByStatus = {};
+                jobs.forEach(j => {
+                    const s = j.status || 'New Lead';
+                    if (!customersByStatus[s]) customersByStatus[s] = new Set();
+                    customersByStatus[s].add(j.customerId);
+                });
+                Object.entries(customersByStatus).forEach(([s, set]) => { counts[s] = set.size; });
                 const statuses = ['New Lead', 'Appointment Set', 'Current Estimate', 'Landed Job', 'In Progress', 'Complete'];
                 pipeline.innerHTML = statuses.filter(s => counts[s]).map(s =>
-                    `<div style="text-align:center;padding:8px 4px;background:#f8f9fa;border-radius:8px;border-left:3px solid ${getStatusColor(s)}">
+                    `<div style="text-align:center;padding:8px 4px;background:#f8f9fa;border-radius:8px;border-left:3px solid ${getStatusColor(s)};cursor:pointer;" onclick="filterJobs('${s}')">
                         <div style="font-size:20px;font-weight:700;color:${getStatusColor(s)}">${counts[s]}</div>
                         <div style="font-size:10px;color:#666;">${s}</div>
                     </div>`
