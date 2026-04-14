@@ -650,6 +650,7 @@
                 <h3>Price Summary</h3>
                 <div class="room-stats" style="font-size: 18px;">
                     <p><strong>Base Price:</strong> <span id="reviewBasePrice" onclick="editBasePrice()" style="cursor:pointer;text-decoration:underline dotted #667eea;" title="Tap to edit">$0.00</span> <span style="font-size:11px;color:#999;">tap to edit</span></p>
+                    <p id="calculatedPriceRow" style="display:none;font-size:13px;color:#999;"><strong>Calculated:</strong> <span id="reviewCalcPrice">$0.00</span> (overridden)</p>
                     <p id="discountRow" style="display: none;"><strong><span id="discountDisplayName">Discount</span>:</strong> <span id="reviewDiscountAmount" style="color: #e74c3c;">-$0.00</span></p>
                     <div id="reviewCreditsRows"></div>
                     <hr style="margin: 10px 0;">
@@ -661,6 +662,11 @@
             </div>
 
             <!-- PDF Options -->
+            <div class="room-card">
+                <h3>Cost Breakdown (internal)</h3>
+                <div id="costBreakdownContent" style="font-size:14px;color:#666;"></div>
+            </div>
+
             <div class="room-card">
                 <h3>PDF & Display Options</h3>
                 <div class="form-group">
@@ -733,7 +739,8 @@
                 <div class="room-stats" id="profitDisplayContent"></div>
             </div>
 
-            <button class="btn btn-warning btn-large" onclick="saveAndGenerateProposal()" style="width:100%;">📄 Save & PDF</button>
+            <button class="btn btn-warning btn-large" onclick="saveAndGenerateProposal()" style="width:100%;">📄 Customer PDF</button>
+            <button class="btn btn-info btn-large" onclick="generateCrewProposal()" style="width:100%;">👷 Crew Proposal (40%)</button>
             <button class="btn btn-secondary btn-small" onclick="openProfitTracking()" style="width:100%;margin-top:10px;">📊 Log Actuals</button>
         </div>
 
@@ -2336,6 +2343,17 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             return colors[status] || '#6b7280';
         }
 
+        window.saveCustomerNotes = async function(customerId) {
+            try {
+                const notes = document.getElementById('customerNotes_' + customerId)?.value || '';
+                const requests = document.getElementById('customerRequests_' + customerId)?.value || '';
+                await updateDoc(doc(db, 'customers', customerId), { notes, specialRequests: requests });
+                const c = customers.find(c => c.id === customerId);
+                if (c) { c.notes = notes; c.specialRequests = requests; }
+                alert('Notes saved!');
+            } catch(e) { alert('Error: ' + e.message); }
+        };
+
         // Customers
         async function loadCustomers() {
             try {
@@ -2406,6 +2424,19 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                         <div><span style="font-size:22px;font-weight:700;color:#667eea;">${customerProjects.length}</span><br><span style="font-size:11px;color:#666;">Projects</span></div>
                         <div><span style="font-size:22px;font-weight:700;color:#10b981;">$${totalValue.toFixed(2)}</span><br><span style="font-size:11px;color:#666;">Total Value</span></div>
                     </div>
+                </div>
+
+                <div class="room-card" style="margin-top:10px;">
+                    <h3>Customer Notes</h3>
+                    <div class="form-group" style="margin-bottom:8px;">
+                        <label style="font-size:13px;">Personal Notes (preferences, small talk)</label>
+                        <textarea id="customerNotes_${customerId}" rows="2" placeholder="Colors they like, hobbies, pets..." style="font-size:14px;">${customer.notes || ''}</textarea>
+                    </div>
+                    <div class="form-group" style="margin-bottom:8px;">
+                        <label style="font-size:13px;">Special Requests</label>
+                        <textarea id="customerRequests_${customerId}" rows="2" placeholder="Allergies, access instructions..." style="font-size:14px;">${customer.specialRequests || ''}</textarea>
+                    </div>
+                    <button class="btn btn-info btn-small" onclick="saveCustomerNotes('${customerId}')" style="width:100%;">Save Notes</button>
                 </div>
 
                 <button class="btn btn-success" onclick="createNewProject('${customerId}','${customer.name.replace(/'/g, "\\'")}')" style="width:100%;margin:10px 0;">➕ New Project</button>
@@ -3899,6 +3930,12 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             const presetSet = new Set(presets);
             const customRooms = currentEstimate.rooms.filter(r => !presetSet.has(r.name)).map(r => r.name);
             const allNames = [...presets, ...customRooms];
+            // Sort: configured rooms first, then unconfigured
+            allNames.sort((a, b) => {
+                const aHas = roomMap[a] && roomMap[a].surfaces.length > 0 ? 0 : 1;
+                const bHas = roomMap[b] && roomMap[b].surfaces.length > 0 ? 0 : 1;
+                return aHas - bHas;
+            });
 
             allNames.forEach(name => {
                 const room = roomMap[name];
@@ -4581,6 +4618,26 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 currentEstimate.basePrice = totalLabor + totalMaterials;
             }
 
+            // Cost breakdown (internal — not shown to customer)
+            const cbEl = document.getElementById('costBreakdownContent');
+            if (cbEl) {
+                const totalGallons = currentEstimate.rooms.reduce((sum, r) => {
+                    return sum + r.surfaces.reduce((s2, surf) => {
+                        const coverage = 350; // avg sqft/gallon
+                        return s2 + ((surf.quantity || 0) * (surf.coats || 1) / coverage);
+                    }, 0);
+                }, 0);
+                const estManHours = totalLabor / (PRICING.LaborRate || 60);
+                cbEl.innerHTML = `
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                        <div><strong>Labor:</strong> $${totalLabor.toFixed(2)}</div>
+                        <div><strong>Materials:</strong> $${totalMaterials.toFixed(2)}</div>
+                        <div><strong>Est. Man-Hours:</strong> ${estManHours.toFixed(1)} hrs</div>
+                        <div><strong>Est. Gallons:</strong> ${totalGallons.toFixed(1)} gal</div>
+                    </div>
+                `;
+            }
+
             updateDiscountPreview();
         }
 
@@ -4628,6 +4685,15 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
             // Update display
             document.getElementById('reviewBasePrice').textContent = `$${basePrice.toFixed(2)}`;
+            // Show calculated price if overridden
+            const calcPrice = (currentEstimate.totalLabor || 0) + (currentEstimate.totalMaterials || 0);
+            const calcRow = document.getElementById('calculatedPriceRow');
+            if (calcRow) {
+                if (currentEstimate.priceOverride && Math.abs(basePrice - calcPrice) > 0.01) {
+                    document.getElementById('reviewCalcPrice').textContent = '$' + calcPrice.toFixed(2);
+                    calcRow.style.display = 'block';
+                } else { calcRow.style.display = 'none'; }
+            }
             document.getElementById('reviewSubtotal').textContent = `$${subtotal.toFixed(2)}`;
             document.getElementById('reviewDeposit').textContent = `$${deposit.toFixed(2)}`;
             document.getElementById('reviewBalance').textContent = `$${balance.toFixed(2)}`;
@@ -4716,6 +4782,44 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             if (changed) {
                 saveEstimate({silent: true}); // fire-and-forget
             }
+        };
+
+        // Crew Proposal — simplified PDF at % of customer price
+        window.generateCrewProposal = function() {
+            const crewPct = 0.40; // 40% of base price
+            const basePrice = currentEstimate.basePrice || 0;
+            const crewPrice = basePrice * crewPct;
+            const customer = customers.find(c => c.id === currentEstimate.customerId);
+            const pca = '-webkit-print-color-adjust:exact;print-color-adjust:exact';
+
+            let roomsHTML = currentEstimate.rooms.map(room => {
+                let surfaceList = room.surfaces.map(s => {
+                    const product = products.find(p => p.id === s.productId);
+                    return `<div style="padding:4px 0 4px 15px;font-size:13px;">${s.surfaceType} — ${product ? product.brand + ' ' + product.name : 'Product'} ${s.sheen} ${s.color} • ${s.coats} coat(s)${s.usePrimer ? ' + primer' : ''}</div>`;
+                }).join('');
+                const svcList = (room.additionalServices || []).map(svc => `<div style="padding:4px 0 4px 15px;font-size:13px;">${svc.name}${svc.description ? ' — ' + svc.description : ''}</div>`).join('');
+                return `<div style="margin-bottom:12px;"><div style="font-weight:700;color:#1e3a8a;font-size:14px;border-bottom:1px solid #ddd;padding-bottom:4px;">${room.name}</div>${surfaceList}${svcList}${room.notes ? '<div style="font-style:italic;color:#666;font-size:12px;padding:4px 0 0 15px;">Note: ' + room.notes + '</div>' : ''}</div>`;
+            }).join('');
+
+            const html = `<div style="font-family:-apple-system,Arial,sans-serif;padding:20px;max-width:100%;">
+                <div style="background:#1e3a8a;color:white;padding:15px;text-align:center;border-radius:8px;${pca}">
+                    <h2 style="margin:0;">CREW WORK ORDER</h2>
+                    <p style="margin:4px 0 0;opacity:0.8;">Northern Star Painters</p>
+                </div>
+                <div style="margin:15px 0;">
+                    <p><strong>Customer:</strong> ${customer ? customer.name : ''}</p>
+                    <p><strong>Address:</strong> ${customer?.address || 'N/A'}</p>
+                    <p><strong>Job Type:</strong> ${currentEstimate.jobType}</p>
+                    <p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
+                    <p style="font-size:20px;font-weight:700;color:#1e3a8a;margin-top:10px;">Crew Price: $${crewPrice.toFixed(2)}</p>
+                </div>
+                <h3 style="color:#1e3a8a;border-bottom:2px solid #2563eb;padding-bottom:4px;">Scope of Work</h3>
+                ${roomsHTML}
+            </div>`;
+
+            document.getElementById('proposalContent').innerHTML = html;
+            document.title = (currentEstimate.jobName || 'Crew Proposal') + ' - CREW';
+            showScreen('proposalViewScreen');
         };
 
         // Manual price edit — tap base price to override
