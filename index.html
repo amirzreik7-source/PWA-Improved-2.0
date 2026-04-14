@@ -138,6 +138,7 @@
                 <button class="btn btn-warning" onclick="showScreen('leadsScreen')">📋 Leads</button>
                 <button class="btn btn-info" onclick="showScreen('productsScreen')">🎨 Products</button>
                 <button class="btn btn-primary" onclick="showScreen('profilesScreen')">📦 Profiles</button>
+                <button class="btn btn-warning" onclick="showScreen('crewsScreen')">👷 Crews</button>
                 <button class="btn btn-info" onclick="showScreen('settingsScreen')">⚙️ Settings</button>
                 <button class="btn btn-secondary" onclick="showDashboard()">📊 Dashboard</button>
             </div>
@@ -907,6 +908,30 @@
         </div>
 
         <!-- SETTINGS SCREEN -->
+        <!-- CREWS SCREEN -->
+        <div id="crewsScreen" class="screen">
+            <button class="btn btn-back" onclick="showScreen('homeScreen')">← Back</button>
+            <h2 class="screen-title">Crew Members</h2>
+            <div class="room-card" style="margin-bottom:15px;">
+                <h3>Add Crew Member</h3>
+                <div class="form-group" style="margin-bottom:8px;">
+                    <input type="text" id="crewName" placeholder="Full Name" style="font-size:15px;">
+                </div>
+                <div class="form-group" style="margin-bottom:8px;">
+                    <input type="tel" id="crewPhone" placeholder="Phone Number" style="font-size:15px;">
+                </div>
+                <div class="form-group" style="margin-bottom:8px;">
+                    <select id="crewRole" style="font-size:15px;">
+                        <option value="Crew Leader">Crew Leader</option>
+                        <option value="Painter">Painter</option>
+                        <option value="Helper">Helper</option>
+                    </select>
+                </div>
+                <button class="btn btn-success" onclick="saveCrewMember()" style="width:100%;">+ Add Crew Member</button>
+            </div>
+            <div id="crewList"></div>
+        </div>
+
         <div id="settingsScreen" class="screen">
             <button class="btn btn-back" onclick="showScreen('homeScreen')">← Back</button>
             <h2 class="screen-title">Company Settings</h2>
@@ -1296,7 +1321,8 @@
                 loadProducts(),
                 loadProfiles(),
                 loadJobs(),
-                loadProjects()
+                loadProjects(),
+                loadCrewMembers()
             ]);
 
             // Check for unsaved draft
@@ -2175,6 +2201,35 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 </div>
 
                 <div class="room-card">
+                    <h3>Crew & Schedule</h3>
+                    <div class="form-group" style="margin-bottom:8px;">
+                        <label style="font-size:13px;">Assigned Crew Leader</label>
+                        <select id="projectCrewLeader_${projectId}" onchange="updateProjectField('${projectId}','assignedCrewLeader',this.value)" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
+                            <option value="">-- Select --</option>
+                            ${crewMembers.filter(c => c.role === 'Crew Leader').map(c => `<option value="${c.name}" ${c.name === project.assignedCrewLeader ? 'selected' : ''}>${c.name}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom:8px;">
+                        <label style="font-size:13px;">Crew Size</label>
+                        <input type="number" id="projectCrewSize_${projectId}" value="${project.crewSize || ''}" min="1" step="1" placeholder="e.g., 3" onchange="updateProjectField('${projectId}','crewSize',parseInt(this.value)||0)" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                        <div class="form-group" style="margin-bottom:8px;">
+                            <label style="font-size:13px;">Start Date</label>
+                            <input type="date" id="projectStartDate_${projectId}" value="${project.scheduledStartDate || ''}" onchange="updateProjectField('${projectId}','scheduledStartDate',this.value)" style="padding:8px;border:2px solid #e0e0e0;border-radius:8px;width:100%;">
+                        </div>
+                        <div class="form-group" style="margin-bottom:8px;">
+                            <label style="font-size:13px;">Arrival Time</label>
+                            <input type="time" id="projectArrivalTime_${projectId}" value="${project.arrivalTime || '08:00'}" onchange="updateProjectField('${projectId}','arrivalTime',this.value)" style="padding:8px;border:2px solid #e0e0e0;border-radius:8px;width:100%;">
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-bottom:8px;">
+                        <label style="font-size:13px;">Estimated Days</label>
+                        <input type="number" id="projectEstDays_${projectId}" value="${project.estimatedDays || ''}" min="1" step="0.5" placeholder="e.g., 3" onchange="updateProjectField('${projectId}','estimatedDays',parseFloat(this.value)||0)" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
+                    </div>
+                </div>
+
+                <div class="room-card">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
                         <h3>Proposals (${projectProposals.length})</h3>
                         <button class="btn btn-success btn-small" onclick="addProposalToProject('${projectId}')">+ New</button>
@@ -2462,6 +2517,58 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 return ref.id;
             } catch(e) { alert('Error creating project: ' + e.message); return null; }
         }
+
+        // ═══════════════════════════════════════
+        // CREW MANAGEMENT
+        // ═══════════════════════════════════════
+        window.crewMembers = [];
+
+        async function loadCrewMembers() {
+            try {
+                const snapshot = await getDocs(query(collection(db, 'crewMembers'), where('userId', '==', currentUser.uid)));
+                window.crewMembers = snapshot.docs.map(d => ({id: d.id, ...d.data()})).filter(c => !c.deleted);
+                displayCrewList();
+            } catch(e) { console.error('Error loading crew:', e); }
+        }
+
+        function displayCrewList() {
+            const list = document.getElementById('crewList');
+            if (!list) return;
+            if (crewMembers.length === 0) {
+                list.innerHTML = '<p style="color:#999;text-align:center;padding:20px;">No crew members yet.</p>';
+                return;
+            }
+            list.innerHTML = crewMembers.map(c => `
+                <div class="selection-card" style="display:flex;justify-content:space-between;align-items:center;">
+                    <div>
+                        <h3 style="margin:0;">${c.name}</h3>
+                        <p style="margin:2px 0;color:#666;">${c.role}${c.phone ? ' • ' + c.phone : ''}</p>
+                    </div>
+                    <button class="btn btn-danger btn-small" onclick="deleteCrewMember('${c.id}')" style="width:30px;height:30px;padding:0;font-size:16px;">×</button>
+                </div>
+            `).join('');
+        }
+
+        window.saveCrewMember = async function() {
+            const name = document.getElementById('crewName').value.trim();
+            const phone = document.getElementById('crewPhone').value.trim();
+            const role = document.getElementById('crewRole').value;
+            if (!name) { alert('Please enter a name'); return; }
+            try {
+                await addDoc(collection(db, 'crewMembers'), { userId: currentUser.uid, name, phone, role, deleted: false });
+                document.getElementById('crewName').value = '';
+                document.getElementById('crewPhone').value = '';
+                await loadCrewMembers();
+            } catch(e) { alert('Error: ' + e.message); }
+        };
+
+        window.deleteCrewMember = async function(id) {
+            if (!confirm('Remove this crew member?')) return;
+            try {
+                await updateDoc(doc(db, 'crewMembers', id), { deleted: true });
+                await loadCrewMembers();
+            } catch(e) { alert('Error: ' + e.message); }
+        };
 
         window.saveCustomerNotes = async function(customerId) {
             try {
@@ -5028,6 +5135,32 @@ Only return JSON, no other text.`;
 
             // Replace header
             html = html.replace('Northern Star Painters &mdash; Proposal', 'Northern Star Painters &mdash; CREW WORK ORDER');
+
+            // Add crew & schedule info after PREPARED FOR section
+            const project = currentEstimate.projectId ? projects.find(p => p.id === currentEstimate.projectId) : null;
+            if (project) {
+                const scheduleInfo = [];
+                if (project.assignedCrewLeader) scheduleInfo.push(`<strong>Crew Leader:</strong> ${project.assignedCrewLeader}`);
+                if (project.crewSize) scheduleInfo.push(`<strong>Crew Size:</strong> ${project.crewSize} members`);
+                if (project.scheduledStartDate) {
+                    const d = new Date(project.scheduledStartDate + 'T00:00');
+                    const dayName = d.toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric', year:'numeric'});
+                    const time = project.arrivalTime || '8:00 AM';
+                    const timeFmt = new Date('2000-01-01T' + time).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
+                    scheduleInfo.push(`<strong>Start Date:</strong> ${dayName}`);
+                    scheduleInfo.push(`<strong>Arrival Time:</strong> ${timeFmt}`);
+                }
+                if (project.estimatedDays) scheduleInfo.push(`<strong>Estimated Days:</strong> ${project.estimatedDays}`);
+                if (scheduleInfo.length > 0) {
+                    const pca = '-webkit-print-color-adjust:exact;print-color-adjust:exact';
+                    const crewBlock = `<div style="color:#1e3a8a;padding:6px 0 4px 0;margin:15px 0 0;font-weight:700;font-size:11pt;letter-spacing:0.5px;border-bottom:2px solid #2563eb">CREW & SCHEDULE</div><div style="height:2px;width:50px;background-color:#f4a624;margin-top:-2px;${pca}"></div><div style="margin:8px 0;font-size:10pt;">${scheduleInfo.map(s => '<p style="margin:4px 0;">' + s + '</p>').join('')}</div>`;
+                    const preparedByIdx = html.indexOf('PREPARED BY');
+                    if (preparedByIdx > -1) {
+                        const insertAt = html.lastIndexOf('<div', preparedByIdx);
+                        html = html.substring(0, insertAt) + crewBlock + html.substring(insertAt);
+                    }
+                }
+            }
 
             // Replace pricing section with crew pricing
             const crewPct = 0.40;
