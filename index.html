@@ -2316,33 +2316,38 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
         // Migration: convert standalone estimates to projects
         window.undoMigration = async function() {
-            const migratedJobs = jobs.filter(j => j.projectId);
-            if (migratedJobs.length === 0) { alert('No migrated estimates found.'); return; }
-            if (!confirm(`Undo migration for ${migratedJobs.length} estimate(s)? This will remove them from projects and show them as standalone estimates. Projects will be deleted.`)) return;
+            // Clean up ALL projects and remove projectId from all jobs
+            const allProjects = [];
+            try {
+                const snap = await getDocs(query(collection(db, 'projects'), where('userId', '==', currentUser.uid)));
+                snap.forEach(d => allProjects.push(d.id));
+            } catch(e) {}
+
+            const allJobsWithProject = jobs.filter(j => j.projectId);
+            const total = allProjects.length + allJobsWithProject.length;
+            if (total === 0) { alert('Nothing to undo.'); return; }
+            if (!confirm(`Delete all ${allProjects.length} project(s) and revert ${allJobsWithProject.length} estimate(s) to standalone?`)) return;
 
             let success = 0;
-            // Collect unique project IDs to delete
-            const projectIds = [...new Set(migratedJobs.map(j => j.projectId))];
-
-            // Remove projectId from all migrated jobs
-            for (const job of migratedJobs) {
+            // Remove projectId from all jobs
+            for (const job of allJobsWithProject) {
                 try {
                     await updateDoc(doc(db, 'jobs', job.id), { projectId: null, proposalLabel: '' });
                     success++;
                 } catch(e) { console.error('Error reverting job', job.id, e); }
             }
 
-            // Delete the auto-created projects
+            // HARD delete all project documents
             let projDeleted = 0;
-            for (const pid of projectIds) {
+            for (const pid of allProjects) {
                 try {
-                    await updateDoc(doc(db, 'projects', pid), { deleted: true });
+                    await deleteDoc(doc(db, 'projects', pid));
                     projDeleted++;
                 } catch(e) { console.error('Error deleting project', pid, e); }
             }
 
             await Promise.all([loadJobs(), loadProjects()]);
-            alert(`Done! Reverted ${success} estimate(s) to standalone. Removed ${projDeleted} project(s).`);
+            alert(`Done! Reverted ${success} estimate(s). Hard-deleted ${projDeleted} project(s).`);
         };
 
         window.migrateEstimatesToProjects = async function() {
