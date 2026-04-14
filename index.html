@@ -125,6 +125,13 @@
         <!-- HOME SCREEN -->
         <div id="homeScreen" class="screen active">
             <h2 class="screen-title">Dashboard</h2>
+
+            <!-- Pipeline Summary -->
+            <div id="homePipelineSummary" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:15px;"></div>
+
+            <!-- Upcoming Appointments -->
+            <div id="homeAppointments" style="margin-bottom:15px;"></div>
+
             <div class="nav-buttons">
                 <button class="btn btn-primary" onclick="showScreen('customersScreen')">👥 Customers</button>
                 <button class="btn btn-success" onclick="startNewEstimate()">➕ New Estimate</button>
@@ -1298,6 +1305,10 @@
             if (screenId === 'leadsScreen') {
                 if (typeof updateLeadCounts === 'function') updateLeadCounts();
             }
+            // Refresh dashboard when showing home
+            if (screenId === 'homeScreen') {
+                if (typeof refreshDashboard === 'function') refreshDashboard();
+            }
         };
 
         // Switch pricing tabs
@@ -2073,6 +2084,24 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 </div>
 
                 <div class="room-card">
+                    <h3>Appointment</h3>
+                    ${project.appointmentDate ? `<p style="color:#8b5cf6;font-weight:600;margin-bottom:8px;">Scheduled: ${new Date(project.appointmentDate).toLocaleDateString()} ${new Date(project.appointmentDate).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true})}</p>
+                    ${project.appointmentNotes ? '<p style="color:#666;font-size:13px;">Notes: ' + project.appointmentNotes + '</p>' : ''}` : ''}
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                        <div class="form-group" style="margin-bottom:8px;"><label style="font-size:13px;">Date</label>
+                            <input type="date" id="apptDate_${projectId}" value="${project.appointmentDate ? new Date(project.appointmentDate).toISOString().split('T')[0] : ''}" style="padding:8px;border:2px solid #e0e0e0;border-radius:8px;width:100%;">
+                        </div>
+                        <div class="form-group" style="margin-bottom:8px;"><label style="font-size:13px;">Time</label>
+                            <input type="time" id="apptTime_${projectId}" value="${project.appointmentDate ? new Date(project.appointmentDate).toTimeString().slice(0,5) : ''}" style="padding:8px;border:2px solid #e0e0e0;border-radius:8px;width:100%;">
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-bottom:8px;"><label style="font-size:13px;">Notes</label>
+                        <input type="text" id="apptNotes_${projectId}" value="${project.appointmentNotes || ''}" placeholder="e.g., Ring doorbell, dog in yard" style="padding:8px;border:2px solid #e0e0e0;border-radius:8px;width:100%;">
+                    </div>
+                    <button class="btn btn-info btn-small" onclick="setProjectAppointment('${projectId}')" style="width:100%;">Set Appointment</button>
+                </div>
+
+                <div class="room-card">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
                         <h3>Proposals (${projectProposals.length})</h3>
                         <button class="btn btn-success btn-small" onclick="addProposalToProject('${projectId}')">+ New Variation</button>
@@ -2142,6 +2171,68 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 const p = projects.find(p => p.id === projectId);
                 if (p) p[field] = value;
             } catch(e) { console.error('Error updating project:', e); }
+        };
+
+        // Dashboard: pipeline summary + appointments
+        function refreshDashboard() {
+            // Pipeline summary
+            const pipeline = document.getElementById('homePipelineSummary');
+            if (pipeline && projects.length > 0) {
+                const counts = {};
+                projects.forEach(p => { counts[p.status] = (counts[p.status] || 0) + 1; });
+                const statuses = ['New Lead', 'Appointment Set', 'Current Estimate', 'Landed Job', 'In Progress', 'Complete'];
+                pipeline.innerHTML = statuses.filter(s => counts[s]).map(s =>
+                    `<div style="text-align:center;padding:8px 4px;background:#f8f9fa;border-radius:8px;border-left:3px solid ${getStatusColor(s)}">
+                        <div style="font-size:20px;font-weight:700;color:${getStatusColor(s)}">${counts[s]}</div>
+                        <div style="font-size:10px;color:#666;">${s}</div>
+                    </div>`
+                ).join('');
+            } else if (pipeline) { pipeline.innerHTML = ''; }
+
+            // Upcoming appointments
+            const apptDiv = document.getElementById('homeAppointments');
+            if (!apptDiv) return;
+            const upcoming = projects.filter(p => p.appointmentDate && p.status === 'Appointment Set')
+                .sort((a, b) => new Date(a.appointmentDate) - new Date(b.appointmentDate))
+                .slice(0, 5);
+            if (upcoming.length === 0) { apptDiv.innerHTML = ''; return; }
+            const today = new Date(); today.setHours(0,0,0,0);
+            const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+            apptDiv.innerHTML = `<div class="room-card" style="border-left:4px solid #8b5cf6;">
+                <h3 style="margin:0 0 8px 0;">Upcoming Appointments (${upcoming.length})</h3>
+                ${upcoming.map(p => {
+                    const d = new Date(p.appointmentDate);
+                    const isToday = d >= today && d < tomorrow;
+                    const label = isToday ? '<strong style="color:#ef4444;">TODAY</strong>' : d.toLocaleDateString();
+                    return `<div style="padding:8px;margin-bottom:6px;background:#f8f9fa;border-radius:6px;cursor:pointer;" onclick="viewProjectDetail('${p.id}')">
+                        <div style="display:flex;justify-content:space-between;">
+                            <strong>${p.customerName}</strong>
+                            <span style="font-size:12px;">${label} ${d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true})}</span>
+                        </div>
+                        <p style="margin:2px 0;font-size:12px;color:#666;">${p.projectName}${p.appointmentNotes ? ' — ' + p.appointmentNotes : ''}</p>
+                    </div>`;
+                }).join('')}
+            </div>`;
+        }
+
+        // Appointment setting
+        window.setProjectAppointment = async function(projectId) {
+            const dateVal = document.getElementById('apptDate_' + projectId)?.value;
+            const timeVal = document.getElementById('apptTime_' + projectId)?.value;
+            const notes = document.getElementById('apptNotes_' + projectId)?.value || '';
+            if (!dateVal || !timeVal) { alert('Please set date and time'); return; }
+            try {
+                const apptDate = new Date(dateVal + 'T' + timeVal).toISOString();
+                await updateDoc(doc(db, 'projects', projectId), {
+                    appointmentDate: apptDate,
+                    appointmentNotes: notes,
+                    status: 'Appointment Set'
+                });
+                const p = projects.find(p => p.id === projectId);
+                if (p) { p.appointmentDate = apptDate; p.appointmentNotes = notes; p.status = 'Appointment Set'; }
+                alert('Appointment set!');
+                viewProjectDetail(projectId);
+            } catch(e) { alert('Error: ' + e.message); }
         };
 
         // Migration: convert standalone estimates to projects
