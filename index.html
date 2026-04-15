@@ -2268,13 +2268,19 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             const estLaborCost = crewBaseProp ? (crewBaseProp.totalLabor || 0) : 0;
             const estHours = PRICING.LaborRate > 0 ? estLaborCost / PRICING.LaborRate : 0;
 
+            // Estimated materials
+            const estMaterialCost = crewBaseProp ? (crewBaseProp.totalMaterials || 0) : 0;
+
             html += `
                 <div class="room-card">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
                         <h3>👷 Crew Proposals (${crewProposals.length})</h3>
                     </div>
-                    <p style="color:#666;font-size:13px;margin-bottom:4px;">Customer price: <strong>$${customerFinalPrice.toFixed(2)}</strong></p>
-                    ${estHours > 0 ? `<p style="color:#666;font-size:13px;margin-bottom:8px;">Est. labor: <strong>${estHours.toFixed(1)} hours</strong> from spread rates</p>` : ''}
+                    <div style="background:#f0f5ff;padding:10px;border-radius:8px;margin-bottom:10px;font-size:13px;">
+                        <p style="margin:2px 0;">Customer price: <strong>$${customerFinalPrice.toFixed(2)}</strong></p>
+                        ${estHours > 0 ? `<p style="margin:2px 0;">Est. labor hours: <strong>${estHours.toFixed(1)} hrs</strong></p>` : ''}
+                        ${estMaterialCost > 0 ? `<p style="margin:2px 0;">Est. materials: <strong>$${estMaterialCost.toFixed(2)}</strong></p>` : ''}
+                    </div>
                     <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;">
                         <input type="number" id="crewPctInput_${projectId}" value="40" min="1" max="100" step="1" style="width:65px;padding:8px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;">
                         <span style="color:#666;font-size:14px;">%</span>
@@ -2286,14 +2292,19 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             } else {
                 crewProposals.forEach((cp, idx) => {
                     const isAccepted = cp.accepted;
-                    const crewDays = cp.crewSize > 0 ? (cp.estHours / (8 * cp.crewSize)).toFixed(1) : '?';
+                    // Round days up to whole number
+                    const rawDays = cp.crewSize > 0 ? cp.estHours / (8 * cp.crewSize) : 0;
+                    const crewDays = Math.ceil(rawDays);
+                    // Calculate hourly rate: payout / total hours (crew × days × 8)
+                    const totalCrewHours = crewDays * 8 * cp.crewSize;
+                    const ratePerHour = totalCrewHours > 0 ? (cp.crewTotal / totalCrewHours).toFixed(2) : '0';
                     html += `
                         <div style="padding:12px;margin-bottom:8px;border-radius:8px;border:2px solid ${isAccepted ? '#28a745' : '#e0e0e0'};background:${isAccepted ? '#d4edda' : '#f8f9fa'};">
                             <div style="display:flex;justify-content:space-between;align-items:center;">
                                 <strong style="font-size:16px;">$${cp.crewTotal.toFixed(2)} <span style="font-size:12px;color:#666;">(${cp.percentage}%)</span></strong>
                                 ${isAccepted ? '<span style="color:#28a745;font-weight:700;font-size:12px;">ACCEPTED</span>' : ''}
                             </div>
-                            <p style="color:#666;font-size:12px;margin:4px 0;">${cp.estHours.toFixed(1)} hrs • ${cp.crewSize} crew • ~${crewDays} days</p>
+                            <p style="color:#666;font-size:12px;margin:4px 0;">${cp.crewSize} crew • ${crewDays} day${crewDays !== 1 ? 's' : ''} • $${ratePerHour}/hr per person</p>
                             ${cp.notes ? '<p style="color:#555;font-size:12px;margin:4px 0;font-style:italic;">' + cp.notes + '</p>' : ''}
                             <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
                                 <button class="btn btn-primary btn-small" onclick="viewCrewProposalPDF('${projectId}',${idx})">👁️ View</button>
@@ -5439,9 +5450,9 @@ Only return JSON, no other text.`;
             // Replace pricing section with crew pricing
             const crewPrice = currentEstimate.grandTotal || currentEstimate.basePrice || 0;
             const cpData = window._crewProposalData;
-            const crewHours = cpData ? cpData.estHours : 0;
             const crewSize = cpData ? cpData.crewSize : 0;
-            const crewDays = (crewSize > 0 && crewHours > 0) ? (crewHours / (8 * crewSize)).toFixed(1) : '—';
+            const crewHoursRaw = cpData ? cpData.estHours : 0;
+            const crewDays = (crewSize > 0 && crewHoursRaw > 0) ? Math.ceil(crewHoursRaw / (8 * crewSize)) : 0;
             const pca = '-webkit-print-color-adjust:exact;print-color-adjust:exact';
 
             // Find and replace the PRICE SUMMARY section
@@ -5452,9 +5463,8 @@ Only return JSON, no other text.`;
                 const afterPrice = html.lastIndexOf('</div>', signatureStart);
                 const crewPriceHTML = `<div style="color:#1e3a8a;padding:6px 0 4px 0;margin:15px 0 0;font-weight:700;font-size:11pt;letter-spacing:0.5px;border-bottom:2px solid #2563eb">LABOR & MATERIALS</div><div style="height:2px;width:50px;background-color:#f4a624;margin-top:-2px;${pca}"></div>
 <div style="margin:8px 0">
-<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:10pt;border-bottom:1px solid #e5e7eb;"><span>Estimated Labor Hours</span><span>${crewHours.toFixed(1)} hrs</span></div>
 <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:10pt;border-bottom:1px solid #e5e7eb;"><span>Crew Size</span><span>${crewSize} members</span></div>
-<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:10pt;border-bottom:1px solid #e5e7eb;"><span>Estimated Days</span><span>${crewDays} days</span></div>
+<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:10pt;border-bottom:1px solid #e5e7eb;"><span>Estimated Days</span><span>${crewDays} day${crewDays !== 1 ? 's' : ''}</span></div>
 <div style="display:flex;justify-content:space-between;padding:10px 0;font-size:13pt;font-weight:700;border-top:2px solid #1e3a8a;margin-top:6px;"><span>Total Labor & Materials</span><span>$${crewPrice.toFixed(2)}</span></div>
 ${cpData?.notes ? '<p style="font-style:italic;color:#666;font-size:9pt;margin-top:6px;">Notes: ' + cpData.notes + '</p>' : ''}
 </div>`;
