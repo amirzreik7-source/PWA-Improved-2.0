@@ -749,7 +749,6 @@
             </div>
 
             <button class="btn btn-warning btn-large" onclick="saveAndGenerateProposal()" style="width:100%;">📄 Customer PDF</button>
-            <button class="btn btn-info btn-large" onclick="generateCrewProposal()" style="width:100%;">👷 Crew Proposal (40%)</button>
             <button class="btn btn-secondary btn-small" onclick="openProfitTracking()" style="width:100%;margin-top:10px;">📊 Log Actuals</button>
         </div>
 
@@ -2726,6 +2725,8 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             };
 
             window._unsavedEstimate = false;
+            window._proposalReturnScreen = null;
+            window._crewReturnProjectId = projectId;
             await generateCrewProposal();
             window._crewProposalData = null;
         };
@@ -5900,7 +5901,13 @@ ${cpData?.notes ? '<p style="font-style:italic;color:#666;font-size:9pt;margin-t
         window._proposalReturnScreen = 'estimateStep6Screen';
 
         window.exitProposalView = function() {
-            showScreen(window._proposalReturnScreen || 'homeScreen');
+            if (window._crewReturnProjectId) {
+                const pid = window._crewReturnProjectId;
+                window._crewReturnProjectId = null;
+                viewProjectDetail(pid);
+            } else {
+                showScreen(window._proposalReturnScreen || 'homeScreen');
+            }
         };
 
         window.fastPrint = function() {
