@@ -5471,22 +5471,21 @@ ${cpData?.notes ? '<p style="font-style:italic;color:#666;font-size:9pt;margin-t
                 html = html.substring(0, beforePrice) + crewPriceHTML + html.substring(afterPrice);
             }
 
-            // Remove contract terms for crew version
+            // Remove contract terms, miscellaneous, clean-up, and signature for crew version
+            // Keep everything up to CONTRACT TERMS, then close the doc
             const contractStart = html.indexOf('PAINTING CONTRACT TERMS');
             if (contractStart > -1) {
                 const contractSection = html.lastIndexOf('<div', contractStart);
-                const miscStart = html.indexOf('MISCELLANEOUS');
-                if (contractSection > -1 && miscStart > -1) {
-                    const miscSection = html.lastIndexOf('<div', miscStart);
-                    html = html.substring(0, contractSection) + html.substring(miscSection);
+                if (contractSection > -1) {
+                    html = html.substring(0, contractSection) + '</div></div>';
                 }
-            }
-
-            // Remove signature section for crew
-            const sigSection = html.indexOf('SIGNATURE');
-            if (sigSection > -1) {
-                const sigDiv = html.lastIndexOf('<div', sigSection);
-                if (sigDiv > -1) html = html.substring(0, sigDiv) + '</div>';
+            } else {
+                // No contract section found — just remove signature
+                const sigSection = html.indexOf('SIGNATURE');
+                if (sigSection > -1) {
+                    const sigDiv = html.lastIndexOf('<div', sigSection);
+                    if (sigDiv > -1) html = html.substring(0, sigDiv) + '</div></div>';
+                }
             }
 
             el.innerHTML = html;
@@ -6089,7 +6088,7 @@ ${cpData?.notes ? '<p style="font-style:italic;color:#666;font-size:9pt;margin-t
             const depositAmount = subtotal * 0.5;
             const balanceAmount = subtotal * 0.5;
             const projectNotes = document.getElementById('projectSummaryNotes')?.value || '';
-            const showBreakdown = document.getElementById('pdfDetailLevel')?.value !== 'total';
+            const showBreakdown = window._crewMode || document.getElementById('pdfDetailLevel')?.value !== 'total';
             const showRoomPrices = document.getElementById('showRoomPrices')?.checked === true;
             const co = companySettings || {};
             const pca = '-webkit-print-color-adjust:exact;print-color-adjust:exact';
