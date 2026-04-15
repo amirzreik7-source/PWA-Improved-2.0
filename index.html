@@ -126,15 +126,24 @@
         <div id="homeScreen" class="screen active">
             <h2 class="screen-title">Dashboard</h2>
 
+            <!-- Global Search -->
+            <div style="margin-bottom:15px;">
+                <input type="text" id="globalSearchInput" placeholder="Search customers, job numbers, addresses..." oninput="globalSearch(this.value)" style="width:100%;padding:12px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;">
+                <div id="globalSearchResults" style="margin-top:6px;"></div>
+            </div>
+
             <!-- Pipeline Summary -->
             <div id="homePipelineSummary" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:15px;"></div>
 
             <!-- Upcoming Appointments -->
             <div id="homeAppointments" style="margin-bottom:15px;"></div>
 
+            <!-- Today's Action Items -->
+            <div id="homeTodayActions" style="margin-bottom:15px;"></div>
+
             <div class="nav-buttons">
                 <button class="btn btn-primary" onclick="showScreen('customersScreen')">👥 Customers</button>
-                <button class="btn btn-success" onclick="startNewEstimate()">➕ New Estimate</button>
+                <button class="btn btn-success" onclick="startNewEstimate()">➕ New Project</button>
                 <button class="btn btn-warning" onclick="showScreen('leadsScreen')">📋 Leads</button>
                 <button class="btn btn-info" onclick="showScreen('productsScreen')">🎨 Products</button>
                 <button class="btn btn-primary" onclick="showScreen('profilesScreen')">📦 Profiles</button>
@@ -694,19 +703,7 @@
                 </div>
             </div>
 
-            <!-- Lead Status -->
-            <div class="room-card">
-                <h3>Lead Status</h3>
-                <div class="form-group">
-                    <select id="estimateStatus" style="font-size:16px;padding:12px;">
-                        <option value="New Lead">New Lead</option>
-                        <option value="In Progress">In Progress</option>
-                        <option value="Landed">Landed</option>
-                        <option value="Lost">Lost</option>
-                        <option value="Complete">Complete</option>
-                    </select>
-                </div>
-            </div>
+            <!-- Status managed at project level, not proposal level -->
 
             <!-- Signature Capture -->
             <div class="room-card">
@@ -2350,20 +2347,20 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
         // Dashboard: pipeline summary + appointments
         function refreshDashboard() {
-            // Pipeline summary — count from jobs (unique customers per status), same source as leads screen
+            // Pipeline summary — count projects by status (source of truth)
             const pipeline = document.getElementById('homePipelineSummary');
-            if (pipeline && jobs.length > 0) {
+            if (pipeline && (projects.length > 0 || jobs.length > 0)) {
                 const counts = {};
-                const customersByStatus = {};
-                jobs.forEach(j => {
+                projects.forEach(p => { counts[p.status] = (counts[p.status] || 0) + 1; });
+                // Also count standalone jobs without projects
+                jobs.filter(j => !j.projectId).forEach(j => {
                     const s = j.status || 'New Lead';
-                    if (!customersByStatus[s]) customersByStatus[s] = new Set();
-                    customersByStatus[s].add(j.customerId);
+                    counts[s] = (counts[s] || 0) + 1;
                 });
-                Object.entries(customersByStatus).forEach(([s, set]) => { counts[s] = set.size; });
                 const statuses = ['New Lead', 'Appointment Set', 'Current Estimate', 'Landed Job', 'In Progress', 'Complete'];
+                const mapped = { 'New Lead': 'New Lead', 'Appointment Set': 'In Progress', 'Current Estimate': 'In Progress', 'Landed Job': 'Landed', 'In Progress': 'In Progress' };
                 pipeline.innerHTML = statuses.filter(s => counts[s]).map(s =>
-                    `<div style="text-align:center;padding:8px 4px;background:#f8f9fa;border-radius:8px;border-left:3px solid ${getStatusColor(s)};cursor:pointer;" onclick="filterJobs('${s}')">
+                    `<div style="text-align:center;padding:8px 4px;background:#f8f9fa;border-radius:8px;border-left:3px solid ${getStatusColor(s)};cursor:pointer;" onclick="filterJobs('${mapped[s] || s}')">
                         <div style="font-size:20px;font-weight:700;color:${getStatusColor(s)}">${counts[s]}</div>
                         <div style="font-size:10px;color:#666;">${s}</div>
                     </div>`
@@ -2372,28 +2369,72 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
             // Upcoming appointments
             const apptDiv = document.getElementById('homeAppointments');
-            if (!apptDiv) return;
-            const upcoming = projects.filter(p => p.appointmentDate && p.status === 'Appointment Set')
-                .sort((a, b) => new Date(a.appointmentDate) - new Date(b.appointmentDate))
-                .slice(0, 5);
-            if (upcoming.length === 0) { apptDiv.innerHTML = ''; return; }
-            const today = new Date(); today.setHours(0,0,0,0);
-            const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
-            apptDiv.innerHTML = `<div class="room-card" style="border-left:4px solid #8b5cf6;">
-                <h3 style="margin:0 0 8px 0;">Upcoming Appointments (${upcoming.length})</h3>
-                ${upcoming.map(p => {
-                    const d = new Date(p.appointmentDate);
-                    const isToday = d >= today && d < tomorrow;
-                    const label = isToday ? '<strong style="color:#ef4444;">TODAY</strong>' : d.toLocaleDateString();
-                    return `<div style="padding:8px;margin-bottom:6px;background:#f8f9fa;border-radius:6px;cursor:pointer;" onclick="viewProjectDetail('${p.id}')">
-                        <div style="display:flex;justify-content:space-between;">
-                            <strong>${p.customerName}</strong>
-                            <span style="font-size:12px;">${label} ${d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true})}</span>
-                        </div>
-                        <p style="margin:2px 0;font-size:12px;color:#666;">${p.projectName}${p.appointmentNotes ? ' — ' + p.appointmentNotes : ''}</p>
+            if (apptDiv) {
+                const upcoming = projects.filter(p => p.appointmentDate && p.status === 'Appointment Set')
+                    .sort((a, b) => new Date(a.appointmentDate) - new Date(b.appointmentDate))
+                    .slice(0, 5);
+                if (upcoming.length === 0) { apptDiv.innerHTML = ''; }
+                else {
+                    const today = new Date(); today.setHours(0,0,0,0);
+                    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+                    apptDiv.innerHTML = `<div class="room-card" style="border-left:4px solid #8b5cf6;">
+                        <h3 style="margin:0 0 8px 0;">Upcoming Appointments (${upcoming.length})</h3>
+                        ${upcoming.map(p => {
+                            const d = new Date(p.appointmentDate);
+                            const isToday = d >= today && d < tomorrow;
+                            const label = isToday ? '<strong style="color:#ef4444;">TODAY</strong>' : d.toLocaleDateString();
+                            return `<div style="padding:8px;margin-bottom:6px;background:#f8f9fa;border-radius:6px;cursor:pointer;" onclick="viewProjectDetail('${p.id}')">
+                                <div style="display:flex;justify-content:space-between;">
+                                    <strong>${p.customerName}</strong>
+                                    <span style="font-size:12px;">${label} ${d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true})}</span>
+                                </div>
+                                <p style="margin:2px 0;font-size:12px;color:#666;">${p.projectName}${p.appointmentNotes ? ' — ' + p.appointmentNotes : ''}</p>
+                            </div>`;
+                        }).join('')}
                     </div>`;
-                }).join('')}
-            </div>`;
+                }
+            }
+
+            // Today's action items
+            const actionsDiv = document.getElementById('homeTodayActions');
+            if (actionsDiv) {
+                const actions = [];
+
+                // Active jobs (In Progress)
+                const activeJobs = projects.filter(p => p.status === 'In Progress');
+                if (activeJobs.length > 0) {
+                    actions.push(`<div style="margin-bottom:8px;"><strong style="color:#f97316;">Active Jobs (${activeJobs.length})</strong></div>`);
+                    activeJobs.forEach(p => {
+                        actions.push(`<div style="padding:6px 8px;background:#fff7ed;border-radius:6px;margin-bottom:4px;cursor:pointer;font-size:13px;" onclick="viewProjectDetail('${p.id}')">${p.customerName} — ${p.projectName}${p.assignedCrewLeader ? ' ('+p.assignedCrewLeader+')' : ''}</div>`);
+                    });
+                }
+
+                // Follow-ups needed (Current Estimate older than 3 days)
+                const threeDaysAgo = new Date(); threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+                const followUps = projects.filter(p => p.status === 'Current Estimate' && new Date(p.createdAt) < threeDaysAgo);
+                if (followUps.length > 0) {
+                    actions.push(`<div style="margin:8px 0 8px;"><strong style="color:#3b82f6;">Follow Up (${followUps.length})</strong></div>`);
+                    followUps.forEach(p => {
+                        const daysAgo = Math.floor((Date.now() - new Date(p.createdAt)) / (1000*60*60*24));
+                        actions.push(`<div style="padding:6px 8px;background:#eff6ff;border-radius:6px;margin-bottom:4px;cursor:pointer;font-size:13px;" onclick="viewProjectDetail('${p.id}')">${p.customerName} — quoted ${daysAgo} days ago</div>`);
+                    });
+                }
+
+                // Need actuals (Complete but no actuals logged)
+                const needActuals = jobs.filter(j => j.status === 'Complete' && !j.actuals);
+                if (needActuals.length > 0) {
+                    actions.push(`<div style="margin:8px 0 8px;"><strong style="color:#6b7280;">Log Actuals (${needActuals.length})</strong></div>`);
+                    needActuals.forEach(j => {
+                        actions.push(`<div style="padding:6px 8px;background:#f3f4f6;border-radius:6px;margin-bottom:4px;cursor:pointer;font-size:13px;" onclick="viewJob('${j.id}')">${j.customerName} — ${j.jobName}</div>`);
+                    });
+                }
+
+                if (actions.length > 0) {
+                    actionsDiv.innerHTML = `<div class="room-card" style="border-left:4px solid #f97316;padding:12px;">${actions.join('')}</div>`;
+                } else {
+                    actionsDiv.innerHTML = '';
+                }
+            }
         }
 
         // Appointment setting
@@ -2563,6 +2604,39 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 return ref.id;
             } catch(e) { alert('Error creating project: ' + e.message); return null; }
         }
+
+        // Global search
+        window.globalSearch = function(query) {
+            const results = document.getElementById('globalSearchResults');
+            if (!query || query.length < 2) { results.innerHTML = ''; return; }
+            const q = query.toLowerCase();
+            const matches = [];
+
+            // Search customers
+            customers.forEach(c => {
+                if ((c.name || '').toLowerCase().includes(q) || (c.address || '').toLowerCase().includes(q) || (c.phone || '').includes(q) || (c.email || '').toLowerCase().includes(q)) {
+                    matches.push({ type: 'customer', label: c.name, sub: c.address || c.phone || '', action: `viewCustomerDetail('${c.id}')` });
+                }
+            });
+
+            // Search projects by job number or name
+            projects.forEach(p => {
+                if ((p.jobNumber || '').toLowerCase().includes(q) || (p.projectName || '').toLowerCase().includes(q) || (p.customerName || '').toLowerCase().includes(q)) {
+                    matches.push({ type: 'project', label: `${p.jobNumber} — ${p.projectName}`, sub: p.customerName, action: `viewProjectDetail('${p.id}')` });
+                }
+            });
+
+            if (matches.length === 0) {
+                results.innerHTML = '<p style="color:#999;font-size:13px;padding:8px;">No results</p>';
+            } else {
+                results.innerHTML = matches.slice(0, 8).map(m =>
+                    `<div style="padding:10px;background:#f8f9fa;border-radius:6px;margin-bottom:4px;cursor:pointer;" onclick="${m.action};document.getElementById('globalSearchInput').value='';document.getElementById('globalSearchResults').innerHTML='';">
+                        <div style="display:flex;justify-content:space-between;"><strong style="font-size:14px;">${m.label}</strong><span style="font-size:11px;color:#667eea;text-transform:uppercase;">${m.type}</span></div>
+                        ${m.sub ? '<p style="margin:2px 0 0;font-size:12px;color:#666;">' + m.sub + '</p>' : ''}
+                    </div>`
+                ).join('');
+            }
+        };
 
         // ═══════════════════════════════════════
         // CREW MANAGEMENT
@@ -2828,7 +2902,6 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 </div>
 
                 <button class="btn btn-success" onclick="createNewProject('${customerId}','${customer.name.replace(/'/g, "\\'")}')" style="width:100%;margin:10px 0;">➕ New Project</button>
-                <button class="btn btn-info" onclick="createNewEstimateForCustomer('${customerId}')" style="width:100%;margin-bottom:15px;">📝 Quick Estimate (no project)</button>
             `;
 
             // Show projects
@@ -3291,12 +3364,17 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
         }
 
         function updateLeadCounts() {
-            // Count unique customers per status (not individual proposals)
+            // Count unique customers per status from projects (source of truth)
             const customersByStatus = {};
             LEAD_STATUSES.forEach(s => customersByStatus[s] = new Set());
-            jobs.forEach(j => {
-                const s = j.status || 'New Lead';
-                if (customersByStatus[s]) customersByStatus[s].add(j.customerId);
+
+            // Get all unique customer IDs
+            const allCustomerIds = new Set([...projects.map(p => p.customerId), ...jobs.map(j => j.customerId)]);
+            allCustomerIds.forEach(cid => {
+                const status = getCustomerLeadStatus(cid);
+                // Map expanded statuses to the 5 lead statuses
+                const mapped = mapToLeadStatus(status);
+                if (customersByStatus[mapped]) customersByStatus[mapped].add(cid);
             });
 
             LEAD_STATUSES.forEach(s => {
@@ -3311,6 +3389,15 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                     btnEl.style.border = active ? '2px solid ' + STATUS_COLORS[s] : '2px solid #e2e8f0';
                 }
             });
+        }
+
+        function mapToLeadStatus(status) {
+            const map = {
+                'New Lead': 'New Lead', 'Appointment Set': 'In Progress', 'Current Estimate': 'In Progress',
+                'Landed Job': 'Landed', 'Scheduled': 'Landed', 'In Progress': 'In Progress',
+                'Complete': 'Complete', 'Dead': 'Lost'
+            };
+            return map[status] || 'New Lead';
         }
 
         window.filterJobs = function(status) {
@@ -3330,38 +3417,58 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             return '<span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;color:#fff;background:' + color + '">' + s + '</span>';
         }
 
+        // Get the effective status for a customer — from projects (preferred) or standalone jobs
+        function getCustomerLeadStatus(customerId) {
+            const custProjects = projects.filter(p => p.customerId === customerId);
+            if (custProjects.length > 0) {
+                // Priority: active statuses first
+                const priority = ['In Progress','Scheduled','Landed Job','Current Estimate','Appointment Set','New Lead','Complete','Dead'];
+                for (const s of priority) { if (custProjects.find(p => p.status === s)) return s; }
+                return custProjects[0].status || 'New Lead';
+            }
+            // Fallback: standalone jobs
+            const custJobs = jobs.filter(j => j.customerId === customerId && !j.projectId);
+            if (custJobs.length > 0) return custJobs[0].status || 'New Lead';
+            return 'New Lead';
+        }
+
         function displayJobList() {
             const list = document.getElementById('jobList');
-            let filtered = jobs;
+
+            // Build customer list from projects + standalone jobs
+            const customerMap = {};
+            projects.forEach(p => {
+                if (!customerMap[p.customerId]) customerMap[p.customerId] = { name: p.customerName, id: p.customerId, projectCount: 0, totalValue: 0, status: '' };
+                customerMap[p.customerId].projectCount++;
+            });
+            jobs.forEach(j => {
+                if (!customerMap[j.customerId]) customerMap[j.customerId] = { name: j.customerName, id: j.customerId, projectCount: 0, totalValue: 0, status: '' };
+                customerMap[j.customerId].totalValue += (j.grandTotal || 0);
+            });
+            // Set status for each customer
+            Object.values(customerMap).forEach(c => { c.status = getCustomerLeadStatus(c.id); });
+
+            // Filter by status
+            let filtered = Object.values(customerMap);
             if (window.currentJobFilter && window.currentJobFilter !== 'All') {
-                filtered = jobs.filter(j => (j.status || 'New Lead') === window.currentJobFilter);
+                filtered = filtered.filter(c => c.status === window.currentJobFilter);
             }
+
             if (filtered.length === 0) {
                 list.innerHTML = '<p style="color:#999;text-align:center;padding:40px">' + (window.currentJobFilter === 'All' ? 'No leads yet.' : 'No ' + window.currentJobFilter + ' leads.') + '</p>';
                 return;
             }
-            // Group by unique customer
-            const customerMap = {};
-            filtered.forEach(job => {
-                if (!customerMap[job.customerId]) {
-                    customerMap[job.customerId] = { name: job.customerName, id: job.customerId, proposals: [], totalValue: 0 };
-                }
-                customerMap[job.customerId].proposals.push(job);
-                customerMap[job.customerId].totalValue += (job.grandTotal || 0);
-            });
-            const uniqueCustomers = Object.values(customerMap).sort((a,b) => b.totalValue - a.totalValue);
 
-            list.innerHTML = uniqueCustomers.map(c => {
-                const latestJob = c.proposals.sort((a,b) => new Date(b.date) - new Date(a.date))[0];
-                return `
+            filtered.sort((a,b) => b.totalValue - a.totalValue);
+            list.innerHTML = filtered.map(c => `
                 <div class="selection-card" onclick="viewCustomerDetail('${c.id}')" style="cursor:pointer;padding:12px 15px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;">
                         <h3 style="margin:0;font-size:16px;">${c.name}</h3>
-                        ${getStatusBadge(latestJob.status)}
+                        ${getStatusBadge(c.status)}
                     </div>
-                    <p style="margin:4px 0 0;font-size:13px;color:#666;">${c.proposals.length} proposal${c.proposals.length!==1?'s':''} • $${c.totalValue.toFixed(2)}</p>
-                </div>`;
-            }).join('');
+                    <p style="margin:4px 0 0;font-size:13px;color:#666;">${c.projectCount > 0 ? c.projectCount + ' project(s) • ' : ''}$${c.totalValue.toFixed(2)}</p>
+                </div>
+            `).join('');
         }
 
         window.viewJob = function(jobId) {
@@ -5751,7 +5858,7 @@ ${cpData?.notes ? '<p style="font-style:italic;color:#666;font-size:9pt;margin-t
                 grandTotal: currentEstimate.grandTotal,
                 companySignature: currentEstimate.companySignature || null,
                 customerSignature: currentEstimate.customerSignature || null,
-                status: document.getElementById('estimateStatus')?.value || 'New Lead',
+                status: currentEstimate.status || 'New Lead',
                 date: new Date().toISOString()
             };
             

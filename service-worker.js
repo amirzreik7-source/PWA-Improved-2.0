@@ -1,7 +1,7 @@
 // Northern Star Painters - Service Worker
 // Version 1.0.0
 
-const CACHE_NAME = 'nsp-v2';
+const CACHE_NAME = 'nsp-v3';
 const FIREBASE_CACHE = 'nsp-firebase-v1';
 
 // Files to cache immediately
