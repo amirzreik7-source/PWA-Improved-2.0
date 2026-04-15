@@ -2266,37 +2266,39 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
             // Crew Proposals Section
             const crewProposals = project.crewProposals || [];
+            const crewBaseProp = project.landedProposalId ? jobs.find(j => j.id === project.landedProposalId) : projectProposals[0];
+            const customerFinalPrice = crewBaseProp ? (crewBaseProp.grandTotal || crewBaseProp.basePrice || 0) : 0;
+            // Estimated hours from spread rates (not affected by discounts/overrides)
+            const estLaborCost = crewBaseProp ? (crewBaseProp.totalLabor || 0) : 0;
+            const estHours = PRICING.LaborRate > 0 ? estLaborCost / PRICING.LaborRate : 0;
+
             html += `
                 <div class="room-card">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
                         <h3>👷 Crew Proposals (${crewProposals.length})</h3>
                     </div>
-                    <div style="display:flex;gap:8px;margin-bottom:10px;">
-                        <input type="number" id="crewPctInput_${projectId}" value="40" min="1" max="100" step="1" style="width:70px;padding:8px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;">
-                        <span style="align-self:center;color:#666;">%</span>
+                    <p style="color:#666;font-size:13px;margin-bottom:4px;">Customer price: <strong>$${customerFinalPrice.toFixed(2)}</strong></p>
+                    ${estHours > 0 ? `<p style="color:#666;font-size:13px;margin-bottom:8px;">Est. labor: <strong>${estHours.toFixed(1)} hours</strong> from spread rates</p>` : ''}
+                    <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;">
+                        <input type="number" id="crewPctInput_${projectId}" value="40" min="1" max="100" step="1" style="width:65px;padding:8px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;">
+                        <span style="color:#666;font-size:14px;">%</span>
                         <button class="btn btn-success btn-small" onclick="addCrewProposal('${projectId}')" style="flex:1;">+ New Crew Proposal</button>
                     </div>`;
 
             if (crewProposals.length === 0) {
                 html += '<p style="color:#999;text-align:center;padding:10px;">No crew proposals yet.</p>';
             } else {
-                // Get the landed customer proposal to calculate crew amounts
-                const landedProp = project.landedProposalId ? jobs.find(j => j.id === project.landedProposalId) : projectProposals[0];
-                const customerPrice = landedProp ? (landedProp.basePrice || landedProp.grandTotal || 0) : 0;
-
                 crewProposals.forEach((cp, idx) => {
-                    const crewAmount = customerPrice * (cp.percentage / 100);
                     const isAccepted = cp.accepted;
+                    const crewDays = cp.crewSize > 0 ? (cp.estHours / (8 * cp.crewSize)).toFixed(1) : '?';
                     html += `
                         <div style="padding:12px;margin-bottom:8px;border-radius:8px;border:2px solid ${isAccepted ? '#28a745' : '#e0e0e0'};background:${isAccepted ? '#d4edda' : '#f8f9fa'};">
                             <div style="display:flex;justify-content:space-between;align-items:center;">
-                                <div>
-                                    <strong>${cp.percentage}%</strong> — $${crewAmount.toFixed(2)}
-                                    ${isAccepted ? '<span style="color:#28a745;font-weight:700;"> ACCEPTED</span>' : ''}
-                                </div>
+                                <strong style="font-size:16px;">$${cp.crewTotal.toFixed(2)} <span style="font-size:12px;color:#666;">(${cp.percentage}%)</span></strong>
+                                ${isAccepted ? '<span style="color:#28a745;font-weight:700;font-size:12px;">ACCEPTED</span>' : ''}
                             </div>
-                            ${cp.notes ? '<p style="color:#666;font-size:12px;margin:4px 0;">Notes: ' + cp.notes + '</p>' : ''}
-                            <p style="color:#999;font-size:11px;margin:2px 0;">${new Date(cp.createdAt).toLocaleDateString()}</p>
+                            <p style="color:#666;font-size:12px;margin:4px 0;">${cp.estHours.toFixed(1)} hrs • ${cp.crewSize} crew • ~${crewDays} days</p>
+                            ${cp.notes ? '<p style="color:#555;font-size:12px;margin:4px 0;font-style:italic;">' + cp.notes + '</p>' : ''}
                             <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
                                 <button class="btn btn-primary btn-small" onclick="viewCrewProposalPDF('${projectId}',${idx})">👁️ View</button>
                                 <button class="btn btn-info btn-small" onclick="editCrewProposalNotes('${projectId}',${idx})">📝 Notes</button>
@@ -2620,11 +2622,33 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
         // ═══════════════════════════════════════
         window.addCrewProposal = async function(projectId) {
             const pct = parseInt(document.getElementById('crewPctInput_' + projectId)?.value) || 40;
+            const project = projects.find(p => p.id === projectId);
+
+            // Get customer final price (after discounts/credits/override)
+            const projectProposals = jobs.filter(j => j.projectId === projectId && !j.deleted);
+            const baseProp = project.landedProposalId ? jobs.find(j => j.id === project.landedProposalId) : projectProposals[0];
+            if (!baseProp) { alert('Create a customer proposal first'); return; }
+
+            const customerFinalPrice = baseProp.grandTotal || baseProp.basePrice || 0;
+            const crewTotal = customerFinalPrice * (pct / 100);
+
+            // Estimated hours from spread rates (not affected by pricing)
+            const estLaborCost = baseProp.totalLabor || 0;
+            const estHours = PRICING.LaborRate > 0 ? estLaborCost / PRICING.LaborRate : 0;
+            const crewSize = project?.crewSize || parseInt(prompt('How many crew members?', '3')) || 3;
             const notes = prompt('Notes for this crew proposal (optional):') || '';
+
             try {
-                const project = projects.find(p => p.id === projectId);
-                const crewProposals = project?.crewProposals || [];
-                crewProposals.push({ percentage: pct, notes: notes.trim(), accepted: false, createdAt: new Date().toISOString() });
+                const crewProposals = [...(project?.crewProposals || [])];
+                crewProposals.push({
+                    percentage: pct,
+                    crewTotal: crewTotal,
+                    estHours: estHours,
+                    crewSize: crewSize,
+                    notes: notes.trim(),
+                    accepted: false,
+                    createdAt: new Date().toISOString()
+                });
                 await updateDoc(doc(db, 'projects', projectId), { crewProposals });
                 if (project) project.crewProposals = crewProposals;
                 viewProjectDetail(projectId);
@@ -2679,8 +2703,8 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             const landedProp = project.landedProposalId ? jobs.find(j => j.id === project.landedProposalId) : jobs.find(j => j.projectId === projectId && !j.deleted);
             if (!landedProp) { alert('No customer proposal found to generate crew version from.'); return; }
 
-            // Load into currentEstimate temporarily
-            const savedEstimate = { ...currentEstimate };
+            window._crewProposalData = cp;
+
             currentEstimate = {
                 customerId: landedProp.customerId,
                 customerName: landedProp.customerName,
@@ -2689,7 +2713,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 profileId: landedProp.profileId,
                 projectId: projectId,
                 rooms: landedProp.rooms || [],
-                basePrice: (landedProp.basePrice || landedProp.grandTotal || 0) * (cp.percentage / 100),
+                basePrice: cp.crewTotal,
                 priceOverride: true,
                 discountType: '',
                 discountValue: 0,
@@ -2698,11 +2722,12 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 projectSummaryNotes: landedProp.projectSummaryNotes || '',
                 totalLabor: landedProp.totalLabor,
                 totalMaterials: landedProp.totalMaterials,
-                grandTotal: (landedProp.basePrice || landedProp.grandTotal || 0) * (cp.percentage / 100)
+                grandTotal: cp.crewTotal
             };
 
             window._unsavedEstimate = false;
             await generateCrewProposal();
+            window._crewProposalData = null;
         };
 
         window.saveCustomerNotes = async function(customerId) {
@@ -5298,21 +5323,26 @@ Only return JSON, no other text.`;
             }
 
             // Replace pricing section with crew pricing
-            const crewPct = 0.40;
-            const basePrice = currentEstimate.basePrice || 0;
-            const crewPrice = basePrice * crewPct;
+            const crewPrice = currentEstimate.grandTotal || currentEstimate.basePrice || 0;
+            const cpData = window._crewProposalData;
+            const crewHours = cpData ? cpData.estHours : 0;
+            const crewSize = cpData ? cpData.crewSize : 0;
+            const crewDays = (crewSize > 0 && crewHours > 0) ? (crewHours / (8 * crewSize)).toFixed(1) : '—';
             const pca = '-webkit-print-color-adjust:exact;print-color-adjust:exact';
 
             // Find and replace the PRICE SUMMARY section
             const priceStart = html.indexOf('PRICE SUMMARY');
             const signatureStart = html.indexOf('SIGNATURE');
             if (priceStart > -1 && signatureStart > -1) {
-                // Find the div that contains the price summary content
                 const beforePrice = html.lastIndexOf('<div', priceStart);
                 const afterPrice = html.lastIndexOf('</div>', signatureStart);
                 const crewPriceHTML = `<div style="color:#1e3a8a;padding:6px 0 4px 0;margin:15px 0 0;font-weight:700;font-size:11pt;letter-spacing:0.5px;border-bottom:2px solid #2563eb">LABOR & MATERIALS</div><div style="height:2px;width:50px;background-color:#f4a624;margin-top:-2px;${pca}"></div>
 <div style="margin:8px 0">
-<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:12pt;font-weight:700;border-bottom:2px solid #1e3a8a;"><span>Total Labor & Materials</span><span>$${crewPrice.toFixed(2)}</span></div>
+<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:10pt;border-bottom:1px solid #e5e7eb;"><span>Estimated Labor Hours</span><span>${crewHours.toFixed(1)} hrs</span></div>
+<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:10pt;border-bottom:1px solid #e5e7eb;"><span>Crew Size</span><span>${crewSize} members</span></div>
+<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:10pt;border-bottom:1px solid #e5e7eb;"><span>Estimated Days</span><span>${crewDays} days</span></div>
+<div style="display:flex;justify-content:space-between;padding:10px 0;font-size:13pt;font-weight:700;border-top:2px solid #1e3a8a;margin-top:6px;"><span>Total Labor & Materials</span><span>$${crewPrice.toFixed(2)}</span></div>
+${cpData?.notes ? '<p style="font-style:italic;color:#666;font-size:9pt;margin-top:6px;">Notes: ' + cpData.notes + '</p>' : ''}
 </div>`;
                 html = html.substring(0, beforePrice) + crewPriceHTML + html.substring(afterPrice);
             }
