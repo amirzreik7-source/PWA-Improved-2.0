@@ -3657,17 +3657,20 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                         material = (qty / PRICING.DoorPaintCoverage) * PRICING.PaintPricePerGallon * coats;
                         break;
                     default: {
-                        const cs = customExteriorSurfaces.find(s => s.name === surface.surfaceType);
+                        // Try exact match first, then case-insensitive
+                        let cs = customExteriorSurfaces.find(s => s.name === surface.surfaceType);
+                        if (!cs) cs = customExteriorSurfaces.find(s => s.name.toLowerCase() === (surface.surfaceType || '').toLowerCase());
                         if (cs && cs.calcType === 'area') {
                             labor = (qty / (cs.laborRate || 100)) * PRICING.LaborRate * coats;
                             material = cs.coverage ? (qty / cs.coverage) * PRICING.PaintPricePerGallon * coats : 0;
                         } else if (cs && cs.calcType === 'perunit') {
-                            labor = (cs.laborRate || 0) * qty * coats;
+                            labor = (cs.laborRate || 25) * qty * coats;
                             material = cs.coverage ? (qty / cs.coverage) * PRICING.PaintPricePerGallon * coats : 0;
                         } else if (cs && cs.calcType === 'flat') {
-                            labor = (cs.laborRate || 0) * qty * coats;
+                            labor = (cs.laborRate || 50) * qty * coats;
                             material = 0;
                         } else {
+                            // Fallback for unknown surfaces
                             labor = (qty / 100) * PRICING.LaborRate * coats;
                             material = (qty / 200) * PRICING.PaintPricePerGallon * coats;
                         }
@@ -3709,17 +3712,20 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                         material = 0;
                         break;
                     default: {
-                        const cs = customInteriorSurfaces.find(s => s.name === surface.surfaceType);
+                        // Try exact match first, then case-insensitive
+                        let cs = customInteriorSurfaces.find(s => s.name === surface.surfaceType);
+                        if (!cs) cs = customInteriorSurfaces.find(s => s.name.toLowerCase() === (surface.surfaceType || '').toLowerCase());
                         if (cs && cs.calcType === 'area') {
                             labor = (qty / (cs.laborRate || 100)) * PRICING.LaborRate * coats;
                             material = cs.coverage ? (qty / cs.coverage) * PRICING.InteriorPaintPricePerGallon * coats : 0;
                         } else if (cs && cs.calcType === 'perunit') {
-                            labor = (cs.laborRate || 0) * qty * coats;
+                            labor = (cs.laborRate || 25) * qty * coats;
                             material = cs.coverage ? (qty / cs.coverage) * PRICING.InteriorPaintPricePerGallon * coats : 0;
                         } else if (cs && cs.calcType === 'flat') {
-                            labor = (cs.laborRate || 0) * qty * coats;
+                            labor = (cs.laborRate || 50) * qty * coats;
                             material = 0;
                         } else {
+                            // Fallback for unknown surfaces
                             labor = (qty / 100) * PRICING.LaborRate * coats;
                             material = (qty / 300) * PRICING.InteriorPaintPricePerGallon * coats;
                         }
