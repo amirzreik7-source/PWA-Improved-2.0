@@ -3076,11 +3076,18 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
         };
 
         window.deleteEstimate = async function(jobId, customerId) {
-            if (!confirm('Delete this proposal? This cannot be undone.')) return;
+            if (!confirm('Delete this proposal?')) return;
             try {
+                const job = jobs.find(j => j.id === jobId);
+                const projectId = job?.projectId;
                 await updateDoc(doc(db, 'jobs', jobId), { deleted: true, deletedAt: new Date().toISOString() });
                 await loadJobs();
-                viewCustomerDetail(customerId); // Refresh customer detail
+                // Stay on project detail if deleting from within a project
+                if (projectId) {
+                    viewProjectDetail(projectId);
+                } else {
+                    viewCustomerDetail(customerId);
+                }
             } catch (e) {
                 alert('Error deleting: ' + e.message);
             }
