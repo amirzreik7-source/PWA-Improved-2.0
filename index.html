@@ -4084,8 +4084,36 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 
                 container.appendChild(box);
             });
+
+            // Also show surfaces that exist on the room but aren't in the predefined list
+            // (e.g., AI-created surfaces, or surfaces from a different job type)
+            const predefinedSet = new Set(surfaces);
+            (window.currentRoom.surfaces || []).forEach(surface => {
+                if (predefinedSet.has(surface.surfaceType)) return; // already shown above
+
+                const box = document.createElement('div');
+                box.style.cssText = 'padding:15px;margin-bottom:10px;border-radius:8px;cursor:pointer;position:relative;background:#d4edda;border:2px solid #28a745;';
+                const cost = calculateSurfaceCost(surface);
+                const coatsDisplay = surface.usePrimer ? `${surface.coats}/${surface.primerCoats}` : `${surface.coats}`;
+                box.innerHTML = `
+                    <div style="padding-right:35px;">
+                        <h4 style="margin:0 0 5px 0;color:#155724;">✓ ${surface.surfaceType}</h4>
+                        <p style="margin:2px 0;font-size:10pt;color:#155724;">${surface.color || ''} • ${surface.sheen || ''} • ${coatsDisplay} coat(s)</p>
+                        <p style="margin:2px 0;font-weight:bold;color:#155724;">$${(cost.total || 0).toFixed(2)}</p>
+                    </div>
+                `;
+                box.addEventListener('click', () => openSurfaceConfig(surface.surfaceType));
+                // Delete button
+                const delBtn = document.createElement('button');
+                delBtn.className = 'btn btn-danger';
+                delBtn.style.cssText = 'position:absolute;top:10px;right:10px;width:24px;height:24px;padding:0;font-size:14px;line-height:24px;border-radius:4px;';
+                delBtn.textContent = '×';
+                delBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteSurfaceFromRoom(surface.surfaceType); });
+                box.appendChild(delBtn);
+                container.appendChild(box);
+            });
         }
-        
+
         // Delete surface from current room
         function deleteSurfaceFromRoom(surfaceType) {
             if (!confirm('Delete this surface?')) return;
