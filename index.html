@@ -2255,8 +2255,20 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                     <button class="btn btn-info btn-small" onclick="setProjectAppointment('${projectId}')" style="width:100%;">Set Appointment</button>
                 </div>
 
-                <div class="room-card">
+                ${['Landed Job','Scheduled','In Progress','Complete'].includes(project.status) ? (() => {
+                    // Calculate estimated hours from landed proposal's spread rates
+                    const landedProp = project.landedProposalId ? projectProposals.find(p => p.id === project.landedProposalId) : projectProposals[0];
+                    const estLaborCost = landedProp ? (landedProp.totalLabor || 0) : 0;
+                    const estHours = PRICING.LaborRate > 0 ? estLaborCost / PRICING.LaborRate : 0;
+                    const defaultCrewSize = project.crewSize || (estHours <= 16 ? 1 : estHours <= 40 ? 2 : 3);
+                    const defaultDays = estHours > 0 ? Math.ceil(estHours / (8 * defaultCrewSize)) : '';
+
+                    return `<div class="room-card">
                     <h3>Crew & Schedule</h3>
+                    ${estHours > 0 ? `<div style="background:#f0f5ff;padding:8px;border-radius:6px;margin-bottom:10px;font-size:13px;">
+                        <p style="margin:2px 0;">Estimated labor: <strong>${estHours.toFixed(1)} hours</strong> (from spread rates)</p>
+                        <p style="margin:2px 0;">Suggested: <strong>${defaultCrewSize} crew × ${defaultDays} day${defaultDays!==1?'s':''}</strong></p>
+                    </div>` : ''}
                     <div class="form-group" style="margin-bottom:8px;">
                         <label style="font-size:13px;">Assigned Crew Leader</label>
                         <select id="projectCrewLeader_${projectId}" onchange="updateProjectField('${projectId}','assignedCrewLeader',this.value)" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
@@ -2265,8 +2277,8 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                         </select>
                     </div>
                     <div class="form-group" style="margin-bottom:8px;">
-                        <label style="font-size:13px;">Crew Size</label>
-                        <input type="number" id="projectCrewSize_${projectId}" value="${project.crewSize || ''}" min="1" step="1" placeholder="e.g., 3" onchange="updateProjectField('${projectId}','crewSize',parseInt(this.value)||0)" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
+                        <label style="font-size:13px;">Crew Size <span style="color:#999;font-weight:400;">(suggested: ${defaultCrewSize})</span></label>
+                        <input type="number" id="projectCrewSize_${projectId}" value="${project.crewSize || defaultCrewSize}" min="1" step="1" onchange="updateProjectField('${projectId}','crewSize',parseInt(this.value)||0)" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
                     </div>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
                         <div class="form-group" style="margin-bottom:8px;">
@@ -2279,10 +2291,11 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                         </div>
                     </div>
                     <div class="form-group" style="margin-bottom:8px;">
-                        <label style="font-size:13px;">Estimated Days</label>
-                        <input type="number" id="projectEstDays_${projectId}" value="${project.estimatedDays || ''}" min="1" step="0.5" placeholder="e.g., 3" onchange="updateProjectField('${projectId}','estimatedDays',parseFloat(this.value)||0)" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
+                        <label style="font-size:13px;">Estimated Days <span style="color:#999;font-weight:400;">(suggested: ${defaultDays})</span></label>
+                        <input type="number" id="projectEstDays_${projectId}" value="${project.estimatedDays || defaultDays}" min="0.5" step="0.5" onchange="updateProjectField('${projectId}','estimatedDays',parseFloat(this.value)||0)" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
                     </div>
-                </div>
+                </div>`;
+                })() : ''}
 
                 <div class="room-card">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
