@@ -5842,7 +5842,14 @@ Only return JSON, no other text.`;
             
             // Capture discount and project notes from form
             const projectNotes = document.getElementById('projectSummaryNotes')?.value || '';
-            
+
+            // Auto-increment proposal label for new versions within a project
+            let proposalLabel = currentEstimate.proposalLabel || '';
+            if (currentEstimate.projectId) {
+                const existingProps = jobs.filter(j => j.projectId === currentEstimate.projectId && !j.deleted);
+                proposalLabel = String.fromCharCode(65 + existingProps.length); // A, B, C...
+            }
+
             const job = {
                 userId: currentUser.uid,
                 customerId: currentEstimate.customerId,
@@ -5851,7 +5858,7 @@ Only return JSON, no other text.`;
                 jobType: currentEstimate.jobType,
                 profileId: currentEstimate.profileId,
                 projectId: currentEstimate.projectId || null,
-                proposalLabel: currentEstimate.proposalLabel || '',
+                proposalLabel: proposalLabel,
                 rooms: currentEstimate.rooms,
                 basePrice: currentEstimate.basePrice,
                 priceOverride: currentEstimate.priceOverride || false,
@@ -5871,15 +5878,11 @@ Only return JSON, no other text.`;
             };
             
             try {
-                if (window.isEditMode && window.editingJobId) {
-                    // Update existing proposal
-                    await updateDoc(doc(db, 'jobs', window.editingJobId), job);
-                } else {
-                    // Create new proposal
-                    const newDoc = await addDoc(collection(db, 'jobs'), job);
-                    window.editingJobId = newDoc.id;
-                    window.isEditMode = true;
-                }
+                // Always create new proposal (keeps version history)
+                const newDoc = await addDoc(collection(db, 'jobs'), job);
+                window.editingJobId = newDoc.id;
+                window.isEditMode = true;
+
                 await loadJobs();
                 window._unsavedEstimate = false;
                 localStorage.removeItem('nsp_draft');
