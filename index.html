@@ -1574,7 +1574,7 @@
                     </div>
                     <div style="margin-bottom:12px;">
                         <label style="font-weight:600;font-size:13px;display:block;margin-bottom:4px;">Measurement Type</label>
-                        <select id="newSurfaceMeasurement" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:15px;" onchange="document.getElementById('newSurfaceCoverageRow').style.display = this.value === 'flat' ? 'none' : 'block';">
+                        <select id="newSurfaceMeasurement" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:15px;" onchange="updateCustomSurfaceLabels()">
                             <option value="sqft">Square Feet (sq ft)</option>
                             <option value="linft">Linear Feet (lin ft)</option>
                             <option value="unit">Per Unit (each/count)</option>
@@ -1587,8 +1587,9 @@
                         <p style="font-size:10px;color:#999;margin-top:3px;" id="newSurfaceLaborHint">How many sq ft can be painted per hour</p>
                     </div>
                     <div id="newSurfaceCoverageRow" style="margin-bottom:15px;">
-                        <label style="font-weight:600;font-size:13px;display:block;margin-bottom:4px;">Paint Coverage (sq ft per gallon)</label>
+                        <label style="font-weight:600;font-size:13px;display:block;margin-bottom:4px;" id="newSurfaceCoverageLabel">Paint Coverage (sq ft per gallon)</label>
                         <input type="number" id="newSurfaceCoverage" placeholder="250" step="1" min="0" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:15px;">
+                        <p style="font-size:10px;color:#999;margin-top:3px;" id="newSurfaceCoverageHint">How many sq ft one gallon of paint covers</p>
                     </div>
                     <div style="display:flex;gap:10px;">
                         <button onclick="document.getElementById('customSurfaceOverlay').remove();" style="flex:1;padding:12px;border:1px solid #ddd;border-radius:8px;background:#f5f5f5;font-size:15px;cursor:pointer;">Cancel</button>
@@ -1597,6 +1598,48 @@
                 </div>
             `;
             document.getElementById('appContainer').appendChild(overlay);
+        };
+
+        window.updateCustomSurfaceLabels = function() {
+            const m = document.getElementById('newSurfaceMeasurement').value;
+            const laborLabel = document.getElementById('newSurfaceLaborLabel');
+            const laborHint = document.getElementById('newSurfaceLaborHint');
+            const coverageLabel = document.getElementById('newSurfaceCoverageLabel');
+            const coverageHint = document.getElementById('newSurfaceCoverageHint');
+            const coverageRow = document.getElementById('newSurfaceCoverageRow');
+            const coverageInput = document.getElementById('newSurfaceCoverage');
+            const laborInput = document.getElementById('newSurfaceLaborRate');
+
+            if (m === 'sqft') {
+                laborLabel.textContent = 'Labor Rate (sq ft/hour)';
+                laborHint.textContent = 'How many sq ft can be painted per hour';
+                laborInput.placeholder = '100';
+                coverageLabel.textContent = 'Paint Coverage (sq ft per gallon)';
+                coverageHint.textContent = 'How many sq ft one gallon of paint covers';
+                coverageInput.placeholder = '350';
+                coverageRow.style.display = 'block';
+            } else if (m === 'linft') {
+                laborLabel.textContent = 'Labor Rate (lin ft/hour)';
+                laborHint.textContent = 'How many linear ft can be painted per hour';
+                laborInput.placeholder = '50';
+                coverageLabel.textContent = 'Paint Coverage (lin ft per gallon)';
+                coverageHint.textContent = 'How many linear ft one gallon covers';
+                coverageInput.placeholder = '200';
+                coverageRow.style.display = 'block';
+            } else if (m === 'unit') {
+                laborLabel.textContent = 'Labor Price ($ per unit)';
+                laborHint.textContent = 'How much to charge per unit (e.g., $60 per shutter)';
+                laborInput.placeholder = '60';
+                coverageLabel.textContent = 'Paint Coverage (units per gallon)';
+                coverageHint.textContent = 'How many units one gallon of paint covers (e.g., 16 shutters per gallon)';
+                coverageInput.placeholder = '16';
+                coverageRow.style.display = 'block';
+            } else if (m === 'flat') {
+                laborLabel.textContent = 'Flat Rate Price ($)';
+                laborHint.textContent = 'Total flat rate charge for this surface';
+                laborInput.placeholder = '150';
+                coverageRow.style.display = 'none';
+            }
         };
 
         window.confirmAddCustomSurface = function(type) {
@@ -1611,7 +1654,7 @@
 
             const measurement = document.getElementById('newSurfaceMeasurement').value;
             const laborRate = parseFloat(document.getElementById('newSurfaceLaborRate').value) || (measurement === 'flat' ? 50 : 100);
-            const coverage = parseFloat(document.getElementById('newSurfaceCoverage').value) || (measurement === 'flat' || measurement === 'unit' ? 0 : 250);
+            const coverage = parseFloat(document.getElementById('newSurfaceCoverage').value) || (measurement === 'flat' ? 0 : measurement === 'unit' ? 16 : 250);
 
             const measureMap = {
                 sqft: { unit: 'sq ft/hour', calcType: 'area', measureUnit: 'Sq Ft' },
