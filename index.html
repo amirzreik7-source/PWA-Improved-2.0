@@ -2173,7 +2173,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                         <label>Lead Source</label>
                         <select id="projectLeadSource" onchange="updateProjectField('${projectId}','leadSource',this.value)" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
                             <option value="">-- Select --</option>
-                            ${['Google','Referral','Yard Sign','Facebook','Repeat Customer','Nextdoor','Yelp','Other'].map(s => `<option value="${s}" ${s === project.leadSource ? 'selected' : ''}>${s}</option>`).join('')}
+                            ${['Google','Referral','Yard Sign','Facebook','Repeat Customer','Nextdoor','Yelp','CertaPro Customer','Email List','Other'].map(s => `<option value="${s}" ${s === project.leadSource ? 'selected' : ''}>${s}</option>`).join('')}
                         </select>
                     </div>
                 </div>
