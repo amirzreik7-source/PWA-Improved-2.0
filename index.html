@@ -5407,88 +5407,11 @@ Only return JSON, no other text.`;
 
         // Crew Proposal — simplified PDF at % of customer price
         window.generateCrewProposal = async function() {
-            // Generate the full customer proposal first
             window._crewMode = true;
             document.getElementById('proposalContent').innerHTML = '<div style="text-align:center;padding:60px;color:#666;">Generating crew work order...</div>';
             showScreen('proposalViewScreen');
             await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
             await generateProposal();
-
-            // Now modify the rendered HTML for crew version
-            const el = document.getElementById('proposalContent');
-            let html = el.innerHTML;
-
-            // Replace header
-            html = html.replace('Northern Star Painters &mdash; Proposal', 'Northern Star Painters &mdash; CREW WORK ORDER');
-
-            // Add crew & schedule info after PREPARED FOR section
-            const project = currentEstimate.projectId ? projects.find(p => p.id === currentEstimate.projectId) : null;
-            if (project) {
-                const scheduleInfo = [];
-                if (project.assignedCrewLeader) scheduleInfo.push(`<strong>Crew Leader:</strong> ${project.assignedCrewLeader}`);
-                if (project.crewSize) scheduleInfo.push(`<strong>Crew Size:</strong> ${project.crewSize} members`);
-                if (project.scheduledStartDate) {
-                    const d = new Date(project.scheduledStartDate + 'T00:00');
-                    const dayName = d.toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric', year:'numeric'});
-                    const time = project.arrivalTime || '8:00 AM';
-                    const timeFmt = new Date('2000-01-01T' + time).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
-                    scheduleInfo.push(`<strong>Start Date:</strong> ${dayName}`);
-                    scheduleInfo.push(`<strong>Arrival Time:</strong> ${timeFmt}`);
-                }
-                if (project.estimatedDays) scheduleInfo.push(`<strong>Estimated Days:</strong> ${project.estimatedDays}`);
-                if (scheduleInfo.length > 0) {
-                    const pca = '-webkit-print-color-adjust:exact;print-color-adjust:exact';
-                    const crewBlock = `<div style="color:#1e3a8a;padding:6px 0 4px 0;margin:15px 0 0;font-weight:700;font-size:11pt;letter-spacing:0.5px;border-bottom:2px solid #2563eb">CREW & SCHEDULE</div><div style="height:2px;width:50px;background-color:#f4a624;margin-top:-2px;${pca}"></div><div style="margin:8px 0;font-size:10pt;">${scheduleInfo.map(s => '<p style="margin:4px 0;">' + s + '</p>').join('')}</div>`;
-                    const preparedByIdx = html.indexOf('PREPARED BY');
-                    if (preparedByIdx > -1) {
-                        const insertAt = html.lastIndexOf('<div', preparedByIdx);
-                        html = html.substring(0, insertAt) + crewBlock + html.substring(insertAt);
-                    }
-                }
-            }
-
-            // Replace pricing section with crew pricing
-            const crewPrice = currentEstimate.grandTotal || currentEstimate.basePrice || 0;
-            const cpData = window._crewProposalData;
-            const crewSize = cpData ? cpData.crewSize : 0;
-            const crewHoursRaw = cpData ? cpData.estHours : 0;
-            const crewDays = (crewSize > 0 && crewHoursRaw > 0) ? Math.ceil(crewHoursRaw / (8 * crewSize)) : 0;
-            const pca = '-webkit-print-color-adjust:exact;print-color-adjust:exact';
-
-            // Find and replace the PRICE SUMMARY section
-            const priceStart = html.indexOf('PRICE SUMMARY');
-            const signatureStart = html.indexOf('SIGNATURE');
-            if (priceStart > -1 && signatureStart > -1) {
-                const beforePrice = html.lastIndexOf('<div', priceStart);
-                const afterPrice = html.lastIndexOf('</div>', signatureStart);
-                const crewPriceHTML = `<div style="color:#1e3a8a;padding:6px 0 4px 0;margin:15px 0 0;font-weight:700;font-size:11pt;letter-spacing:0.5px;border-bottom:2px solid #2563eb">LABOR & MATERIALS</div><div style="height:2px;width:50px;background-color:#f4a624;margin-top:-2px;${pca}"></div>
-<div style="margin:8px 0">
-<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:10pt;border-bottom:1px solid #e5e7eb;"><span>Crew Size</span><span>${crewSize} members</span></div>
-<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:10pt;border-bottom:1px solid #e5e7eb;"><span>Estimated Days</span><span>${crewDays} day${crewDays !== 1 ? 's' : ''}</span></div>
-<div style="display:flex;justify-content:space-between;padding:10px 0;font-size:13pt;font-weight:700;border-top:2px solid #1e3a8a;margin-top:6px;"><span>Total Labor & Materials</span><span>$${crewPrice.toFixed(2)}</span></div>
-${cpData?.notes ? '<p style="font-style:italic;color:#666;font-size:9pt;margin-top:6px;">Notes: ' + cpData.notes + '</p>' : ''}
-</div>`;
-                html = html.substring(0, beforePrice) + crewPriceHTML + html.substring(afterPrice);
-            }
-
-            // Remove contract terms, miscellaneous, clean-up, and signature for crew version
-            // Keep everything up to CONTRACT TERMS, then close the doc
-            const contractStart = html.indexOf('PAINTING CONTRACT TERMS');
-            if (contractStart > -1) {
-                const contractSection = html.lastIndexOf('<div', contractStart);
-                if (contractSection > -1) {
-                    html = html.substring(0, contractSection) + '</div></div>';
-                }
-            } else {
-                // No contract section found — just remove signature
-                const sigSection = html.indexOf('SIGNATURE');
-                if (sigSection > -1) {
-                    const sigDiv = html.lastIndexOf('<div', sigSection);
-                    if (sigDiv > -1) html = html.substring(0, sigDiv) + '</div></div>';
-                }
-            }
-
-            el.innerHTML = html;
             document.title = (currentEstimate.jobName || 'Work Order') + ' - CREW';
             window._crewMode = false;
         };
@@ -6146,6 +6069,40 @@ ${cpData?.notes ? '<p style="font-style:italic;color:#666;font-size:9pt;margin-t
             const credits = currentEstimate.credits || [];
             const creditsHTML = credits.map(c => priceRow(c.name, '<span style="color:#e74c3c">-$'+c.amount.toFixed(2)+'</span>')).join('');
 
+            // Crew mode: build schedule and pricing
+            let crewScheduleHTML = '';
+            let crewPricingHTML = '';
+            if (window._crewMode) {
+                const project = currentEstimate.projectId ? projects.find(p => p.id === currentEstimate.projectId) : null;
+                const cpData = window._crewProposalData;
+                const crewSize = cpData ? cpData.crewSize : (project?.crewSize || 0);
+                const crewHoursRaw = cpData ? cpData.estHours : 0;
+                const crewDays = (crewSize > 0 && crewHoursRaw > 0) ? Math.ceil(crewHoursRaw / (8 * crewSize)) : 0;
+                const crewPrice = currentEstimate.grandTotal || currentEstimate.basePrice || 0;
+
+                // Schedule section
+                if (project) {
+                    const si = [];
+                    if (project.assignedCrewLeader) si.push('<p style="margin:4px 0;"><strong>Crew Leader:</strong> ' + project.assignedCrewLeader + '</p>');
+                    if (crewSize) si.push('<p style="margin:4px 0;"><strong>Crew Size:</strong> ' + crewSize + ' members</p>');
+                    if (project.scheduledStartDate) {
+                        const d = new Date(project.scheduledStartDate + 'T00:00');
+                        si.push('<p style="margin:4px 0;"><strong>Start Date:</strong> ' + d.toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric', year:'numeric'}) + '</p>');
+                        const time = project.arrivalTime || '08:00';
+                        si.push('<p style="margin:4px 0;"><strong>Arrival Time:</strong> ' + new Date('2000-01-01T' + time).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true}) + '</p>');
+                    }
+                    if (si.length > 0) crewScheduleHTML = sectionTitle('CREW & SCHEDULE') + '<div style="margin:8px 0;font-size:10pt;">' + si.join('') + '</div>';
+                }
+
+                // Pricing section
+                crewPricingHTML = sectionTitle('LABOR & MATERIALS') + '<div style="margin:8px 0">' +
+                    priceRow('Crew Size', crewSize + ' members') +
+                    priceRow('Estimated Days', crewDays + ' day' + (crewDays !== 1 ? 's' : '')) +
+                    '<div style="display:flex;justify-content:space-between;padding:10px 0;font-size:13pt;font-weight:700;border-top:2px solid #1e3a8a;margin-top:6px;"><span>Total Labor & Materials</span><span>$' + crewPrice.toFixed(2) + '</span></div>' +
+                    (cpData?.notes ? '<p style="font-style:italic;color:#666;font-size:9pt;margin-top:6px;">Notes: ' + cpData.notes + '</p>' : '') +
+                    '</div>';
+            }
+
             // Room price summary
             let roomPriceSummary = '';
             if (showRoomPrices) {
@@ -6173,13 +6130,13 @@ ${cpData?.notes ? '<p style="font-style:italic;color:#666;font-size:9pt;margin-t
 .proposal-doc td{padding:4px 6px;border-bottom:1px solid #e5e7eb;font-size:9pt;vertical-align:top}
 </style>
 <div style="background-color:#1e3a8a;height:38px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;${pca}">
-<span style="color:#fff;font-size:11pt;font-weight:600">Northern Star Painters &mdash; Proposal</span>
+<span style="color:#fff;font-size:11pt;font-weight:600">Northern Star Painters &mdash; ${window._crewMode ? 'CREW WORK ORDER' : 'Proposal'}</span>
 <span style="color:#e0e0e0;font-size:8.5pt">${bannerDate} &bull; ${bannerTime}</span></div>
 <div class="page-content">
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-top:15px;gap:15px;page-break-inside:avoid">
 <div style="max-width:260px">${co.logoUrl ? '<img src="'+co.logoUrl+'" style="max-width:220px;max-height:80px;display:block">' : '<div style="color:#f4a624;font-size:16px;letter-spacing:2px;'+pca+'">★ ★ ★ ★ ★</div><div style="font-size:18px;font-weight:800;color:#1e3a8a">'+(co.companyName||'Northern Star Painters')+'</div>'}</div>
 <div style="flex:1;max-width:260px;background-color:#e8f0fe;border:1px solid #c7d7f0;border-radius:6px;padding:10px 12px;${pca}">
-<div style="font-size:12pt;font-weight:700;color:#1e3a8a;margin:0 0 4px 0">${currentEstimate.jobType} Proposal</div>
+<div style="font-size:12pt;font-weight:700;color:#1e3a8a;margin:0 0 4px 0">${currentEstimate.jobType} ${window._crewMode ? 'Work Order' : 'Proposal'}</div>
 <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:8pt;border-bottom:1px solid #c7d7f0"><span style="font-weight:600;color:#1e3a8a">Proposal #</span><span style="color:#D4AF37;font-weight:600">${proposalNumber}</span></div>
 <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:8pt;border-bottom:1px solid #c7d7f0"><span style="font-weight:600;color:#1e3a8a">Date</span><span style="color:#D4AF37;font-weight:600">${date}</span></div>
 <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:8pt;border-bottom:1px solid #c7d7f0"><span style="font-weight:600;color:#1e3a8a">Valid Until</span><span style="color:#D4AF37;font-weight:600">${validUntil}</span></div>
@@ -6196,7 +6153,8 @@ ${co.consultantPhotoUrl ? '<img src="'+co.consultantPhotoUrl+'" style="width:55p
 <div style="flex:1"><p style="font-size:11pt;font-weight:700;margin:0">${co.consultantName||'Sales Consultant'}</p>${co.consultantTitle?'<p style="font-size:9pt;color:#666;margin:1px 0">'+co.consultantTitle+'</p>':''}</div>
 ${(co.consultantPhone||co.consultantEmail)?'<div style="text-align:right;font-size:8.5pt;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:6px 10px;'+pca+'">'+(co.consultantPhone?'<p style="margin:2px 0"><span style="color:#2563eb">☎</span> '+co.consultantPhone+'</p>':'')+(co.consultantEmail?'<p style="margin:2px 0"><span style="color:#2563eb">✉</span> '+co.consultantEmail+'</p>':'')+'</div>':''}
 </div>
-${sectionTitle('PRICE SUMMARY')}
+${window._crewMode ? crewScheduleHTML : ''}
+${window._crewMode ? crewPricingHTML : `${sectionTitle('PRICE SUMMARY')}
 <div style="margin:8px 0">
 ${roomPriceSummary}
 ${roomPriceSummary ? '<div style="border-top:1px solid #ccc;margin:4px 0"></div>' : ''}
@@ -6206,15 +6164,15 @@ ${creditsHTML}
 ${priceRow('Subtotal','$'+subtotal.toFixed(2),'border-top:2px solid #1e3a8a;font-weight:bold;margin-top:6px;padding-top:6px')}
 ${priceRow('Deposit Due (50%)','$'+depositAmount.toFixed(2))}
 ${priceRow('Balance','$'+balanceAmount.toFixed(2))}
-</div>
+</div>`}
 ${sectionTitle('PROJECT SUMMARY')}
 <p><strong>Included in the price above:</strong></p>
 <ul>${groupedRooms.map(r=>{const parts=[...r.surfaces.map(s=>s.surfaceType||'Surface'),...(r.additionalServices||[]).map(svc=>svc.name)];return '<li><strong>'+r.name+'</strong>'+(parts.length?' ('+parts.join(', ')+')':'')+'</li>';}).join('')}</ul>
 ${projectNotes ? '<p style="margin-top:8px">'+projectNotes+'</p>' : ''}
 ${detailsHTML}
-${sectionTitle(currentEstimate.jobType.toUpperCase()+' PAINTING CONTRACT TERMS')}
-${formattedContract}
-<h2>MISCELLANEOUS</h2>
+${window._crewMode ? '' : sectionTitle(currentEstimate.jobType.toUpperCase()+' PAINTING CONTRACT TERMS')}
+${window._crewMode ? '' : formattedContract}
+${window._crewMode ? '' : `<h2>MISCELLANEOUS</h2>
 <ul><li>Please review this proposal thoroughly. Items not explicitly mentioned are not covered.</li>
 <li>A dedicated Job Site Supervisor (JSS) will oversee operations and address concerns.</li>
 <li>Additional coats beyond those specified will incur extra charges.</li>
@@ -6232,8 +6190,8 @@ ${formattedContract}
 <p><strong>Methods:</strong> Checks, Visa, MasterCard, AmEx. 3.5% convenience fee for credit cards.</p>
 <p><strong>Deposit:</strong> 50% required to schedule.</p>
 <p><strong>Balance:</strong> Due at completion walk-through. Late fees of 12% after 5 days.</p>
-${sectionTitle('SIGNATURES')}
-<p style="margin:10px 0">The undersigned have read and accept the terms stated herein.</p>
+${sectionTitle('SIGNATURES')}`}
+${window._crewMode ? '' : `<p style="margin:10px 0">The undersigned have read and accept the terms stated herein.</p>
 <div class="signature-grid">
 <div><p><strong>Company Representative</strong></p><div class="signature-block">
 <p>Name: _______________________________</p><p>Date: _______________________________</p>
@@ -6242,7 +6200,7 @@ ${currentEstimate.companySignature ? '<p>Signature:</p><img src="'+currentEstima
 <div><p><strong>Customer</strong></p><div class="signature-block">
 <p>Name: _______________________________</p><p>Date: _______________________________</p>
 ${currentEstimate.customerSignature ? '<p>Signature:</p><img src="'+currentEstimate.customerSignature+'" style="max-width:220px;height:50px;margin-top:3px">' : '<p>Signature: _______________________________</p>'}
-</div></div></div>
+</div></div></div>`}
 <div style="text-align:center;margin-top:25px;padding:10px 0;color:#6b7280;font-size:8pt">
 <p><strong style="color:#1e3a8a">${co.companyName||'Northern Star Painters'}</strong></p>
 <p>${co.companyAddress||'1300 4th Street SE, Suite 412, Washington DC 20003'}</p>
