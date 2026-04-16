@@ -300,6 +300,7 @@
                 <div class="form-group">
                     <label>Notes (appears in proposal)</label>
                     <textarea id="roomNotes" rows="3" placeholder="Optional notes for this room/side"></textarea>
+                    <button class="btn btn-primary btn-small" onclick="aiRewrite('roomNotes')" style="margin-top:6px;">🤖 Rewrite</button>
                 </div>
             </div>
             
@@ -655,6 +656,7 @@
                 <div class="form-group">
                     <label>Custom message for proposal (appears after room list in Project Summary)</label>
                     <textarea id="projectSummaryNotes" rows="4" placeholder="e.g., We're excited to transform your home with premium Benjamin Moore paints and our expert crew."></textarea>
+                    <button class="btn btn-primary btn-small" onclick="aiRewrite('projectSummaryNotes')" style="margin-top:6px;">🤖 Rewrite</button>
                 </div>
             </div>
 
@@ -2658,6 +2660,37 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 return ref.id;
             } catch(e) { alert('Error creating project: ' + e.message); return null; }
         }
+
+        // AI Rewrite — fix grammar, spelling, make professional
+        window.aiRewrite = async function(textareaId) {
+            const el = document.getElementById(textareaId);
+            if (!el) return;
+            const text = el.value.trim();
+            if (!text) { alert('Write something first, then tap Rewrite'); return; }
+
+            const origText = el.value;
+            el.value = 'Rewriting...';
+            el.disabled = true;
+
+            try {
+                const response = await fetch('https://damp-moon-203c.amirzreik7.workers.dev', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: 'claude-sonnet-4-20250514',
+                        max_tokens: 500,
+                        messages: [{ role: 'user', content: `Rewrite this text to be professional, grammatically correct, and clear. Keep the same meaning and details. This is for a painting proposal/work order. Return ONLY the rewritten text, nothing else.\n\nOriginal: "${text}"` }]
+                    })
+                });
+                if (!response.ok) throw new Error('API error');
+                const data = await response.json();
+                el.value = data.content[0].text.replace(/^["']|["']$/g, '').trim();
+            } catch(e) {
+                el.value = origText;
+                alert('Rewrite failed: ' + e.message);
+            }
+            el.disabled = false;
+        };
 
         // Global search
         window.globalSearch = function(query) {
