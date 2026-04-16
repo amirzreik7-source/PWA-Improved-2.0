@@ -360,10 +360,13 @@
                 <div class="form-group">
                     <label>Product</label>
                     <select id="surfaceProduct"></select>
+                    <p style="margin-top:6px;"><a href="#" onclick="event.preventDefault();quickAddProduct()" style="color:#667eea;font-size:13px;">+ Product not listed? Add new</a></p>
                 </div>
                 <div class="form-group">
-                    <label>Sheen</label>
-                    <input type="text" id="surfaceSheen" list="sheenOptions" placeholder="Auto-filled from product">
+                    <label>Sheen / Finish</label>
+                    <select id="surfaceSheen">
+                        <option value="">-- Select --</option>
+                    </select>
                 </div>
                 <div class="form-group">
                     <label>Color</label>
@@ -864,10 +867,14 @@
                     <option value="Behr">Behr</option>
                     <option value="Other">Other</option>
                 </select></div>
-                <div class="form-group"><label>Sheen *</label><input type="text" id="productSheen" list="sheenOptions" required placeholder="e.g. Semi-Gloss, Matte, Flat...">
-                <datalist id="sheenOptions">
-                    <option value="Soft Gloss"><option value="Semi-Gloss"><option value="Matte"><option value="Flat"><option value="Eggshell"><option value="Satin">
-                </datalist></div>
+                <div class="form-group"><label>Category *</label><select id="productCategory" required onchange="updateProductSheenOptions()">
+                    <option value="Paint">Paint</option>
+                    <option value="Stain">Stain</option>
+                    <option value="Primer">Primer</option>
+                </select></div>
+                <div class="form-group"><label>Sheen / Finish *</label><select id="productSheen" required>
+                    <option value="">-- Select --</option>
+                </select></div>
                 <div class="form-group"><label>Type *</label><select id="productType" required>
                     <option value="">-- Select Type --</option>
                     <option value="Exterior">Exterior</option>
@@ -3126,7 +3133,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             list.innerHTML = products.map(p => `
                 <div class="selection-card">
                     <h3>${p.name}</h3>
-                    <p><strong>${p.brand}</strong> • ${p.sheen} • ${p.type}</p>
+                    <p><strong>${p.brand}</strong> • ${p.category || 'Paint'} • ${p.sheen} • ${p.type}</p>
                     <div style="margin-top:10px;">
                         <button class="btn btn-primary btn-small" onclick="editProduct('${p.id}')">✏️ Edit</button>
                         <button class="btn btn-danger btn-small" onclick="deleteProduct('${p.id}')">🗑️</button>
@@ -3141,6 +3148,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 userId: currentUser.uid,
                 name: document.getElementById('productName').value,
                 brand: document.getElementById('productBrand').value,
+                category: document.getElementById('productCategory').value || 'Paint',
                 sheen: document.getElementById('productSheen').value,
                 type: document.getElementById('productType').value
             };
@@ -3165,6 +3173,8 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             document.getElementById('productFormTitle').textContent = 'Edit Product';
             document.getElementById('productName').value = product.name;
             document.getElementById('productBrand').value = product.brand;
+            document.getElementById('productCategory').value = product.category || 'Paint';
+            updateProductSheenOptions();
             document.getElementById('productSheen').value = product.sheen;
             document.getElementById('productType').value = product.type;
             showScreen('newProductScreen');
@@ -3176,6 +3186,71 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 await updateDoc(doc(db, 'products', id), { deleted: true });
                 await loadProducts();
             } catch(e) { alert('Error deleting product: ' + e.message); }
+        };
+
+        // Sheen options by product category
+        const SHEEN_OPTIONS = {
+            Paint: ['Flat', 'Matte', 'Eggshell', 'Satin', 'Semi-Gloss', 'Soft Gloss', 'Gloss'],
+            Stain: ['Solid', 'Semi-Solid', 'Semi-Transparent', 'Transparent', 'Clear'],
+            Primer: ['Flat', 'Matte']
+        };
+
+        window.updateProductSheenOptions = function() {
+            const cat = document.getElementById('productCategory')?.value || 'Paint';
+            const sheenEl = document.getElementById('productSheen');
+            if (!sheenEl) return;
+            const current = sheenEl.value;
+            const options = SHEEN_OPTIONS[cat] || SHEEN_OPTIONS.Paint;
+            sheenEl.innerHTML = '<option value="">-- Select --</option>' + options.map(s => `<option value="${s}">${s}</option>`).join('');
+            if (options.includes(current)) sheenEl.value = current;
+        };
+        // Init on load
+        setTimeout(() => updateProductSheenOptions(), 100);
+
+        // Update surface sheen dropdown based on selected product
+        function updateSurfaceSheenDropdown(productId) {
+            const product = products.find(p => p.id === productId);
+            const sheenEl = document.getElementById('surfaceSheen');
+            if (!sheenEl) return;
+            const cat = product?.category || 'Paint';
+            const options = SHEEN_OPTIONS[cat] || SHEEN_OPTIONS.Paint;
+            const current = sheenEl.value;
+            sheenEl.innerHTML = '<option value="">-- Select --</option>' + options.map(s => `<option value="${s}">${s}</option>`).join('');
+            // Auto-select product's sheen, or keep current if valid
+            if (product?.sheen && options.includes(product.sheen)) {
+                sheenEl.value = product.sheen;
+            } else if (options.includes(current)) {
+                sheenEl.value = current;
+            }
+        }
+
+        // Quick-add product from surface config screen
+        window.quickAddProduct = async function() {
+            const name = prompt('Product name (e.g., "Duration"):');
+            if (!name || !name.trim()) return;
+            const brand = prompt('Brand (e.g., "Sherwin Williams"):') || 'Other';
+            const catChoice = prompt('Category:\n1. Paint\n2. Stain\n3. Primer\n\nEnter 1, 2, or 3:') || '1';
+            const catMap = {'1':'Paint','2':'Stain','3':'Primer'};
+            const category = catMap[catChoice] || 'Paint';
+            const sheenOpts = SHEEN_OPTIONS[category];
+            const sheenChoice = prompt(category + ' finish options:\n' + sheenOpts.map((s,i) => (i+1)+'. '+s).join('\n') + '\n\nEnter number:');
+            const sheen = sheenOpts[parseInt(sheenChoice)-1] || sheenOpts[0];
+            const type = currentEstimate.jobType || 'Both';
+
+            try {
+                const newProduct = { userId: currentUser.uid, name: name.trim(), brand: brand.trim(), category, sheen, type };
+                const docRef = await addDoc(collection(db, 'products'), newProduct);
+                await loadProducts();
+                // Re-populate the product dropdown and select the new one
+                const productDropdown = document.getElementById('surfaceProduct');
+                if (productDropdown) {
+                    const filteredProducts = products.filter(p => p.type === currentEstimate.jobType || p.type === 'Both');
+                    productDropdown.innerHTML = '<option value="">Select Product...</option>' + filteredProducts.map(p => `<option value="${p.id}">${p.brand} - ${p.name} (${p.category || 'Paint'}) - ${p.sheen}</option>`).join('');
+                    productDropdown.value = docRef.id;
+                    updateSurfaceSheenDropdown(docRef.id);
+                }
+                alert('Product added: ' + brand + ' ' + name + ' - ' + sheen);
+            } catch(e) { alert('Error adding product: ' + e.message); }
         };
 
         window.cancelProductEdit = function() {
@@ -4397,16 +4472,13 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             filteredProducts.forEach(product => {
                 const option = document.createElement('option');
                 option.value = product.id;
-                option.textContent = `${product.brand} - ${product.name} - ${product.sheen}`;
+                option.textContent = `${product.brand} - ${product.name} (${product.category || 'Paint'}) - ${product.sheen}`;
                 productDropdown.appendChild(option);
             });
 
             // Auto-fill sheen when product is selected
             productDropdown.onchange = function() {
-                const selected = window.products.find(p => p.id === this.value);
-                if (selected) {
-                    document.getElementById('surfaceSheen').value = selected.sheen;
-                }
+                updateSurfaceSheenDropdown(this.value);
             };
 
             // Auto-calculate quantity if applicable
@@ -4424,7 +4496,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             filteredProducts.forEach(product => {
                 const option = document.createElement('option');
                 option.value = product.id;
-                option.textContent = `${product.brand} - ${product.name} - ${product.sheen}`;
+                option.textContent = `${product.brand} - ${product.name} (${product.category || 'Paint'}) - ${product.sheen}`;
                 primerDropdown.appendChild(option);
             });
 
@@ -4432,6 +4504,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 // Editing existing
                 document.getElementById('surfaceQuantity').value = existingSurface.quantity || '';
                 document.getElementById('surfaceProduct').value = existingSurface.productId || '';
+                updateSurfaceSheenDropdown(existingSurface.productId);
                 document.getElementById('surfaceSheen').value = existingSurface.sheen || '';
                 document.getElementById('surfaceColor').value = existingSurface.color || '';
                 document.getElementById('surfaceCoats').value = existingSurface.coats || 2;
@@ -4467,12 +4540,11 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
                 if (profileProductId) {
                     document.getElementById('surfaceProduct').value = profileProductId;
-                    // Auto-fill sheen from product if profile doesn't have it
-                    const product = window.products.find(p => p.id === profileProductId);
-                    document.getElementById('surfaceSheen').value = profileSheen || (product ? product.sheen : '');
+                    updateSurfaceSheenDropdown(profileProductId);
+                    document.getElementById('surfaceSheen').value = profileSheen || '';
                 } else {
                     document.getElementById('surfaceProduct').value = '';
-                    document.getElementById('surfaceSheen').value = '';
+                    updateSurfaceSheenDropdown('');
                 }
                 document.getElementById('surfaceColor').value = profileColor || '';
                 document.getElementById('surfaceCoats').value = profileCoats || 2;
@@ -4757,22 +4829,20 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             filteredProducts.forEach(product => {
                 const option = document.createElement('option');
                 option.value = product.id;
-                option.textContent = `${product.brand} - ${product.name} - ${product.sheen}`;
+                option.textContent = `${product.brand} - ${product.name} (${product.category || 'Paint'}) - ${product.sheen}`;
                 productDropdown.appendChild(option);
             });
 
             // Auto-fill sheen when product is selected
             productDropdown.onchange = function() {
-                const selected = window.products.find(p => p.id === this.value);
-                if (selected) {
-                    document.getElementById('surfaceSheen').value = selected.sheen;
-                }
+                updateSurfaceSheenDropdown(this.value);
             };
 
             if (existingSurface) {
                 // Editing existing
                 document.getElementById('surfaceQuantity').value = existingSurface.quantity || '';
                 document.getElementById('surfaceProduct').value = existingSurface.productId || '';
+                updateSurfaceSheenDropdown(existingSurface.productId);
                 document.getElementById('surfaceSheen').value = existingSurface.sheen || '';
                 document.getElementById('surfaceColor').value = existingSurface.color || '';
                 document.getElementById('surfaceCoats').value = existingSurface.coats || 2;
