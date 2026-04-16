@@ -5466,19 +5466,19 @@ Only return JSON, no other text.`;
         window.saveAndGenerateProposal = async function() {
             // Show loading state INSTANTLY
             const content = document.getElementById('proposalContent');
-            content.innerHTML = '<div style="text-align:center;padding:60px;color:#666;font-size:16px;">Generating proposal...</div>';
+            content.innerHTML = '<div style="text-align:center;padding:60px;color:#666;font-size:16px;">Saving & generating proposal...</div>';
             showScreen('proposalViewScreen');
 
             // Let the loading screen paint before doing heavy work
             await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-            // Build proposal HTML (uses cached contract terms — fast)
-            await generateProposal();
-
-            // Only save if there are actual unsaved changes
+            // Save FIRST so the new proposal exists in Firebase with current data
             if (window._unsavedEstimate) {
-                saveEstimate({silent: true}); // fire-and-forget
+                await saveEstimate({silent: true});
             }
+
+            // Then generate PDF from currentEstimate (which has all edits)
+            await generateProposal();
         };
 
         // Crew Proposal — simplified PDF at % of customer price
