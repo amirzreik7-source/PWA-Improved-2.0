@@ -2237,6 +2237,41 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                     </div>
                 </div>
 
+                ${(() => {
+                    // Linked Projects section
+                    const linkedIds = project.linkedProjects || [];
+                    const otherProjects = projects.filter(p => p.customerId === project.customerId && p.id !== projectId && !linkedIds.includes(p.id));
+                    const linkedList = linkedIds.map(lid => projects.find(p => p.id === lid)).filter(Boolean);
+
+                    let linkHTML = `<div class="room-card">
+                        <h3>Linked Projects</h3>
+                        <p style="color:#666;font-size:12px;margin-bottom:8px;">Link projects done together for combined crew proposals & actuals</p>`;
+
+                    if (linkedList.length > 0) {
+                        linkHTML += linkedList.map(lp => `
+                            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#e7f0ff;border-radius:6px;margin-bottom:6px;">
+                                <div>
+                                    <strong style="font-size:13px;">${lp.jobNumber}</strong> — ${lp.projectName}
+                                </div>
+                                <button class="btn btn-danger" onclick="unlinkProject('${projectId}','${lp.id}')" style="width:24px;height:24px;padding:0;font-size:14px;line-height:24px;border-radius:4px;">×</button>
+                            </div>
+                        `).join('');
+                    }
+
+                    if (otherProjects.length > 0) {
+                        linkHTML += `<select id="linkProjectSelect_${projectId}" style="width:100%;padding:8px;border:2px solid #e0e0e0;border-radius:8px;margin-top:6px;">
+                            <option value="">Link another project...</option>
+                            ${otherProjects.map(op => `<option value="${op.id}">${op.jobNumber} — ${op.projectName}</option>`).join('')}
+                        </select>
+                        <button class="btn btn-info btn-small" onclick="linkProject('${projectId}')" style="width:100%;margin-top:6px;">Link</button>`;
+                    } else if (linkedList.length === 0) {
+                        linkHTML += '<p style="color:#999;font-size:12px;">No other projects for this customer to link.</p>';
+                    }
+
+                    linkHTML += '</div>';
+                    return linkHTML;
+                })()}
+
                 <div class="room-card">
                     <h3>Appointment</h3>
                     ${project.appointmentDate ? `<p style="color:#8b5cf6;font-weight:600;margin-bottom:8px;">Scheduled: ${new Date(project.appointmentDate).toLocaleDateString()} ${new Date(project.appointmentDate).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true})}</p>
@@ -2343,21 +2378,43 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             // Estimated materials
             const estMaterialCost = crewBaseProp ? (crewBaseProp.totalMaterials || 0) : 0;
 
+            // Calculate combined totals if linked projects exist
+            const linkedIds = project.linkedProjects || [];
+            let combinedPrice = customerFinalPrice;
+            let combinedHours = estHours;
+            let combinedMaterials = estMaterialCost;
+            const linkedNames = [];
+            linkedIds.forEach(lid => {
+                const lp = projects.find(p => p.id === lid);
+                if (!lp) return;
+                linkedNames.push(lp.projectName);
+                const lpProp = lp.landedProposalId ? jobs.find(j => j.id === lp.landedProposalId) : jobs.find(j => j.projectId === lid && !j.deleted);
+                if (lpProp) {
+                    combinedPrice += lpProp.grandTotal || lpProp.basePrice || 0;
+                    const lpLabor = lpProp.totalLabor || 0;
+                    combinedHours += PRICING.LaborRate > 0 ? lpLabor / PRICING.LaborRate : 0;
+                    combinedMaterials += lpProp.totalMaterials || 0;
+                }
+            });
+            const hasLinked = linkedIds.length > 0;
+
             html += `
                 <div class="room-card">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
                         <h3>👷 Crew Proposals (${crewProposals.length})</h3>
                     </div>
                     <div style="background:#f0f5ff;padding:10px;border-radius:8px;margin-bottom:10px;font-size:13px;">
-                        <p style="margin:2px 0;">Customer price: <strong>$${customerFinalPrice.toFixed(2)}</strong></p>
-                        ${estHours > 0 ? `<p style="margin:2px 0;">Est. labor hours: <strong>${estHours.toFixed(1)} hrs</strong></p>` : ''}
-                        ${estMaterialCost > 0 ? `<p style="margin:2px 0;">Est. materials: <strong>$${estMaterialCost.toFixed(2)}</strong></p>` : ''}
+                        <p style="margin:2px 0;">Customer price: <strong>$${customerFinalPrice.toFixed(2)}</strong>${hasLinked ? ` <span style="color:#667eea;">(combined: $${combinedPrice.toFixed(2)})</span>` : ''}</p>
+                        ${combinedHours > 0 ? `<p style="margin:2px 0;">Est. labor: <strong>${estHours.toFixed(1)} hrs</strong>${hasLinked ? ` <span style="color:#667eea;">(combined: ${combinedHours.toFixed(1)} hrs)</span>` : ''}</p>` : ''}
+                        ${combinedMaterials > 0 ? `<p style="margin:2px 0;">Est. materials: <strong>$${estMaterialCost.toFixed(2)}</strong>${hasLinked ? ` <span style="color:#667eea;">(combined: $${combinedMaterials.toFixed(2)})</span>` : ''}</p>` : ''}
+                        ${hasLinked ? `<p style="margin:4px 0 0;color:#667eea;font-size:11px;">Linked with: ${linkedNames.join(', ')}</p>` : ''}
                     </div>
                     <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;">
                         <input type="number" id="crewPctInput_${projectId}" value="40" min="1" max="100" step="1" style="width:65px;padding:8px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;">
                         <span style="color:#666;font-size:14px;">%</span>
-                        <button class="btn btn-success btn-small" onclick="addCrewProposal('${projectId}')" style="flex:1;">+ New Crew Proposal</button>
-                    </div>`;
+                        <button class="btn btn-success btn-small" onclick="addCrewProposal('${projectId}')" style="flex:1;">+ This Project</button>
+                    </div>
+                    ${hasLinked ? `<button class="btn btn-info btn-small" onclick="addCombinedCrewProposal('${projectId}')" style="width:100%;margin-bottom:10px;">+ Combined Crew Proposal (all linked projects)</button>` : ''}`;
 
             if (crewProposals.length === 0) {
                 html += '<p style="color:#999;text-align:center;padding:10px;">No crew proposals yet.</p>';
@@ -2373,7 +2430,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                     html += `
                         <div style="padding:12px;margin-bottom:8px;border-radius:8px;border:2px solid ${isAccepted ? '#28a745' : '#e0e0e0'};background:${isAccepted ? '#d4edda' : '#f8f9fa'};">
                             <div style="display:flex;justify-content:space-between;align-items:center;">
-                                <strong style="font-size:16px;">$${cp.crewTotal.toFixed(2)} <span style="font-size:12px;color:#666;">(${cp.percentage}%)</span></strong>
+                                <strong style="font-size:16px;">$${cp.crewTotal.toFixed(2)} <span style="font-size:12px;color:#666;">(${cp.percentage}%)</span></strong>${cp.combined ? ' <span style="background:#667eea;color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;">COMBINED</span>' : ''}
                                 ${isAccepted ? '<span style="color:#28a745;font-weight:700;font-size:12px;">ACCEPTED</span>' : ''}
                             </div>
                             <p style="color:#666;font-size:12px;margin:4px 0;">${cp.crewSize} crew • ${crewDays} day${crewDays !== 1 ? 's' : ''} • $${ratePerHour}/hr per person</p>
@@ -2805,6 +2862,89 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
         };
 
         // ═══════════════════════════════════════
+        // LINKED PROJECTS
+        window.linkProject = async function(projectId) {
+            const selectEl = document.getElementById('linkProjectSelect_' + projectId);
+            const targetId = selectEl?.value;
+            if (!targetId) return;
+            try {
+                const project = projects.find(p => p.id === projectId);
+                const linked = [...(project?.linkedProjects || [])];
+                if (!linked.includes(targetId)) linked.push(targetId);
+                await updateDoc(doc(db, 'projects', projectId), { linkedProjects: linked });
+                if (project) project.linkedProjects = linked;
+                // Also link the other direction
+                const target = projects.find(p => p.id === targetId);
+                const targetLinked = [...(target?.linkedProjects || [])];
+                if (!targetLinked.includes(projectId)) targetLinked.push(projectId);
+                await updateDoc(doc(db, 'projects', targetId), { linkedProjects: targetLinked });
+                if (target) target.linkedProjects = targetLinked;
+                viewProjectDetail(projectId);
+            } catch(e) { alert('Error: ' + e.message); }
+        };
+
+        window.unlinkProject = async function(projectId, targetId) {
+            try {
+                const project = projects.find(p => p.id === projectId);
+                const linked = (project?.linkedProjects || []).filter(id => id !== targetId);
+                await updateDoc(doc(db, 'projects', projectId), { linkedProjects: linked });
+                if (project) project.linkedProjects = linked;
+                // Remove from other direction too
+                const target = projects.find(p => p.id === targetId);
+                const targetLinked = (target?.linkedProjects || []).filter(id => id !== projectId);
+                await updateDoc(doc(db, 'projects', targetId), { linkedProjects: targetLinked });
+                if (target) target.linkedProjects = targetLinked;
+                viewProjectDetail(projectId);
+            } catch(e) { alert('Error: ' + e.message); }
+        };
+
+        // Combined crew proposal across linked projects
+        window.addCombinedCrewProposal = async function(projectId) {
+            const pct = parseInt(document.getElementById('crewPctInput_' + projectId)?.value) || 40;
+            const project = projects.find(p => p.id === projectId);
+            const linkedIds = project?.linkedProjects || [];
+            const allProjectIds = [projectId, ...linkedIds];
+
+            // Calculate combined totals
+            let combinedPrice = 0;
+            let combinedHours = 0;
+            const projectNames = [];
+
+            allProjectIds.forEach(pid => {
+                const p = projects.find(pr => pr.id === pid);
+                if (!p) return;
+                projectNames.push(p.projectName);
+                const prop = p.landedProposalId ? jobs.find(j => j.id === p.landedProposalId) : jobs.find(j => j.projectId === pid && !j.deleted);
+                if (prop) {
+                    combinedPrice += prop.grandTotal || prop.basePrice || 0;
+                    const labor = prop.totalLabor || 0;
+                    combinedHours += PRICING.LaborRate > 0 ? labor / PRICING.LaborRate : 0;
+                }
+            });
+
+            const crewTotal = combinedPrice * (pct / 100);
+            const crewSize = project?.crewSize || parseInt(prompt('How many crew members?', '3')) || 3;
+            const notes = prompt('Notes for combined crew proposal (optional):') || '';
+
+            try {
+                const crewProposals = [...(project?.crewProposals || [])];
+                crewProposals.push({
+                    percentage: pct,
+                    crewTotal: crewTotal,
+                    estHours: combinedHours,
+                    crewSize: crewSize,
+                    notes: (notes.trim() ? notes.trim() + ' — ' : '') + 'Combined: ' + projectNames.join(' + '),
+                    combined: true,
+                    linkedProjectIds: allProjectIds,
+                    accepted: false,
+                    createdAt: new Date().toISOString()
+                });
+                await updateDoc(doc(db, 'projects', projectId), { crewProposals });
+                if (project) project.crewProposals = crewProposals;
+                viewProjectDetail(projectId);
+            } catch(e) { alert('Error: ' + e.message); }
+        };
+
         // CREW PROPOSAL MANAGEMENT
         // ═══════════════════════════════════════
         window.addCrewProposal = async function(projectId) {
@@ -2886,29 +3026,58 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             const cp = project.crewProposals?.[idx];
             if (!cp) return;
 
-            // Find the landed proposal (or first proposal) to use as base
-            const landedProp = project.landedProposalId ? jobs.find(j => j.id === project.landedProposalId) : jobs.find(j => j.projectId === projectId && !j.deleted);
-            if (!landedProp) { alert('No customer proposal found to generate crew version from.'); return; }
+            // For combined proposals, merge rooms from all linked projects
+            let allRooms = [];
+            let allNotes = [];
+            let jobType = '';
+            let customerName = '';
+            let customerId = '';
+            let jobName = '';
+
+            if (cp.combined && cp.linkedProjectIds) {
+                cp.linkedProjectIds.forEach(pid => {
+                    const p = projects.find(pr => pr.id === pid);
+                    if (!p) return;
+                    const prop = p.landedProposalId ? jobs.find(j => j.id === p.landedProposalId) : jobs.find(j => j.projectId === pid && !j.deleted);
+                    if (!prop) return;
+                    // Add project name as a header room
+                    allRooms.push({ name: '── ' + p.projectName.toUpperCase() + ' ──', surfaces: [], additionalServices: [], notes: '' });
+                    (prop.rooms || []).forEach(r => allRooms.push(r));
+                    if (prop.projectSummaryNotes) allNotes.push(prop.projectSummaryNotes);
+                    if (!jobType) jobType = prop.jobType;
+                    if (!customerName) { customerName = prop.customerName; customerId = prop.customerId; }
+                });
+                jobName = customerName + ' - Combined';
+            } else {
+                const landedProp = project.landedProposalId ? jobs.find(j => j.id === project.landedProposalId) : jobs.find(j => j.projectId === projectId && !j.deleted);
+                if (!landedProp) { alert('No customer proposal found.'); return; }
+                allRooms = landedProp.rooms || [];
+                allNotes = landedProp.projectSummaryNotes ? [landedProp.projectSummaryNotes] : [];
+                jobType = landedProp.jobType;
+                customerName = landedProp.customerName;
+                customerId = landedProp.customerId;
+                jobName = landedProp.jobName;
+            }
 
             window._crewProposalData = cp;
 
             currentEstimate = {
-                customerId: landedProp.customerId,
-                customerName: landedProp.customerName,
-                jobName: landedProp.jobName,
-                jobType: landedProp.jobType,
-                profileId: landedProp.profileId,
+                customerId: customerId,
+                customerName: customerName,
+                jobName: jobName,
+                jobType: jobType,
+                profileId: null,
                 projectId: projectId,
-                rooms: landedProp.rooms || [],
+                rooms: allRooms,
                 basePrice: cp.crewTotal,
                 priceOverride: true,
                 discountType: '',
                 discountValue: 0,
                 discountAmount: 0,
                 credits: [],
-                projectSummaryNotes: landedProp.projectSummaryNotes || '',
-                totalLabor: landedProp.totalLabor,
-                totalMaterials: landedProp.totalMaterials,
+                projectSummaryNotes: allNotes.join('\n'),
+                totalLabor: 0,
+                totalMaterials: 0,
                 grandTotal: cp.crewTotal
             };
 
