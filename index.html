@@ -2438,7 +2438,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                     const isAccepted = cp.accepted;
                     // Round days up to whole number
                     const rawDays = cp.crewSize > 0 ? cp.estHours / (8 * cp.crewSize) : 0;
-                    const crewDays = Math.ceil(rawDays);
+                    const crewDays = cp.customDays || Math.ceil(rawDays);
                     // Calculate hourly rate: payout / total hours (crew × days × 8)
                     const totalCrewHours = crewDays * 8 * cp.crewSize;
                     const ratePerHour = totalCrewHours > 0 ? (cp.crewTotal / totalCrewHours).toFixed(2) : '0';
@@ -2452,7 +2452,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                             ${cp.notes ? '<p style="color:#555;font-size:12px;margin:4px 0;font-style:italic;">' + cp.notes + '</p>' : ''}
                             <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
                                 <button class="btn btn-primary btn-small" onclick="viewCrewProposalPDF('${projectId}',${idx})">👁️ View</button>
-                                <button class="btn btn-info btn-small" onclick="editCrewProposalNotes('${projectId}',${idx})">📝 Notes</button>
+                                <button class="btn btn-info btn-small" onclick="editCrewProposal('${projectId}',${idx})">✏️ Edit</button>
                                 ${!isAccepted ? `<button class="btn btn-success btn-small" onclick="acceptCrewProposal('${projectId}',${idx})">✓ Accepted</button>` : ''}
                                 <button class="btn btn-danger btn-small" onclick="deleteCrewProposal('${projectId}',${idx})">Del</button>
                             </div>
@@ -3056,13 +3056,25 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             } catch(e) { alert('Error: ' + e.message); }
         };
 
-        window.editCrewProposalNotes = async function(projectId, idx) {
+        window.editCrewProposal = async function(projectId, idx) {
             const project = projects.find(p => p.id === projectId);
             const crewProposals = [...(project?.crewProposals || [])];
-            const current = crewProposals[idx]?.notes || '';
-            const newNotes = prompt('Crew proposal notes:', current);
+            const cp = crewProposals[idx];
+            if (!cp) return;
+
+            const newCrewSize = prompt('Crew members:', cp.crewSize || 3);
+            if (newCrewSize === null) return;
+
+            const rawDays = parseInt(newCrewSize) > 0 ? Math.ceil(cp.estHours / (8 * parseInt(newCrewSize))) : cp.crewSize > 0 ? Math.ceil(cp.estHours / (8 * cp.crewSize)) : 3;
+            const newDays = prompt('Estimated days (suggested: ' + rawDays + '):', rawDays);
+            if (newDays === null) return;
+
+            const newNotes = prompt('Notes:', cp.notes || '');
             if (newNotes === null) return;
+
             try {
+                crewProposals[idx].crewSize = parseInt(newCrewSize) || cp.crewSize;
+                crewProposals[idx].customDays = parseInt(newDays) || null;
                 crewProposals[idx].notes = newNotes.trim();
                 await updateDoc(doc(db, 'projects', projectId), { crewProposals });
                 if (project) project.crewProposals = crewProposals;
@@ -6612,7 +6624,7 @@ Only return JSON, no other text.`;
                 const cpData = window._crewProposalData;
                 const crewSize = cpData ? cpData.crewSize : (project?.crewSize || 0);
                 const crewHoursRaw = cpData ? cpData.estHours : 0;
-                const crewDays = (crewSize > 0 && crewHoursRaw > 0) ? Math.ceil(crewHoursRaw / (8 * crewSize)) : 0;
+                const crewDays = cpData?.customDays || ((crewSize > 0 && crewHoursRaw > 0) ? Math.ceil(crewHoursRaw / (8 * crewSize)) : 0);
                 const crewPrice = currentEstimate.grandTotal || currentEstimate.basePrice || 0;
 
                 // Schedule section
