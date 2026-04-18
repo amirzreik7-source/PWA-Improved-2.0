@@ -407,7 +407,13 @@
         <!-- PROFIT TRACKING MODAL -->
         <div id="profitTrackingScreen" class="screen">
             <button class="btn btn-back" onclick="closeProfitTracking()">← Back</button>
-            <h2 class="screen-title">Job Completed - Log Actuals</h2>
+            <h2 class="screen-title">Job Complete — Log Actuals</h2>
+
+            <!-- Revenue Summary (auto-populated, not editable) -->
+            <div class="room-card" id="actualsRevenueCard" style="border-left:4px solid #10b981;">
+                <h3>Revenue</h3>
+                <div id="actualsRevenueBreakdown" style="font-size:14px;"></div>
+            </div>
 
             <div class="room-card">
                 <h3>Crew & Time</h3>
@@ -460,15 +466,16 @@
                 </div>
             </div>
 
-            <div class="room-card" id="profitResultsCard" style="display:none;">
+            <div class="room-card" id="profitResultsCard" style="display:none;border-left:4px solid #10b981;">
                 <h3>Profitability</h3>
                 <div style="font-size:15px;">
-                    <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Customer Paid:</span><span id="profitEstimateTotal">$0.00</span></div>
+                    <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Total Revenue:</span><span id="profitEstimateTotal">$0.00</span></div>
                     <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Crew Payout:</span><span id="profitCrewCost">$0.00</span></div>
                     <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Material Cost:</span><span id="profitMatCost">$0.00</span></div>
                     <div style="display:flex;justify-content:space-between;padding:4px 0;border-top:2px solid #333;margin-top:6px;padding-top:8px;font-weight:700;"><span>Net Profit:</span><span id="profitNetProfit">$0.00</span></div>
                     <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Hourly Rate/Person:</span><span id="profitHourlyRate">$0.00/hr</span></div>
-                    <p style="font-size:32px;font-weight:700;text-align:center;margin:12px 0;"><span id="profitPercentDisplay">0%</span></p>
+                    <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Profit per Day:</span><span id="profitPerDay">$0.00</span></div>
+                    <p style="font-size:36px;font-weight:700;text-align:center;margin:12px 0;"><span id="profitPercentDisplay">0%</span></p>
                 </div>
             </div>
 
@@ -478,19 +485,27 @@
             </div>
 
             <div class="room-card">
-                <h3>Job Details</h3>
+                <h3>Job Rating & Notes</h3>
                 <div class="form-group">
                     <label>Difficulty (1-10)</label>
                     <input type="range" id="actualDifficulty" min="1" max="10" value="5" oninput="document.getElementById('diffLabel').textContent=this.value">
                     <span id="diffLabel" style="font-weight:700;font-size:18px;">5</span> / 10
                 </div>
                 <div class="form-group">
-                    <label>Notes (issues, delays, learnings)</label>
-                    <textarea id="actualNotes" rows="3" placeholder="e.g., Rain delay day 3, needed extra coat on north wall"></textarea>
+                    <label>What went well?</label>
+                    <textarea id="actualNotesGood" rows="2" placeholder="e.g., Crew finished ahead of schedule, customer very happy"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>What went wrong? (issues, delays)</label>
+                    <textarea id="actualNotesBad" rows="2" placeholder="e.g., Rain delay day 3, needed extra coat on north wall"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Learnings for next time</label>
+                    <textarea id="actualNotesLearning" rows="2" placeholder="e.g., Add 1 day buffer for houses built before 1960"></textarea>
                 </div>
             </div>
 
-            <button class="btn btn-success btn-large" onclick="saveProfitActuals()">Save & Complete Job</button>
+            <button class="btn btn-success btn-large" onclick="saveProfitActuals()" style="width:100%;">Save & Complete Job</button>
         </div>
 
         <!-- ADDITIONAL SERVICE MODAL -->
@@ -2447,6 +2462,32 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             }
             html += '</div>';
 
+            // Job Completion / Actuals section
+            if (['Landed Job','Scheduled','In Progress','Complete'].includes(project.status)) {
+                if (project.actuals) {
+                    const a = project.actuals;
+                    const profitColor = a.profitMargin >= 40 ? '#10b981' : (a.profitMargin >= 25 ? '#f59e0b' : '#ef4444');
+                    html += `<div class="room-card" style="border-left:4px solid ${profitColor};">
+                        <h3>Job Actuals</h3>
+                        <div style="font-size:14px;">
+                            <div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Revenue:</span><strong>$${(a.revenue || 0).toFixed(2)}</strong></div>
+                            <div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Crew Payout:</span><span>$${a.crewPayout.toFixed(2)}</span></div>
+                            <div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Materials:</span><span>$${a.materialCost.toFixed(2)}</span></div>
+                            <div style="display:flex;justify-content:space-between;padding:3px 0;border-top:2px solid #333;margin-top:4px;padding-top:6px;font-weight:700;"><span>Net Profit:</span><span style="color:${profitColor};">$${a.netProfit.toFixed(2)}</span></div>
+                            <div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Margin:</span><span style="color:${profitColor};font-weight:700;">${a.profitMargin.toFixed(1)}%</span></div>
+                            <div style="display:flex;justify-content:space-between;padding:3px 0;"><span>$/hr per person:</span><span>$${(a.hourlyRate || 0).toFixed(2)}</span></div>
+                            <div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Profit/day:</span><span>$${(a.profitPerDay || 0).toFixed(2)}</span></div>
+                            ${a.combined ? '<p style="color:#667eea;font-size:12px;margin-top:6px;">Combined actuals across linked projects</p>' : ''}
+                        </div>
+                        <button class="btn btn-info btn-small" onclick="openProjectActuals('${projectId}')" style="width:100%;margin-top:10px;">Edit Actuals</button>
+                    </div>`;
+                } else {
+                    html += `<div class="room-card" style="border-left:4px solid #f59e0b;">
+                        <button class="btn btn-success btn-large" onclick="openProjectActuals('${projectId}')" style="width:100%;">Log Actuals & Complete Job</button>
+                    </div>`;
+                }
+            }
+
             const detailScreen = document.getElementById('customerDetailScreen');
             if (!detailScreen) {
                 const screen = document.createElement('div');
@@ -2473,6 +2514,15 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
                 await updateDoc(doc(db, 'projects', projectId), updates);
                 await loadProjects();
+
+                // Auto-trigger actuals when marking Complete
+                if (newStatus === 'Complete') {
+                    if (confirm('Log job actuals now? (crew payout, material costs, etc.)')) {
+                        openProjectActuals(projectId);
+                        return;
+                    }
+                }
+
                 viewProjectDetail(projectId);
             } catch(e) { alert('Error updating status: ' + e.message); }
         };
@@ -5813,34 +5863,93 @@ Only return JSON, no other text.`;
             }
         };
 
-        window.openProfitTracking = function() {
-            const jobId = window.currentJobIdForProfit;
-            const job = jobId ? jobs.find(j => j.id === jobId) : null;
+        // Track which project we're logging actuals for
+        window._actualsProjectId = null;
+        window._actualsRevenue = 0;
+        window._actualsEstLabor = 0;
+        window._actualsEstMaterial = 0;
+        window._actualsLinkedProjectIds = [];
 
-            // Populate crew leader suggestions from past actuals
-            const leaders = [...new Set(jobs.filter(j => j.actuals?.crewLeader).map(j => j.actuals.crewLeader))];
+        // Open actuals from project level
+        window.openProjectActuals = function(projectId) {
+            const project = projects.find(p => p.id === projectId);
+            if (!project) return;
+
+            window._actualsProjectId = projectId;
+            const linkedIds = project.linkedProjects || [];
+            const allProjectIds = [projectId, ...linkedIds];
+            window._actualsLinkedProjectIds = allProjectIds;
+
+            // Calculate combined revenue and estimates from all linked projects
+            let totalRevenue = 0;
+            let totalEstLabor = 0;
+            let totalEstMaterial = 0;
+            const revenueLines = [];
+
+            allProjectIds.forEach(pid => {
+                const p = projects.find(pr => pr.id === pid);
+                if (!p) return;
+                const prop = p.landedProposalId ? jobs.find(j => j.id === p.landedProposalId) : jobs.find(j => j.projectId === pid && !j.deleted);
+                if (!prop) return;
+                const rev = prop.grandTotal || prop.basePrice || 0;
+                totalRevenue += rev;
+                totalEstLabor += prop.totalLabor || 0;
+                totalEstMaterial += prop.totalMaterials || 0;
+                revenueLines.push({ name: p.projectName, jobNumber: p.jobNumber, amount: rev });
+            });
+
+            window._actualsRevenue = totalRevenue;
+            window._actualsEstLabor = totalEstLabor;
+            window._actualsEstMaterial = totalEstMaterial;
+
+            // Revenue breakdown display
+            const revEl = document.getElementById('actualsRevenueBreakdown');
+            if (revEl) {
+                let revHTML = revenueLines.map(r =>
+                    `<div style="display:flex;justify-content:space-between;padding:3px 0;"><span>${r.jobNumber} — ${r.name}</span><strong>$${r.amount.toFixed(2)}</strong></div>`
+                ).join('');
+                if (revenueLines.length > 1) {
+                    revHTML += `<div style="display:flex;justify-content:space-between;padding:6px 0;border-top:2px solid #10b981;margin-top:4px;font-size:16px;font-weight:700;"><span>Total Revenue</span><span>$${totalRevenue.toFixed(2)}</span></div>`;
+                }
+                const estHours = PRICING.LaborRate > 0 ? totalEstLabor / PRICING.LaborRate : 0;
+                revHTML += `<div style="margin-top:6px;padding-top:6px;border-top:1px solid #e5e7eb;color:#666;font-size:12px;">
+                    Est. labor: ${estHours.toFixed(1)} hrs • Est. materials: $${totalEstMaterial.toFixed(2)}
+                </div>`;
+                revEl.innerHTML = revHTML;
+            }
+
+            // Populate crew leader suggestions
+            const leaders = [...new Set([
+                ...crewMembers.filter(c => c.role === 'Crew Leader').map(c => c.name),
+                ...jobs.filter(j => j.actuals?.crewLeader).map(j => j.actuals.crewLeader)
+            ])];
             const dlEl = document.getElementById('crewLeaderList');
             if (dlEl) dlEl.innerHTML = leaders.map(l => `<option value="${l}">`).join('');
 
-            // Pre-fill if actuals exist
-            if (job && job.actuals) {
-                const a = job.actuals;
-                document.getElementById('actualCrewLeader').value = a.crewLeader || '';
-                document.getElementById('actualCrewCount').value = a.crewCount || '';
-                document.getElementById('actualHoursPerDay').value = a.hoursPerDay || 8;
-                document.getElementById('actualStartDate').value = a.startDate || '';
-                document.getElementById('actualEndDate').value = a.endDate || '';
-                document.getElementById('actualDays').value = a.days || '';
-                document.getElementById('actualCrewPayout').value = a.crewPayout || '';
-                document.getElementById('actualMaterialCost').value = a.materialCost || '';
-                document.getElementById('actualGallons').value = a.gallonsUsed || '';
-                document.getElementById('actualDifficulty').value = a.difficulty || 5;
-                document.getElementById('diffLabel').textContent = a.difficulty || 5;
-                document.getElementById('actualNotes').value = a.notes || '';
+            // Pre-fill from project data
+            document.getElementById('actualCrewLeader').value = project.assignedCrewLeader || '';
+            document.getElementById('actualCrewCount').value = project.crewSize || '';
+            document.getElementById('actualHoursPerDay').value = 8;
+
+            // Pre-fill from existing actuals if re-editing
+            const existingActuals = project.actuals;
+            if (existingActuals) {
+                document.getElementById('actualCrewLeader').value = existingActuals.crewLeader || project.assignedCrewLeader || '';
+                document.getElementById('actualCrewCount').value = existingActuals.crewCount || project.crewSize || '';
+                document.getElementById('actualHoursPerDay').value = existingActuals.hoursPerDay || 8;
+                document.getElementById('actualStartDate').value = existingActuals.startDate || '';
+                document.getElementById('actualEndDate').value = existingActuals.endDate || '';
+                document.getElementById('actualDays').value = existingActuals.days || '';
+                document.getElementById('actualCrewPayout').value = existingActuals.crewPayout || '';
+                document.getElementById('actualMaterialCost').value = existingActuals.materialCost || '';
+                document.getElementById('actualGallons').value = existingActuals.gallonsUsed || '';
+                document.getElementById('actualDifficulty').value = existingActuals.difficulty || 5;
+                document.getElementById('diffLabel').textContent = existingActuals.difficulty || 5;
+                document.getElementById('actualNotesGood').value = existingActuals.notesGood || '';
+                document.getElementById('actualNotesBad').value = existingActuals.notesBad || '';
+                document.getElementById('actualNotesLearning').value = existingActuals.notesLearning || '';
             } else {
-                ['actualCrewLeader','actualCrewPayout','actualMaterialCost','actualDays','actualGallons','actualStartDate','actualEndDate','actualNotes'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
-                document.getElementById('actualCrewCount').value = '';
-                document.getElementById('actualHoursPerDay').value = 8;
+                ['actualCrewPayout','actualMaterialCost','actualDays','actualGallons','actualStartDate','actualEndDate','actualNotesGood','actualNotesBad','actualNotesLearning'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
                 document.getElementById('actualDifficulty').value = 5;
                 document.getElementById('diffLabel').textContent = '5';
             }
@@ -5849,6 +5958,33 @@ Only return JSON, no other text.`;
             document.getElementById('varianceCard').style.display = 'none';
             calculateProfit();
             showScreen('profitTrackingScreen');
+        };
+
+        // Legacy support — old "Log Actuals" button on Step 6
+        window.openProfitTracking = function() {
+            const jobId = window.currentJobIdForProfit;
+            const job = jobId ? jobs.find(j => j.id === jobId) : null;
+            if (job?.projectId) {
+                openProjectActuals(job.projectId);
+            } else {
+                // Standalone job — use old flow
+                window._actualsProjectId = null;
+                window._actualsRevenue = currentEstimate.grandTotal || 0;
+                window._actualsEstLabor = currentEstimate.totalLabor || 0;
+                window._actualsEstMaterial = currentEstimate.totalMaterials || 0;
+                window._actualsLinkedProjectIds = [];
+                const revEl = document.getElementById('actualsRevenueBreakdown');
+                if (revEl) revEl.innerHTML = `<div style="display:flex;justify-content:space-between;"><span>Customer Paid</span><strong>$${window._actualsRevenue.toFixed(2)}</strong></div>`;
+                ['actualCrewLeader','actualCrewPayout','actualMaterialCost','actualDays','actualGallons','actualStartDate','actualEndDate','actualNotesGood','actualNotesBad','actualNotesLearning'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+                document.getElementById('actualCrewCount').value = '';
+                document.getElementById('actualHoursPerDay').value = 8;
+                document.getElementById('actualDifficulty').value = 5;
+                document.getElementById('diffLabel').textContent = '5';
+                document.getElementById('profitResultsCard').style.display = 'none';
+                document.getElementById('varianceCard').style.display = 'none';
+                calculateProfit();
+                showScreen('profitTrackingScreen');
+            }
         };
 
         window.calculateProfit = function() {
@@ -5865,27 +6001,30 @@ Only return JSON, no other text.`;
             }
 
             const totalCosts = crewPayout + materialCost;
-            const estimateTotal = currentEstimate.grandTotal || 0;
-            const netProfit = estimateTotal - totalCosts;
-            const profitPct = estimateTotal > 0 ? (netProfit / estimateTotal) * 100 : 0;
+            const revenue = window._actualsRevenue || 0;
+            const netProfit = revenue - totalCosts;
+            const profitPct = revenue > 0 ? (netProfit / revenue) * 100 : 0;
             const hourlyRate = (days > 0 && crewCount > 0) ? crewPayout / (days * hrsPerDay * crewCount) : 0;
+            const profitPerDay = days > 0 ? netProfit / days : 0;
 
             let profitColor = '#ef4444';
             if (profitPct >= 40) profitColor = '#10b981';
             else if (profitPct >= 25) profitColor = '#f59e0b';
 
             document.getElementById('profitHourlyRate').textContent = '$' + hourlyRate.toFixed(2) + '/hr';
+            document.getElementById('profitPerDay').textContent = '$' + profitPerDay.toFixed(2);
             document.getElementById('profitCrewCost').textContent = '$' + crewPayout.toFixed(2);
             document.getElementById('profitMatCost').textContent = '$' + materialCost.toFixed(2);
-            document.getElementById('profitEstimateTotal').textContent = '$' + estimateTotal.toFixed(2);
+            document.getElementById('profitEstimateTotal').textContent = '$' + revenue.toFixed(2);
             document.getElementById('profitNetProfit').textContent = '$' + netProfit.toFixed(2);
-            document.getElementById('profitPercentDisplay').textContent = profitPct.toFixed(1) + '% Profit';
+            document.getElementById('profitNetProfit').style.color = profitColor;
+            document.getElementById('profitPercentDisplay').textContent = profitPct.toFixed(1) + '%';
             document.getElementById('profitPercentDisplay').style.color = profitColor;
             document.getElementById('profitResultsCard').style.display = 'block';
 
             // Variance analysis
-            const estLabor = currentEstimate.totalLabor || 0;
-            const estMaterial = currentEstimate.totalMaterials || 0;
+            const estLabor = window._actualsEstLabor || 0;
+            const estMaterial = window._actualsEstMaterial || 0;
             if (estLabor > 0 || estMaterial > 0) {
                 const laborVar = estLabor > 0 ? ((crewPayout - estLabor) / estLabor * 100) : 0;
                 const matVar = estMaterial > 0 ? ((materialCost - estMaterial) / estMaterial * 100) : 0;
@@ -5903,62 +6042,85 @@ Only return JSON, no other text.`;
         };
 
         window.saveProfitActuals = async function() {
-            const jobId = window.currentJobIdForProfit;
-            if (!jobId) { alert('Please save the estimate first, then log actuals from the job view.'); return; }
-
             const hrsPerDay = parseFloat(document.getElementById('actualHoursPerDay').value) || 8;
             const days = parseFloat(document.getElementById('actualDays').value) || 0;
             const crewCount = parseInt(document.getElementById('actualCrewCount').value) || 0;
             const crewPayout = parseFloat(document.getElementById('actualCrewPayout').value) || 0;
             const materialCost = parseFloat(document.getElementById('actualMaterialCost').value) || 0;
+            const revenue = window._actualsRevenue || 0;
 
             const actuals = {
                 crewLeader: document.getElementById('actualCrewLeader').value.trim(),
-                crewCount: crewCount,
-                hoursPerDay: hrsPerDay,
+                crewCount, hoursPerDay: hrsPerDay,
                 totalHours: days * hrsPerDay * crewCount,
                 startDate: document.getElementById('actualStartDate').value,
                 endDate: document.getElementById('actualEndDate').value,
-                days: days,
-                crewPayout: crewPayout,
-                materialCost: materialCost,
+                days, crewPayout, materialCost,
                 gallonsUsed: parseFloat(document.getElementById('actualGallons').value) || 0,
                 difficulty: parseInt(document.getElementById('actualDifficulty').value) || 5,
-                notes: document.getElementById('actualNotes').value.trim(),
+                notesGood: document.getElementById('actualNotesGood')?.value?.trim() || '',
+                notesBad: document.getElementById('actualNotesBad')?.value?.trim() || '',
+                notesLearning: document.getElementById('actualNotesLearning')?.value?.trim() || '',
                 totalCosts: crewPayout + materialCost,
-                netProfit: (currentEstimate.grandTotal || 0) - (crewPayout + materialCost),
-                profitMargin: 0,
-                hourlyRate: 0,
+                revenue: revenue,
+                netProfit: revenue - (crewPayout + materialCost),
+                profitMargin: revenue > 0 ? ((revenue - (crewPayout + materialCost)) / revenue * 100) : 0,
+                hourlyRate: (days > 0 && crewCount > 0) ? crewPayout / (days * hrsPerDay * crewCount) : 0,
+                profitPerDay: days > 0 ? (revenue - (crewPayout + materialCost)) / days : 0,
+                estLabor: window._actualsEstLabor || 0,
+                estMaterial: window._actualsEstMaterial || 0,
+                linkedProjectIds: window._actualsLinkedProjectIds || [],
+                combined: (window._actualsLinkedProjectIds || []).length > 1,
                 completedAt: new Date().toISOString()
             };
-            actuals.profitMargin = currentEstimate.grandTotal > 0 ? (actuals.netProfit / currentEstimate.grandTotal) * 100 : 0;
-            actuals.hourlyRate = (days > 0 && crewCount > 0) ? crewPayout / (days * hrsPerDay * crewCount) : 0;
-            // Store estimate values for future variance analysis
-            actuals.estLabor = currentEstimate.totalLabor || 0;
-            actuals.estMaterial = currentEstimate.totalMaterials || 0;
-            actuals.estTotal = currentEstimate.grandTotal || 0;
 
             try {
-                await updateDoc(doc(db, 'jobs', jobId), { actuals: actuals, status: 'Complete' });
-                // Also update project status if linked
-                const job = jobs.find(j => j.id === jobId);
-                if (job) {
-                    job.actuals = actuals;
-                    job.status = 'Complete';
-                    if (job.projectId) {
-                        await updateDoc(doc(db, 'projects', job.projectId), { status: 'Complete' });
-                        const p = projects.find(pr => pr.id === job.projectId);
-                        if (p) p.status = 'Complete';
+                const projectId = window._actualsProjectId;
+
+                if (projectId) {
+                    // Save actuals on the primary project
+                    await updateDoc(doc(db, 'projects', projectId), { actuals, status: 'Complete' });
+                    const p = projects.find(pr => pr.id === projectId);
+                    if (p) { p.actuals = actuals; p.status = 'Complete'; }
+
+                    // Mark all linked projects as Complete too
+                    const linkedIds = (window._actualsLinkedProjectIds || []).filter(id => id !== projectId);
+                    for (const lid of linkedIds) {
+                        await updateDoc(doc(db, 'projects', lid), { status: 'Complete', actualsRef: projectId });
+                        const lp = projects.find(pr => pr.id === lid);
+                        if (lp) { lp.status = 'Complete'; lp.actualsRef = projectId; }
                     }
+
+                    // Also update the landed proposal's status
+                    const proj = projects.find(pr => pr.id === projectId);
+                    if (proj?.landedProposalId) {
+                        await updateDoc(doc(db, 'jobs', proj.landedProposalId), { actuals, status: 'Complete' });
+                        const job = jobs.find(j => j.id === proj.landedProposalId);
+                        if (job) { job.actuals = actuals; job.status = 'Complete'; }
+                    }
+
+                    await loadProjects();
+                    alert('Job completed! Actuals saved.');
+                    viewProjectDetail(projectId);
+                } else {
+                    // Standalone job (legacy)
+                    const jobId = window.currentJobIdForProfit;
+                    if (!jobId) { alert('No job to save actuals for.'); return; }
+                    await updateDoc(doc(db, 'jobs', jobId), { actuals, status: 'Complete' });
+                    const job = jobs.find(j => j.id === jobId);
+                    if (job) { job.actuals = actuals; job.status = 'Complete'; }
+                    alert('Job completed! Actuals saved.');
+                    showScreen('estimateStep6Screen');
                 }
-                alert('Job completed! Actuals saved.');
-                showProfitDisplay(actuals);
-                showScreen('estimateStep6Screen');
             } catch (error) { alert('Error saving actuals: ' + error.message); }
         };
 
         window.closeProfitTracking = function() {
-            showScreen('estimateStep6Screen');
+            if (window._actualsProjectId) {
+                viewProjectDetail(window._actualsProjectId);
+            } else {
+                showScreen('estimateStep6Screen');
+            }
         };
 
         function showProfitDisplay(actuals) {
