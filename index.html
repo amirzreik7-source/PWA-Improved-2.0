@@ -1108,11 +1108,12 @@
             <button class="btn btn-back" onclick="showScreen('homeScreen')">← Back</button>
             <h2 class="screen-title">Leads</h2>
 
-            <!-- Top 3 buttons: New Leads, In Progress, Landed -->
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
-                <button id="filterBtn-New Lead" class="btn" onclick="filterJobs('New Lead')" style="padding:14px 8px;font-size:13px;border-radius:10px;">New Leads<br><span id="count-New Lead" style="font-size:22px;font-weight:700">0</span></button>
-                <button id="filterBtn-In Progress" class="btn" onclick="filterJobs('In Progress')" style="padding:14px 8px;font-size:13px;border-radius:10px;">In Progress<br><span id="count-In Progress" style="font-size:22px;font-weight:700">0</span></button>
-                <button id="filterBtn-Landed" class="btn" onclick="filterJobs('Landed')" style="padding:14px 8px;font-size:13px;border-radius:10px;">Landed<br><span id="count-Landed" style="font-size:22px;font-weight:700">0</span></button>
+            <!-- Status filter buttons -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+                <button id="filterBtn-New Lead" class="btn" onclick="filterJobs('New Lead')" style="padding:12px 6px;font-size:12px;border-radius:10px;">New Leads<br><span id="count-New Lead" style="font-size:20px;font-weight:700">0</span></button>
+                <button id="filterBtn-Appointment Set" class="btn" onclick="filterJobs('Appointment Set')" style="padding:12px 6px;font-size:12px;border-radius:10px;">Appt Set<br><span id="count-Appointment Set" style="font-size:20px;font-weight:700">0</span></button>
+                <button id="filterBtn-In Progress" class="btn" onclick="filterJobs('In Progress')" style="padding:12px 6px;font-size:12px;border-radius:10px;">In Progress<br><span id="count-In Progress" style="font-size:20px;font-weight:700">0</span></button>
+                <button id="filterBtn-Landed" class="btn" onclick="filterJobs('Landed')" style="padding:12px 6px;font-size:12px;border-radius:10px;">Landed<br><span id="count-Landed" style="font-size:20px;font-weight:700">0</span></button>
             </div>
 
             <!-- See All expander -->
@@ -3756,8 +3757,8 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
         };
 
         // Lead status config
-        const LEAD_STATUSES = ['New Lead','In Progress','Landed','Lost','Complete'];
-        const STATUS_COLORS = {'New Lead':'#3b82f6','In Progress':'#f59e0b','Landed':'#10b981','Lost':'#ef4444','Complete':'#6b7280'};
+        const LEAD_STATUSES = ['New Lead','Appointment Set','In Progress','Landed','Lost','Complete'];
+        const STATUS_COLORS = {'New Lead':'#3b82f6','Appointment Set':'#8b5cf6','In Progress':'#f59e0b','Landed':'#10b981','Lost':'#ef4444','Complete':'#6b7280'};
         window.currentJobFilter = 'All';
 
         // Toggle See All
@@ -3813,9 +3814,14 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
         function mapToLeadStatus(status) {
             const map = {
-                'New Lead': 'New Lead', 'Appointment Set': 'In Progress', 'Current Estimate': 'In Progress',
-                'Landed Job': 'Landed', 'Scheduled': 'Landed', 'In Progress': 'In Progress',
-                'Complete': 'Complete', 'Dead': 'Lost'
+                'New Lead': 'New Lead',
+                'Appointment Set': 'Appointment Set',
+                'Current Estimate': 'Appointment Set',
+                'Landed Job': 'Landed',
+                'Scheduled': 'In Progress',
+                'In Progress': 'In Progress',
+                'Complete': 'Complete',
+                'Dead': 'Lost'
             };
             return map[status] || 'New Lead';
         }
