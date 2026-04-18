@@ -3637,10 +3637,10 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             // Set status for each customer
             Object.values(customerMap).forEach(c => { c.status = getCustomerLeadStatus(c.id); });
 
-            // Filter by status
+            // Filter by status (map expanded project statuses to lead statuses for comparison)
             let filtered = Object.values(customerMap);
             if (window.currentJobFilter && window.currentJobFilter !== 'All') {
-                filtered = filtered.filter(c => c.status === window.currentJobFilter);
+                filtered = filtered.filter(c => mapToLeadStatus(c.status) === window.currentJobFilter);
             }
 
             if (filtered.length === 0) {
