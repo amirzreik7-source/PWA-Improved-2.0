@@ -2480,6 +2480,58 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             }
             html += '</div>';
 
+            // Job Log section (for active jobs)
+            if (['Landed Job','Scheduled','In Progress'].includes(project.status)) {
+                const jobLog = project.jobLog || [];
+                html += `<div class="room-card" style="border-left:4px solid #f97316;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                        <h3>Job Log (${jobLog.length})</h3>
+                    </div>
+                    <div style="margin-bottom:10px;">
+                        <textarea id="jobLogInput_${projectId}" rows="2" placeholder="What happened today? e.g., 2 guys on site, bought 3 gal paint $55 each from Sherwin..." style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-size:14px;"></textarea>
+                        <button class="btn btn-success btn-small" onclick="addJobLogEntry('${projectId}')" style="width:100%;margin-top:6px;">+ Add Entry</button>
+                    </div>`;
+
+                if (jobLog.length > 0) {
+                    // Running totals from AI-extracted data
+                    let totalMaterials = 0;
+                    let totalCrewDays = 0;
+                    jobLog.forEach(e => {
+                        totalMaterials += e.materialSpend || 0;
+                        totalCrewDays += e.crewCount || 0;
+                    });
+
+                    if (totalMaterials > 0 || totalCrewDays > 0) {
+                        html += `<div style="background:#fff7ed;padding:8px;border-radius:6px;margin-bottom:8px;font-size:12px;">
+                            <strong>Running totals:</strong>
+                            ${totalMaterials > 0 ? ' Materials: $' + totalMaterials.toFixed(2) : ''}
+                            ${totalCrewDays > 0 ? ' • ' + totalCrewDays + ' man-days' : ''}
+                        </div>`;
+                    }
+
+                    // Show entries newest first
+                    html += jobLog.slice().reverse().map((entry, i) => {
+                        const idx = jobLog.length - 1 - i;
+                        const d = new Date(entry.date);
+                        const dateLabel = d.toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'});
+                        return `<div style="padding:10px;background:#f8f9fa;border-radius:8px;margin-bottom:6px;position:relative;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <strong style="font-size:12px;color:#f97316;">${dateLabel}</strong>
+                                <button onclick="deleteJobLogEntry('${projectId}',${idx})" style="background:none;border:none;color:#999;font-size:16px;cursor:pointer;">×</button>
+                            </div>
+                            <p style="font-size:13px;margin:4px 0;color:#333;">${entry.text}</p>
+                            ${entry.aiSummary ? '<p style="font-size:11px;color:#667eea;margin:4px 0;">AI: ' + entry.aiSummary + '</p>' : ''}
+                            ${entry.materialSpend ? '<span style="background:#fef3c7;padding:2px 6px;border-radius:4px;font-size:11px;">$' + entry.materialSpend.toFixed(2) + ' materials</span> ' : ''}
+                            ${entry.crewCount ? '<span style="background:#dbeafe;padding:2px 6px;border-radius:4px;font-size:11px;">' + entry.crewCount + ' crew</span>' : ''}
+                        </div>`;
+                    }).join('');
+                }
+
+                html += `<div style="margin-top:10px;">
+                    <button class="btn btn-warning btn-small" onclick="aiCloseoutJob('${projectId}')" style="width:100%;">🤖 AI Close-out (generate actuals from log)</button>
+                </div></div>`;
+            }
+
             // Job Completion / Actuals section
             if (['Landed Job','Scheduled','In Progress','Complete'].includes(project.status)) {
                 if (project.actuals) {
@@ -2930,6 +2982,199 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
         };
 
         // ═══════════════════════════════════════
+        // ═══════════════════════════════════════
+        // JOB LOG + AI CLOSE-OUT
+        // ═══════════════════════════════════════
+        window.addJobLogEntry = async function(projectId) {
+            const input = document.getElementById('jobLogInput_' + projectId);
+            const text = input?.value?.trim();
+            if (!text) { alert('Write something about today first'); return; }
+
+            const project = projects.find(p => p.id === projectId);
+            const jobLog = [...(project?.jobLog || [])];
+
+            // Show processing
+            input.disabled = true;
+            input.value = 'Processing with AI...';
+
+            try {
+                // Send to AI to extract structured data
+                const aiResponse = await fetch('https://damp-moon-203c.amirzreik7.workers.dev', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: 'claude-sonnet-4-20250514',
+                        max_tokens: 300,
+                        messages: [{ role: 'user', content: `Extract structured data from this painting job log entry. Return JSON only, no other text.
+
+Entry: "${text}"
+
+Return:
+{
+  "crewCount": number or null (how many crew members mentioned working today),
+  "materialSpend": number or null (total dollar amount spent on materials/supplies),
+  "crewPayout": number or null (if a crew payout amount is mentioned),
+  "aiSummary": "clean, brief 1-line summary of what happened",
+  "scopeChange": true/false (was extra work added or removed),
+  "issues": "any problems mentioned, or null"
+}` }]
+                    })
+                });
+
+                let extracted = { aiSummary: '', crewCount: null, materialSpend: null };
+                if (aiResponse.ok) {
+                    const data = await aiResponse.json();
+                    const aiText = data.content[0].text;
+                    try {
+                        extracted = JSON.parse(aiText.replace(/```json?\n?/g, '').replace(/```/g, '').trim());
+                    } catch(e) { /* AI didn't return valid JSON, that's OK */ }
+                }
+
+                const entry = {
+                    date: new Date().toISOString(),
+                    text: text,
+                    aiSummary: extracted.aiSummary || '',
+                    crewCount: extracted.crewCount || null,
+                    materialSpend: extracted.materialSpend || null,
+                    crewPayout: extracted.crewPayout || null,
+                    scopeChange: extracted.scopeChange || false,
+                    issues: extracted.issues || null
+                };
+
+                jobLog.push(entry);
+                await updateDoc(doc(db, 'projects', projectId), { jobLog });
+                if (project) project.jobLog = jobLog;
+                viewProjectDetail(projectId);
+            } catch(e) {
+                // If AI fails, still save the raw entry
+                const entry = { date: new Date().toISOString(), text: text };
+                jobLog.push(entry);
+                try {
+                    await updateDoc(doc(db, 'projects', projectId), { jobLog });
+                    if (project) project.jobLog = jobLog;
+                } catch(e2) {}
+                viewProjectDetail(projectId);
+            }
+        };
+
+        window.deleteJobLogEntry = async function(projectId, idx) {
+            if (!confirm('Delete this log entry?')) return;
+            try {
+                const project = projects.find(p => p.id === projectId);
+                const jobLog = [...(project?.jobLog || [])];
+                jobLog.splice(idx, 1);
+                await updateDoc(doc(db, 'projects', projectId), { jobLog });
+                if (project) project.jobLog = jobLog;
+                viewProjectDetail(projectId);
+            } catch(e) { alert('Error: ' + e.message); }
+        };
+
+        // AI Close-out: reads all job log entries + estimate data, generates actuals
+        window.aiCloseoutJob = async function(projectId) {
+            const project = projects.find(p => p.id === projectId);
+            if (!project) return;
+            const jobLog = project.jobLog || [];
+            if (jobLog.length === 0) { alert('Add some job log entries first, then AI can generate the close-out.'); return; }
+
+            // Gather estimate data
+            const linkedIds = project.linkedProjects || [];
+            const allProjectIds = [projectId, ...linkedIds];
+            let totalRevenue = 0;
+            let totalEstLabor = 0;
+            let totalEstMaterial = 0;
+            const projectNames = [];
+
+            allProjectIds.forEach(pid => {
+                const p = projects.find(pr => pr.id === pid);
+                if (!p) return;
+                projectNames.push(p.projectName);
+                const prop = p.landedProposalId ? jobs.find(j => j.id === p.landedProposalId) : jobs.find(j => j.projectId === pid && !j.deleted);
+                if (prop) {
+                    totalRevenue += prop.grandTotal || prop.basePrice || 0;
+                    totalEstLabor += prop.totalLabor || 0;
+                    totalEstMaterial += prop.totalMaterials || 0;
+                }
+            });
+
+            // Build the journal text
+            const journalText = jobLog.map(e => {
+                const d = new Date(e.date).toLocaleDateString();
+                return d + ': ' + e.text;
+            }).join('\n');
+
+            const prompt = `You are a painting business assistant. Analyze this job journal and generate a structured close-out report.
+
+PROJECT: ${projectNames.join(' + ')}
+CUSTOMER REVENUE: $${totalRevenue.toFixed(2)}
+ESTIMATED LABOR COST: $${totalEstLabor.toFixed(2)}
+ESTIMATED MATERIAL COST: $${totalEstMaterial.toFixed(2)}
+
+JOB JOURNAL:
+${journalText}
+
+Based on the journal entries, calculate and return this JSON (no other text):
+{
+  "crewLeader": "name of crew leader if mentioned",
+  "crewSize": average number of crew members across all days,
+  "totalDays": number of work days,
+  "crewPayout": total crew payout if mentioned (or null if not mentioned),
+  "materialCost": total material/supply spend extracted from entries,
+  "gallonsUsed": estimated gallons of paint if mentioned,
+  "startDate": "YYYY-MM-DD" first day mentioned,
+  "endDate": "YYYY-MM-DD" last day mentioned,
+  "difficulty": 1-10 rating based on issues described,
+  "notesGood": "what went well, from the journal",
+  "notesBad": "issues, delays, problems from the journal",
+  "notesLearning": "lessons for future jobs like this",
+  "crewNegotiation": "any crew pricing negotiation mentioned, or null",
+  "scopeChanges": "any scope changes mentioned, or null"
+}`;
+
+            try {
+                const btn = document.querySelector('[onclick*="aiCloseoutJob"]');
+                if (btn) { btn.textContent = 'AI analyzing...'; btn.disabled = true; }
+
+                const response = await fetch('https://damp-moon-203c.amirzreik7.workers.dev', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: 'claude-sonnet-4-20250514',
+                        max_tokens: 800,
+                        messages: [{ role: 'user', content: prompt }]
+                    })
+                });
+
+                if (!response.ok) throw new Error('API error');
+                const data = await response.json();
+                const aiText = data.content[0].text;
+                const result = JSON.parse(aiText.replace(/```json?\n?/g, '').replace(/```/g, '').trim());
+
+                // Open the actuals screen pre-filled with AI data
+                openProjectActuals(projectId);
+
+                // Pre-fill with AI results after screen renders
+                setTimeout(() => {
+                    if (result.crewLeader) document.getElementById('actualCrewLeader').value = result.crewLeader;
+                    if (result.crewSize) document.getElementById('actualCrewCount').value = Math.round(result.crewSize);
+                    if (result.totalDays) document.getElementById('actualDays').value = result.totalDays;
+                    if (result.crewPayout) document.getElementById('actualCrewPayout').value = result.crewPayout;
+                    if (result.materialCost) document.getElementById('actualMaterialCost').value = result.materialCost;
+                    if (result.gallonsUsed) document.getElementById('actualGallons').value = result.gallonsUsed;
+                    if (result.startDate) document.getElementById('actualStartDate').value = result.startDate;
+                    if (result.endDate) document.getElementById('actualEndDate').value = result.endDate;
+                    if (result.difficulty) { document.getElementById('actualDifficulty').value = result.difficulty; document.getElementById('diffLabel').textContent = result.difficulty; }
+                    if (result.notesGood) document.getElementById('actualNotesGood').value = result.notesGood;
+                    if (result.notesBad) document.getElementById('actualNotesBad').value = result.notesBad;
+                    if (result.notesLearning) document.getElementById('actualNotesLearning').value = result.notesLearning;
+                    calculateProfit();
+                }, 200);
+
+            } catch(e) {
+                alert('AI close-out failed: ' + e.message + '. You can still fill in actuals manually.');
+                openProjectActuals(projectId);
+            }
+        };
+
         // LINKED PROJECTS
         window.linkProject = async function(projectId) {
             const selectEl = document.getElementById('linkProjectSelect_' + projectId);
