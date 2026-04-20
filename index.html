@@ -6941,6 +6941,49 @@ Only return JSON, no other text.`;
                 </div>` : ''}
             `;
 
+            // Pricing Health section
+            const completedWithActuals = completed.filter(j => j.actuals?.estLabor > 0);
+            if (completedWithActuals.length >= 3) {
+                const byType = {};
+                completedWithActuals.forEach(j => {
+                    const t = j.jobType || 'Other';
+                    if (!byType[t]) byType[t] = { labor: [], material: [], margins: [], count: 0 };
+                    byType[t].count++;
+                    byType[t].labor.push(((j.actuals.crewPayout - j.actuals.estLabor) / j.actuals.estLabor * 100));
+                    if (j.actuals.estMaterial > 0) byType[t].material.push(((j.actuals.materialCost - j.actuals.estMaterial) / j.actuals.estMaterial * 100));
+                    byType[t].margins.push(j.actuals.profitMargin || 0);
+                });
+
+                const avg = arr => arr.length > 0 ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
+                const pColor = v => v >= 40 ? '#10b981' : v >= 25 ? '#f59e0b' : '#ef4444';
+                const aColor = v => v >= 90 ? '#10b981' : v >= 80 ? '#f59e0b' : '#ef4444';
+
+                let healthHTML = '<div class="room-card"><h3>Pricing Health</h3>';
+                Object.entries(byType).forEach(([type, data]) => {
+                    if (data.count < 2) return;
+                    const laborAcc = 100 - Math.abs(avg(data.labor));
+                    const matAcc = data.material.length > 0 ? 100 - Math.abs(avg(data.material)) : 100;
+                    const margin = avg(data.margins);
+                    const laborVar = avg(data.labor);
+                    const needsAction = margin < 40 || laborAcc < 80;
+
+                    healthHTML += `<div style="padding:12px;background:#f8f9fa;border-radius:8px;margin-bottom:8px;">
+                        <strong>${type}</strong> (${data.count} jobs)
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;font-size:13px;">
+                            <div>Labor accuracy: <strong style="color:${aColor(laborAcc)}">${laborAcc.toFixed(0)}%</strong> ${laborVar > 0 ? '⬆' : '⬇'}</div>
+                            <div>Material accuracy: <strong style="color:${aColor(matAcc)}">${matAcc.toFixed(0)}%</strong></div>
+                            <div>Avg margin: <strong style="color:${pColor(margin)}">${margin.toFixed(0)}%</strong> <span style="color:#999;">target: 40%</span></div>
+                        </div>
+                        ${needsAction
+                            ? `<div style="background:#fef3c7;padding:6px;border-radius:4px;margin-top:6px;font-size:12px;color:#92400e;">${margin < 40 ? 'Consider increasing labor rates' : 'Review estimation accuracy'}</div>`
+                            : `<div style="background:#f0fdf4;padding:6px;border-radius:4px;margin-top:6px;font-size:12px;color:#166534;">On track</div>`
+                        }
+                    </div>`;
+                });
+                healthHTML += '</div>';
+                content.innerHTML += healthHTML;
+            }
+
             showScreen('dashboardScreen');
         };
 
