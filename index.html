@@ -709,8 +709,8 @@
             </div>
 
             <div class="room-card">
-                <h3 style="margin-top:0;">Smart Insights</h3>
-                <div id="smartInsightsContent" style="font-size:13px;"></div>
+                <h3 style="margin-top:0;">Pricing Advisor</h3>
+                <div id="pricingAdvisorContent" style="font-size:13px;"></div>
             </div>
 
             <div class="room-card">
@@ -6026,28 +6026,68 @@ Only return JSON, no other text.`;
 
             updateDiscountPreview();
 
-            // Smart insights from completed jobs
-            const insightsEl = document.getElementById('smartInsightsContent');
-            if (insightsEl) {
+            // Pricing Advisor — contextual suggestions from completed jobs
+            const advisorEl = document.getElementById('pricingAdvisorContent');
+            if (advisorEl) {
                 const completed = jobs.filter(j => j.actuals && j.actuals.completedAt && j.jobType === currentEstimate.jobType);
-                if (completed.length >= 3) {
-                    const insights = [];
-                    // Labor accuracy
-                    const withLabor = completed.filter(j => j.actuals.estLabor > 0);
-                    if (withLabor.length >= 3) {
-                        const avgLaborVar = withLabor.reduce((s, j) => s + ((j.actuals.crewPayout - j.actuals.estLabor) / j.actuals.estLabor * 100), 0) / withLabor.length;
-                        if (avgLaborVar > 15) insights.push(`<div style="background:#fef3c7;padding:8px;border-radius:6px;margin:4px 0;">Your ${currentEstimate.jobType.toLowerCase()} labor estimates are <strong>${avgLaborVar.toFixed(0)}% low</strong> on average. This job's labor ($${totalLabor.toFixed(0)}) may actually cost ~$${(totalLabor * (1 + avgLaborVar/100)).toFixed(0)}.</div>`);
-                        else if (avgLaborVar < -15) insights.push(`<div style="background:#d1fae5;padding:8px;border-radius:6px;margin:4px 0;">Your labor estimates are ${Math.abs(avgLaborVar).toFixed(0)}% high — room to be more competitive on pricing.</div>`);
-                    }
-                    // Avg margin
-                    const avgMargin = completed.reduce((s, j) => s + (j.actuals.profitMargin || 0), 0) / completed.length;
-                    insights.push(`<div style="background:#eff6ff;padding:8px;border-radius:6px;margin:4px 0;">Your avg ${currentEstimate.jobType.toLowerCase()} profit margin is <strong>${avgMargin.toFixed(1)}%</strong> across ${completed.length} jobs.</div>`);
-                    // Confidence
-                    const confidence = Math.min(100, 50 + completed.length * 5);
-                    insights.push(`<div style="background:#f8f9fa;padding:8px;border-radius:6px;margin:4px 0;">Quote confidence: <strong>${confidence}%</strong> (based on ${completed.length} similar completed jobs)</div>`);
-                    insightsEl.innerHTML = insights.join('');
+                const basePrice = currentEstimate.basePrice || (totalLabor + totalMaterials);
+
+                if (completed.length < 3) {
+                    advisorEl.innerHTML = `<p style="color:#999;">Complete ${3 - completed.length} more ${currentEstimate.jobType?.toLowerCase() || ''} job(s) to unlock pricing insights.</p>`;
                 } else {
-                    insightsEl.innerHTML = '<p style="color:#999;">Complete 3+ ${currentEstimate.jobType?.toLowerCase() || ""} jobs to see smart insights here.</p>';
+                    // Calculate variances
+                    const withLabor = completed.filter(j => j.actuals.estLabor > 0);
+                    const avgLaborVar = withLabor.length >= 3 ? withLabor.reduce((s, j) => s + ((j.actuals.crewPayout - j.actuals.estLabor) / j.actuals.estLabor * 100), 0) / withLabor.length : 0;
+                    const withMat = completed.filter(j => j.actuals.estMaterial > 0);
+                    const avgMatVar = withMat.length >= 3 ? withMat.reduce((s, j) => s + ((j.actuals.materialCost - j.actuals.estMaterial) / j.actuals.estMaterial * 100), 0) / withMat.length : 0;
+                    const avgMargin = completed.reduce((s, j) => s + (j.actuals.profitMargin || 0), 0) / completed.length;
+                    const avgTotal = completed.reduce((s, j) => s + (j.grandTotal || 0), 0) / completed.length;
+                    const confidence = Math.min(95, 30 + completed.length * 8);
+
+                    // Calculate suggested adjustment
+                    const laborAdjust = avgLaborVar > 10 ? totalLabor * (avgLaborVar / 100) * 0.7 : 0;
+                    const suggestedPrice = Math.round(basePrice + laborAdjust);
+                    const suggestedAdjust = suggestedPrice - Math.round(basePrice);
+                    const isUnder = suggestedAdjust > 50; // Only show if meaningful (>$50)
+
+                    let html = `<div style="background:${isUnder ? '#fef3c7' : '#f0fdf4'};padding:14px;border-radius:10px;border:1px solid ${isUnder ? '#fcd34d' : '#86efac'};">
+                        <div style="font-size:15px;font-weight:600;margin-bottom:8px;">This ${currentEstimate.jobType.toLowerCase()} estimate: $${Math.round(basePrice).toLocaleString()}</div>`;
+
+                    if (isUnder) {
+                        html += `<div style="background:#fff;padding:10px;border-radius:8px;margin-bottom:8px;">
+                            <div style="color:#dc2626;font-weight:600;">Your ${currentEstimate.jobType.toLowerCase()} labor has been ${Math.abs(avgLaborVar).toFixed(0)}% ${avgLaborVar > 0 ? 'over' : 'under'} on average</div>
+                            <div style="margin-top:4px;">Suggested: <strong style="color:#059669;">+$${suggestedAdjust.toLocaleString()} → $${suggestedPrice.toLocaleString()}</strong></div>
+                        </div>`;
+                    }
+
+                    // Material accuracy
+                    html += `<div style="margin-bottom:6px;">${Math.abs(avgMatVar) < 10
+                        ? '<span style="color:#059669;">✓</span> Material estimates accurate'
+                        : '<span style="color:#d97706;">⚠</span> Materials vary by ' + Math.abs(avgMatVar).toFixed(0) + '% on avg'}</div>`;
+
+                    // Similar jobs average
+                    const diffPct = Math.round(((basePrice - avgTotal) / avgTotal) * 100);
+                    html += `<div style="margin-bottom:6px;">Similar jobs averaged <strong>$${Math.round(avgTotal).toLocaleString()}</strong>. `;
+                    if (Math.abs(diffPct) > 5) {
+                        html += `This is ${Math.abs(diffPct)}% ${diffPct < 0 ? 'below' : 'above'} average.`;
+                    } else { html += 'On target.'; }
+                    html += '</div>';
+
+                    // Avg margin + confidence
+                    const marginColor = avgMargin >= 40 ? '#059669' : avgMargin >= 25 ? '#d97706' : '#dc2626';
+                    html += `<div style="margin-bottom:6px;">Avg margin: <strong style="color:${marginColor};">${avgMargin.toFixed(1)}%</strong> across ${completed.length} jobs</div>`;
+                    html += `<div style="color:#666;font-size:12px;margin-bottom:10px;">Confidence: ${confidence}% (${completed.length} similar completed jobs)</div>`;
+
+                    // Action buttons
+                    if (isUnder) {
+                        html += `<div style="display:flex;gap:8px;">
+                            <button class="btn btn-success btn-small" onclick="currentEstimate.basePrice=${suggestedPrice};currentEstimate.priceOverride=true;updateDiscountPreview();document.getElementById('pricingAdvisorContent').querySelector('.advisor-actions')?.remove();alert('Price adjusted to $${suggestedPrice.toLocaleString()}')" style="flex:1;">Adjust to $${suggestedPrice.toLocaleString()}</button>
+                            <button class="btn btn-secondary btn-small" onclick="this.parentElement.remove()" style="flex:1;">Keep $${Math.round(basePrice).toLocaleString()}</button>
+                        </div>`;
+                    }
+
+                    html += '</div>';
+                    advisorEl.innerHTML = html;
                 }
             }
         }
