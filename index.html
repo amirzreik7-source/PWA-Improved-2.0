@@ -6084,20 +6084,82 @@ Only return JSON, no other text.`;
             // Cost breakdown (internal — not shown to customer)
             const cbEl = document.getElementById('costBreakdownContent');
             if (cbEl) {
-                const totalGallons = currentEstimate.rooms.reduce((sum, r) => {
-                    return sum + r.surfaces.reduce((s2, surf) => {
-                        const coverage = 350; // avg sqft/gallon
-                        return s2 + ((surf.quantity || 0) * (surf.coats || 1) / coverage);
-                    }, 0);
-                }, 0);
+                const isExt = currentEstimate.jobType === 'Exterior';
+                const ppg = isExt ? (PRICING.PaintPricePerGallon || 55) : (PRICING.InteriorPaintPricePerGallon || 45);
+                let totalGallons = 0;
+                const surfaceDetails = [];
+
+                currentEstimate.rooms.forEach(r => {
+                    r.surfaces.forEach(surf => {
+                        const qty = surf.quantity || 0;
+                        const coats = surf.coats || 1;
+                        // Get actual coverage rate for this surface type
+                        let coverage = isExt ? 350 : 350;
+                        const st = surf.surfaceType;
+                        if (st === 'Siding') coverage = PRICING.SidingPaintCoverage || 350;
+                        else if (st === 'Soffit') coverage = PRICING.SoffitPaintCoverage || 200;
+                        else if (st === 'Fascia') coverage = PRICING.FasciaPaintCoverage || 200;
+                        else if (st === 'Windows' && isExt) coverage = PRICING.WindowPaintCoverage || 50;
+                        else if (st === 'Front Door' || st === 'Doors' || st === 'Shutters' || st === 'Garage Door') coverage = PRICING.DoorPaintCoverage || 100;
+                        else if (st === 'Walls' || st === 'Ceiling') coverage = PRICING.WallCeilingPaintCoverage || 350;
+                        else if (st === 'Baseboards') coverage = PRICING.BaseboardPaintCoverage || 200;
+                        else if (st === 'Windows' && !isExt) coverage = PRICING.InteriorWindowPaintCoverage || 50;
+                        else if (st === 'Doors' && !isExt) coverage = PRICING.InteriorDoorPaintCoverage || 100;
+                        else {
+                            // Custom surface — check coverage
+                            const cs = (isExt ? customExteriorSurfaces : customInteriorSurfaces).find(s => s.name.toLowerCase() === (st||'').toLowerCase());
+                            if (cs && cs.coverage) coverage = cs.coverage;
+                        }
+
+                        const gallons = coverage > 0 ? (qty * coats / coverage) : 0;
+                        const matCost = gallons * ppg;
+                        totalGallons += gallons;
+
+                        // Add primer gallons if applicable
+                        let primerGallons = 0;
+                        if (surf.usePrimer && surf.primerCoats > 0) {
+                            primerGallons = coverage > 0 ? (qty * surf.primerCoats / coverage) : 0;
+                            totalGallons += primerGallons;
+                        }
+
+                        if (qty > 0) {
+                            surfaceDetails.push({
+                                room: r.name, surface: st, qty, coats, coverage, gallons,
+                                primerGallons, matCost: surf.materialCost || matCost
+                            });
+                        }
+                    });
+                });
+
                 const estManHours = totalLabor / (PRICING.LaborRate || 60);
+
+                let detailRows = surfaceDetails.map(d =>
+                    `<div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:4px;padding:3px 0;border-bottom:1px solid #f3f4f6;font-size:12px;">
+                        <div>${d.room} — ${d.surface}</div>
+                        <div style="text-align:right;">${d.gallons.toFixed(1)} gal</div>
+                        <div style="text-align:right;">$${d.matCost.toFixed(2)}</div>
+                    </div>`
+                ).join('');
+
                 cbEl.innerHTML = `
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
                         <div><strong>Labor:</strong> $${totalLabor.toFixed(2)}</div>
                         <div><strong>Materials:</strong> $${totalMaterials.toFixed(2)}</div>
                         <div><strong>Est. Man-Hours:</strong> ${estManHours.toFixed(1)} hrs</div>
                         <div><strong>Est. Gallons:</strong> ${totalGallons.toFixed(1)} gal</div>
                     </div>
+                    <div style="margin-top:6px;">
+                        <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:4px;padding:3px 0;font-size:11px;font-weight:600;color:#999;border-bottom:2px solid #e5e7eb;">
+                            <div>Surface</div><div style="text-align:right;">Gallons</div><div style="text-align:right;">Cost</div>
+                        </div>
+                        ${detailRows}
+                        <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:4px;padding:4px 0;font-size:12px;font-weight:700;border-top:2px solid #333;">
+                            <div>Total</div>
+                            <div style="text-align:right;">${totalGallons.toFixed(1)} gal</div>
+                            <div style="text-align:right;">$${totalMaterials.toFixed(2)}</div>
+                        </div>
+                    </div>
+                    <p style="font-size:10px;color:#999;margin-top:4px;">Paint: $${ppg.toFixed(2)}/gal</p>
                 `;
             }
 
