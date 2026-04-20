@@ -486,6 +486,22 @@
             </div>
 
             <div class="room-card">
+                <h3>Completion Photos</h3>
+                <p style="color:#666;font-size:12px;margin-bottom:8px;">Before & after photos (up to 3 pairs)</p>
+                <div id="completionPhotosGrid" style="margin-bottom:10px;"></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                    <div>
+                        <input type="file" id="beforePhotoInput" accept="image/*" onchange="uploadCompletionPhoto('before', event)" style="display:none;">
+                        <button class="btn btn-info btn-small" onclick="document.getElementById('beforePhotoInput').click()" style="width:100%;">+ Before Photo</button>
+                    </div>
+                    <div>
+                        <input type="file" id="afterPhotoInput" accept="image/*" onchange="uploadCompletionPhoto('after', event)" style="display:none;">
+                        <button class="btn btn-success btn-small" onclick="document.getElementById('afterPhotoInput').click()" style="width:100%;">+ After Photo</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="room-card">
                 <h3>Job Rating & Notes</h3>
                 <div class="form-group">
                     <label>Difficulty (1-10)</label>
@@ -2555,6 +2571,19 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                             <div style="display:flex;justify-content:space-between;padding:3px 0;"><span>$/hr per person:</span><span>$${(a.hourlyRate || 0).toFixed(2)}</span></div>
                             <div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Profit/day:</span><span>$${(a.profitPerDay || 0).toFixed(2)}</span></div>
                             ${a.combined ? '<p style="color:#667eea;font-size:12px;margin-top:6px;">Combined actuals across linked projects</p>' : ''}
+                            ${a.completionPhotos && (a.completionPhotos.before?.length > 0 || a.completionPhotos.after?.length > 0) ? (() => {
+                                const bp = a.completionPhotos.before || [];
+                                const ap = a.completionPhotos.after || [];
+                                const max = Math.max(bp.length, ap.length);
+                                let ph = '<div style="margin-top:10px;border-top:1px solid #e5e7eb;padding-top:8px;"><strong style="font-size:12px;">Before / After</strong>';
+                                for (let i = 0; i < max; i++) {
+                                    ph += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:6px;">';
+                                    ph += bp[i] ? '<img src="'+bp[i].url+'" style="width:100%;height:70px;object-fit:cover;border-radius:4px;border:2px solid #ef4444;">' : '<div></div>';
+                                    ph += ap[i] ? '<img src="'+ap[i].url+'" style="width:100%;height:70px;object-fit:cover;border-radius:4px;border:2px solid #10b981;">' : '<div></div>';
+                                    ph += '</div>';
+                                }
+                                return ph + '</div>';
+                            })() : ''}
                         </div>
                         <button class="btn btn-info btn-small" onclick="openProjectActuals('${projectId}')" style="width:100%;margin-top:10px;">Edit Actuals</button>
                     </div>`;
@@ -6396,7 +6425,11 @@ Only return JSON, no other text.`;
                 document.getElementById('actualNotesGood').value = existingActuals.notesGood || '';
                 document.getElementById('actualNotesBad').value = existingActuals.notesBad || '';
                 document.getElementById('actualNotesLearning').value = existingActuals.notesLearning || '';
+                // Load completion photos
+                window._completionPhotos = existingActuals.completionPhotos || { before: [], after: [] };
+                displayCompletionPhotos();
             } else {
+                window._completionPhotos = { before: [], after: [] };
                 ['actualCrewPayout','actualMaterialCost','actualDays','actualGallons','actualStartDate','actualEndDate','actualNotesGood','actualNotesBad','actualNotesLearning'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
                 document.getElementById('actualDifficulty').value = 5;
                 document.getElementById('diffLabel').textContent = '5';
@@ -6509,6 +6542,7 @@ Only return JSON, no other text.`;
                 notesGood: document.getElementById('actualNotesGood')?.value?.trim() || '',
                 notesBad: document.getElementById('actualNotesBad')?.value?.trim() || '',
                 notesLearning: document.getElementById('actualNotesLearning')?.value?.trim() || '',
+                completionPhotos: window._completionPhotos || { before: [], after: [] },
                 totalCosts: crewPayout + materialCost,
                 revenue: revenue,
                 netProfit: revenue - (crewPayout + materialCost),
@@ -6562,6 +6596,58 @@ Only return JSON, no other text.`;
                 }
             } catch (error) { alert('Error saving actuals: ' + error.message); }
         };
+
+        // Completion photos (before/after)
+        window._completionPhotos = { before: [], after: [] };
+
+        window.uploadCompletionPhoto = async function(type, event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            if (window._completionPhotos[type].length >= 3) { alert('Maximum 3 ' + type + ' photos'); return; }
+            try {
+                const compressed = await compressImage(file, 800, 0.8);
+                const path = `users/${currentUser.uid}/completion/${Date.now()}_${type}.jpg`;
+                const sRef = ref(storage, path);
+                await uploadBytes(sRef, compressed);
+                const url = await getDownloadURL(sRef);
+                window._completionPhotos[type].push({ url, path });
+                displayCompletionPhotos();
+            } catch(e) {
+                alert('Upload failed: ' + e.message);
+            }
+            event.target.value = '';
+        };
+
+        window.deleteCompletionPhoto = function(type, idx) {
+            const photo = window._completionPhotos[type][idx];
+            if (photo?.path) { try { deleteObject(ref(storage, photo.path)); } catch(e) {} }
+            window._completionPhotos[type].splice(idx, 1);
+            displayCompletionPhotos();
+        };
+
+        function displayCompletionPhotos() {
+            const grid = document.getElementById('completionPhotosGrid');
+            if (!grid) return;
+            const before = window._completionPhotos.before;
+            const after = window._completionPhotos.after;
+            if (before.length === 0 && after.length === 0) { grid.innerHTML = ''; return; }
+
+            let html = '';
+            const maxPairs = Math.max(before.length, after.length);
+            for (let i = 0; i < maxPairs; i++) {
+                html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">';
+                if (before[i]) {
+                    html += `<div style="position:relative;"><p style="font-size:10px;color:#666;margin:0 0 2px;">BEFORE</p><img src="${before[i].url}" style="width:100%;height:80px;object-fit:cover;border-radius:6px;border:2px solid #ef4444;">
+                        <button onclick="deleteCompletionPhoto('before',${i})" style="position:absolute;top:14px;right:2px;background:#dc3545;color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:12px;cursor:pointer;line-height:18px;">×</button></div>`;
+                } else { html += '<div></div>'; }
+                if (after[i]) {
+                    html += `<div style="position:relative;"><p style="font-size:10px;color:#666;margin:0 0 2px;">AFTER</p><img src="${after[i].url}" style="width:100%;height:80px;object-fit:cover;border-radius:6px;border:2px solid #10b981;">
+                        <button onclick="deleteCompletionPhoto('after',${i})" style="position:absolute;top:14px;right:2px;background:#dc3545;color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:12px;cursor:pointer;line-height:18px;">×</button></div>`;
+                } else { html += '<div></div>'; }
+                html += '</div>';
+            }
+            grid.innerHTML = html;
+        }
 
         window.closeProfitTracking = function() {
             if (window._actualsProjectId) {
