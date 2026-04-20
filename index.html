@@ -2558,6 +2558,46 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                         </div>
                         <button class="btn btn-info btn-small" onclick="openProjectActuals('${projectId}')" style="width:100%;margin-top:10px;">Edit Actuals</button>
                     </div>`;
+
+                    // Post-job analysis — what could have been better
+                    const laborVar = a.estLabor > 0 ? ((a.crewPayout - a.estLabor) / a.estLabor * 100) : 0;
+                    const matVar = a.estMaterial > 0 ? ((a.materialCost - a.estMaterial) / a.estMaterial * 100) : 0;
+                    const targetMargin = 40;
+                    const idealPrice = a.totalCosts > 0 ? Math.round(a.totalCosts / (1 - targetMargin/100)) : 0;
+                    const idealMargin = idealPrice > 0 ? ((idealPrice - a.totalCosts) / idealPrice * 100) : 0;
+
+                    // Count how often this job type goes over on labor
+                    const sameType = jobs.filter(j => j.actuals?.estLabor > 0 && j.jobType === (projectProposals[0]?.jobType || ''));
+                    const overCount = sameType.filter(j => j.actuals.crewPayout > j.actuals.estLabor).length;
+
+                    let analysisHTML = '';
+                    if (Math.abs(laborVar) > 10 || a.profitMargin < targetMargin) {
+                        analysisHTML += `<div class="room-card" style="border-left:4px solid #3b82f6;">
+                            <h3>Job Analysis</h3>`;
+
+                        if (Math.abs(laborVar) > 10) {
+                            analysisHTML += `<div style="background:#fef3c7;padding:10px;border-radius:6px;margin-bottom:8px;font-size:13px;">
+                                <strong>Labor was ${Math.abs(laborVar).toFixed(0)}% ${laborVar > 0 ? 'over' : 'under'} estimate.</strong>
+                                ${sameType.length > 2 ? `<br>You've been over on labor ${overCount} out of ${sameType.length} similar jobs.` : ''}
+                            </div>`;
+                        }
+
+                        if (a.profitMargin < targetMargin && idealPrice > (a.revenue || 0)) {
+                            analysisHTML += `<div style="background:#eff6ff;padding:10px;border-radius:6px;margin-bottom:8px;font-size:13px;">
+                                <strong>If you'd charged $${idealPrice.toLocaleString()}, margin would be ${idealMargin.toFixed(1)}%</strong>
+                                <br>That's +$${(idealPrice - (a.revenue || 0)).toLocaleString()} more than actual revenue.
+                            </div>`;
+                        }
+
+                        if (Math.abs(laborVar) > 15) {
+                            const currentRate = PRICING.LaborRate || 60;
+                            const suggestedRate = Math.round(currentRate / (1 + laborVar/100));
+                            analysisHTML += `<button class="btn btn-secondary btn-small" onclick="if(confirm('Update labor rate from $${currentRate}/hr to $${suggestedRate}/hr?')){document.getElementById('globalLaborRate')&&(document.getElementById('globalLaborRate').value=${suggestedRate});showScreen('priceSettingsScreen');}" style="width:100%;">Suggest: Update labor rate to $${suggestedRate}/hr</button>`;
+                        }
+
+                        analysisHTML += '</div>';
+                        html += analysisHTML;
+                    }
                 } else {
                     html += `<div class="room-card" style="border-left:4px solid #f59e0b;">
                         <button class="btn btn-success btn-large" onclick="openProjectActuals('${projectId}')" style="width:100%;">Log Actuals & Complete Job</button>
