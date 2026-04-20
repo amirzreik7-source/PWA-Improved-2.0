@@ -977,6 +977,13 @@
                 <button class="btn btn-danger" onclick="undoMigration()" style="width:100%;">↩️ Undo Migration (revert to standalone)</button>
             </div>
             
+            <!-- PHOTO MIGRATION -->
+            <div class="room-card" style="margin-bottom:20px;border:2px solid #06b6d4;">
+                <h3>Migrate Photos to Storage</h3>
+                <p style="color:#666;font-size:13px;margin-bottom:10px;">Move photos from Firestore (base64) to Firebase Storage. Reduces document size and prevents 1MB limit issues. Safe to run multiple times.</p>
+                <button class="btn btn-info" onclick="migratePhotosToStorage()" style="width:100%;">📸 Migrate Photos</button>
+            </div>
+
             <div class="room-card">
                 <h3>Company Information</h3>
                 <div class="form-group"><label>Company Name</label><input type="text" id="companyName" value="Northern Star Painters"></div>
@@ -1169,7 +1176,7 @@
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
         import { getFirestore, collection, addDoc, getDocs, getDoc, doc, updateDoc, deleteDoc, query, where, orderBy, enableIndexedDbPersistence, serverTimestamp, runTransaction } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
-        import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js';
+        import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js';
 
         // Firebase configuration
         const firebaseConfig = {
@@ -2751,6 +2758,48 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
             await Promise.all([loadJobs(), loadProjects()]);
             alert(`Done! Reverted ${success} estimate(s). Hard-deleted ${projDeleted} project(s).`);
+        };
+
+        window.migratePhotosToStorage = async function() {
+            const jobsToMigrate = jobs.filter(j => {
+                if (!j.rooms) return false;
+                return j.rooms.some(r => (r.photos || []).some(p => typeof p === 'string' && p.startsWith('data:')));
+            });
+            if (jobsToMigrate.length === 0) { alert('No base64 photos to migrate. All done!'); return; }
+            if (!confirm(`Found ${jobsToMigrate.length} job(s) with base64 photos. Migrate to Firebase Storage?`)) return;
+
+            let migrated = 0, errors = 0;
+            for (const job of jobsToMigrate) {
+                let changed = false;
+                for (const room of job.rooms) {
+                    if (!room.photos) continue;
+                    for (let i = 0; i < room.photos.length; i++) {
+                        const photo = room.photos[i];
+                        if (typeof photo === 'string' && photo.startsWith('data:')) {
+                            try {
+                                const roomName = (room.name || 'room').replace(/[^a-zA-Z0-9]/g, '_');
+                                const path = `users/${currentUser.uid}/photos/${roomName}_${Date.now()}_${i}.jpg`;
+                                const blob = await (await fetch(photo)).blob();
+                                const sRef = ref(storage, path);
+                                await uploadBytes(sRef, blob);
+                                const url = await getDownloadURL(sRef);
+                                room.photos[i] = { url, path };
+                                changed = true;
+                                migrated++;
+                            } catch(e) { console.error('Photo migration error:', e); errors++; }
+                        }
+                    }
+                    // Update photoData too
+                    if (room.photos.length > 0) room.photoData = getPhotoSrc(room.photos[0]);
+                }
+                if (changed) {
+                    try {
+                        await updateDoc(doc(db, 'jobs', job.id), { rooms: job.rooms });
+                    } catch(e) { console.error('Job update error:', e); errors++; }
+                }
+            }
+            await loadJobs();
+            alert(`Done! ${migrated} photos migrated, ${errors} errors.`);
         };
 
         window.migrateEstimatesToProjects = async function() {
@@ -4766,40 +4815,79 @@ Based on the journal entries, calculate and return this JSON (no other text):
         window.handleRoomPhotoUpload = async function(event) {
             const file = event.target.files[0];
             if (!file) return;
-            const compressed = await compressImage(file, 600, 0.7);
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                window.currentRoom.photoData = e.target.result;
-            };
-            reader.readAsDataURL(compressed);
+            try {
+                const compressed = await compressImage(file, 600, 0.7);
+                const roomName = (window.currentRoom?.name || 'room').replace(/[^a-zA-Z0-9]/g, '_');
+                const path = `users/${currentUser.uid}/photos/${roomName}_${Date.now()}.jpg`;
+                const sRef = ref(storage, path);
+                await uploadBytes(sRef, compressed);
+                const url = await getDownloadURL(sRef);
+                window.currentRoom.photoData = url;
+            } catch(e) {
+                // Fallback to base64
+                const compressed = await compressImage(file, 600, 0.7);
+                const reader = new FileReader();
+                reader.onload = (ev) => { window.currentRoom.photoData = ev.target.result; };
+                reader.readAsDataURL(compressed);
+            }
         };
 
-        // Multi-photo support
+        // Multi-photo support — uploads to Firebase Storage
         window.handleMultiPhotoUpload = async function(event) {
             const file = event.target.files[0];
             if (!file) return;
             if (!window.currentRoom.photos) window.currentRoom.photos = [];
             if (window.currentRoom.photos.length >= 4) { alert('Maximum 4 photos'); return; }
 
-            const compressed = await compressImage(file, 600, 0.7);
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                window.currentRoom.photos.push(e.target.result);
-                // Also keep photoData as first photo for backward compat
-                if (!window.currentRoom.photoData) window.currentRoom.photoData = e.target.result;
+            try {
+                const compressed = await compressImage(file, 600, 0.7);
+                const roomName = (window.currentRoom.name || 'room').replace(/[^a-zA-Z0-9]/g, '_');
+                const storagePath = `users/${currentUser.uid}/photos/${roomName}_${Date.now()}.jpg`;
+                const storageRef2 = ref(storage, storagePath);
+                await uploadBytes(storageRef2, compressed);
+                const url = await getDownloadURL(storageRef2);
+
+                window.currentRoom.photos.push({ url: url, path: storagePath });
+                if (!window.currentRoom.photoData) window.currentRoom.photoData = url;
+                markUnsaved();
                 displayRoomPhotos();
-            };
-            reader.readAsDataURL(compressed);
-            event.target.value = ''; // Reset so same file can be re-added
+            } catch(e) {
+                // Fallback to base64 if Storage fails
+                const reader = new FileReader();
+                const compressed = await compressImage(file, 600, 0.7);
+                reader.onload = (ev) => {
+                    window.currentRoom.photos.push(ev.target.result);
+                    if (!window.currentRoom.photoData) window.currentRoom.photoData = ev.target.result;
+                    markUnsaved();
+                    displayRoomPhotos();
+                };
+                reader.readAsDataURL(compressed);
+                console.warn('Storage upload failed, using base64 fallback:', e);
+            }
+            event.target.value = '';
         };
 
         window.deleteRoomPhoto = function(index) {
             if (!window.currentRoom.photos) return;
+            const photo = window.currentRoom.photos[index];
+            // Delete from Storage if it's a Storage photo
+            if (photo && photo.path) {
+                try { deleteObject(ref(storage, photo.path)); } catch(e) {}
+            }
             window.currentRoom.photos.splice(index, 1);
             // Update photoData for backward compat
-            window.currentRoom.photoData = window.currentRoom.photos[0] || null;
+            const first = window.currentRoom.photos[0];
+            window.currentRoom.photoData = first ? (first.url || first) : null;
             displayRoomPhotos();
         };
+
+        // Helper: get photo src from either URL object or base64 string
+        function getPhotoSrc(photo) {
+            if (!photo) return '';
+            if (typeof photo === 'string') return photo; // base64
+            if (photo.url) return photo.url; // Storage URL object
+            return '';
+        }
 
         function displayRoomPhotos() {
             const grid = document.getElementById('roomPhotosGrid');
@@ -4812,7 +4900,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
             } else {
                 grid.innerHTML = photos.map((p, i) => `
                     <div style="position:relative;">
-                        <img src="${p}" style="width:100%;height:100px;object-fit:cover;border-radius:8px;">
+                        <img src="${getPhotoSrc(p)}" style="width:100%;height:100px;object-fit:cover;border-radius:8px;">
                         <button onclick="deleteRoomPhoto(${i})" style="position:absolute;top:4px;right:4px;background:#dc3545;color:#fff;border:none;border-radius:50%;width:22px;height:22px;font-size:14px;cursor:pointer;line-height:22px;">×</button>
                     </div>
                 `).join('');
@@ -7060,7 +7148,7 @@ Only return JSON, no other text.`;
                     const rowCount = room.surfaces.length + svcCount + 1;
                     const photos = room.photos || (room.photoData ? [room.photoData] : []);
                     const photoCell = photos.length > 0
-                        ? `<td rowspan="${rowCount+1}" style="padding:4px;vertical-align:top;page-break-inside:avoid;break-inside:avoid"><div style="display:grid;grid-template-columns:${photos.length>1?'1fr 1fr':'1fr'};gap:3px;page-break-inside:avoid;break-inside:avoid">${photos.map(p=>'<img src="'+p+'" style="width:100%;max-height:150px;border-radius:3px;object-fit:cover;page-break-inside:avoid;break-inside:avoid">').join('')}</div></td>`
+                        ? `<td rowspan="${rowCount+1}" style="padding:4px;vertical-align:top;page-break-inside:avoid;break-inside:avoid"><div style="display:grid;grid-template-columns:${photos.length>1?'1fr 1fr':'1fr'};gap:3px;page-break-inside:avoid;break-inside:avoid">${photos.map(p=>'<img src="'+getPhotoSrc(p)+'" style="width:100%;max-height:150px;border-radius:3px;object-fit:cover;page-break-inside:avoid;break-inside:avoid">').join('')}</div></td>`
                         : `<td rowspan="${rowCount+1}"></td>`;
                     rows += `<tr><td colspan="5" style="font-weight:700;font-size:9.5pt;color:#1e3a8a;padding:6px;background-color:#eff6ff;border-left:3px solid #2563eb;${pca}">${room.name.toUpperCase()}</td>${photoCell}</tr>`;
                     room.surfaces.forEach(s => {
