@@ -426,29 +426,28 @@
                 </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                     <div class="form-group">
-                        <label>Crew Size</label>
-                        <input type="number" id="actualCrewCount" min="1" step="1" placeholder="0" oninput="calculateProfit()">
-                    </div>
-                    <div class="form-group">
-                        <label>Hours/Day</label>
-                        <input type="number" id="actualHoursPerDay" min="1" max="16" step="0.5" value="8" oninput="calculateProfit()">
-                    </div>
-                </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                    <div class="form-group">
                         <label>Start Date</label>
-                        <input type="date" id="actualStartDate">
+                        <input type="date" id="actualStartDate" onchange="generateDailyLog()">
                     </div>
                     <div class="form-group">
                         <label>End Date</label>
-                        <input type="date" id="actualEndDate" onchange="autoCalcDays()">
+                        <input type="date" id="actualEndDate" onchange="generateDailyLog()">
                     </div>
                 </div>
                 <div class="form-group">
-                    <label>Days Worked</label>
-                    <input type="number" id="actualDays" min="0.5" step="0.5" placeholder="0" oninput="calculateProfit()">
+                    <label>Hours per Full Day <span style="color:#999;font-weight:400;">(default 8)</span></label>
+                    <input type="number" id="actualHoursPerDay" min="1" max="16" step="0.5" value="8" oninput="calculateProfit()">
                 </div>
-                <div class="form-group">
+                <div class="form-group" style="margin-bottom:6px;">
+                    <label>Daily Crew Log</label>
+                    <p style="color:#666;font-size:12px;margin:2px 0 8px;">How many crew worked each day. Use ½ for half days, Skip for no-show days (weekends, weather, etc.).</p>
+                </div>
+                <div id="dailyLogContainer"></div>
+                <button type="button" class="btn btn-info btn-small" onclick="addExtraDay()" style="width:100%;margin-top:4px;">+ Add Extra Day (touch-up, callback)</button>
+                <!-- Hidden legacy fields kept for backwards compat with older flows -->
+                <input type="hidden" id="actualCrewCount" value="">
+                <input type="hidden" id="actualDays" value="">
+                <div class="form-group" style="margin-top:12px;">
                     <label>Total Crew Payout ($)</label>
                     <input type="number" id="actualCrewPayout" step="0.01" min="0" placeholder="0.00" oninput="calculateProfit()">
                 </div>
@@ -6795,15 +6794,117 @@ Only return JSON, no other text.`;
         // === PROFIT TRACKING ===
         window.currentJobIdForProfit = null;
 
-        window.autoCalcDays = function() {
+        // === DAILY CREW LOG ===
+        // Each entry: { date: 'YYYY-MM-DD', crewCount: number, fraction: 1 | 0.5 | 0.25, skip: bool }
+        window._actualsDailyLog = [];
+
+        window.generateDailyLog = function() {
             const start = document.getElementById('actualStartDate').value;
             const end = document.getElementById('actualEndDate').value;
-            if (start && end) {
-                const diff = Math.ceil((new Date(end) - new Date(start)) / (1000*60*60*24)) + 1;
-                if (diff > 0) document.getElementById('actualDays').value = diff;
-                calculateProfit();
+            if (!start || !end) return;
+            const sDate = new Date(start + 'T00:00');
+            const eDate = new Date(end + 'T00:00');
+            if (isNaN(sDate) || isNaN(eDate) || eDate < sDate) return;
+
+            const project = window._actualsProjectId ? projects.find(p => p.id === window._actualsProjectId) : null;
+            const defaultCrew = project?.crewSize || 2;
+
+            // Preserve existing entries by date so editing start/end doesn't wipe manual edits
+            const existingByDate = {};
+            (window._actualsDailyLog || []).forEach(d => { existingByDate[d.date] = d; });
+
+            const log = [];
+            const cur = new Date(sDate);
+            while (cur <= eDate) {
+                const dateStr = cur.toISOString().split('T')[0];
+                log.push(existingByDate[dateStr] || { date: dateStr, crewCount: defaultCrew, fraction: 1, skip: false });
+                cur.setDate(cur.getDate() + 1);
             }
+            // Keep any extra days the user added beyond the end date (touch-ups/callbacks)
+            (window._actualsDailyLog || []).forEach(d => {
+                if (!log.find(l => l.date === d.date) && d.date > end) log.push(d);
+            });
+            window._actualsDailyLog = log;
+            renderDailyLog();
+            calculateProfit();
         };
+
+        window.renderDailyLog = function() {
+            const container = document.getElementById('dailyLogContainer');
+            if (!container) return;
+            const log = window._actualsDailyLog || [];
+            if (log.length === 0) {
+                container.innerHTML = '<p style="color:#999;text-align:center;padding:12px;font-size:13px;background:#f8f9fa;border-radius:6px;">Pick a start and end date above to log daily crew count.</p>';
+                return;
+            }
+            const rows = log.map((d, i) => {
+                const dateObj = new Date(d.date + 'T00:00');
+                const label = dateObj.toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'});
+                const bg = d.skip ? '#f3f4f6' : '#fff';
+                const opacity = d.skip ? '0.55' : '1';
+                const dis = d.skip ? 'disabled' : '';
+                return `<div style="display:flex;gap:6px;align-items:center;padding:8px;border:1px solid #e0e0e0;border-radius:8px;margin-bottom:6px;background:${bg};opacity:${opacity};">
+                    <div style="flex:1;font-size:13px;min-width:0;"><strong>${label}</strong></div>
+                    <input type="number" min="0" step="1" value="${d.crewCount}" ${dis} style="width:50px;padding:6px;border:1px solid #d1d5db;border-radius:6px;text-align:center;font-size:13px;" onchange="updateDayLog(${i},'crewCount',parseInt(this.value)||0)" title="Crew count">
+                    <select ${dis} style="padding:6px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;" onchange="updateDayLog(${i},'fraction',parseFloat(this.value))">
+                        <option value="1" ${d.fraction === 1 ? 'selected' : ''}>Full</option>
+                        <option value="0.5" ${d.fraction === 0.5 ? 'selected' : ''}>½</option>
+                        <option value="0.25" ${d.fraction === 0.25 ? 'selected' : ''}>¼</option>
+                    </select>
+                    <button type="button" style="padding:4px 8px;font-size:11px;border:1px solid #d1d5db;background:${d.skip ? '#fef3c7' : '#fff'};border-radius:6px;cursor:pointer;" onclick="updateDayLog(${i},'skip',${!d.skip})">${d.skip ? 'Skipped' : 'Skip'}</button>
+                </div>`;
+            }).join('');
+
+            const totalManDays = log.reduce((s, d) => s + (d.skip ? 0 : (d.crewCount || 0) * (d.fraction || 1)), 0);
+            const workedDays = log.reduce((s, d) => s + (d.skip ? 0 : (d.fraction || 1)), 0);
+            const summary = `<div style="padding:8px 10px;background:#eff6ff;border-radius:6px;font-size:13px;margin-top:4px;">
+                <strong>${workedDays.toFixed(workedDays % 1 === 0 ? 0 : 2)}</strong> day${workedDays === 1 ? '' : 's'} worked • <strong>${totalManDays.toFixed(totalManDays % 1 === 0 ? 0 : 2)}</strong> man-day${totalManDays === 1 ? '' : 's'}
+            </div>`;
+            container.innerHTML = rows + summary;
+        };
+
+        window.updateDayLog = function(idx, field, value) {
+            if (!window._actualsDailyLog || !window._actualsDailyLog[idx]) return;
+            window._actualsDailyLog[idx][field] = value;
+            renderDailyLog();
+            calculateProfit();
+        };
+
+        window.addExtraDay = function() {
+            const log = window._actualsDailyLog || [];
+            const last = log[log.length - 1];
+            let nextDate;
+            if (last) {
+                const d = new Date(last.date + 'T00:00');
+                d.setDate(d.getDate() + 1);
+                nextDate = d.toISOString().split('T')[0];
+            } else {
+                nextDate = new Date().toISOString().split('T')[0];
+            }
+            const project = window._actualsProjectId ? projects.find(p => p.id === window._actualsProjectId) : null;
+            const defaultCrew = project?.crewSize || 1;
+            log.push({ date: nextDate, crewCount: defaultCrew, fraction: 0.5, skip: false });
+            window._actualsDailyLog = log;
+            renderDailyLog();
+            calculateProfit();
+        };
+
+        // Derived summary of the daily log — used by calc/save
+        window._summarizeDailyLog = function() {
+            const log = window._actualsDailyLog || [];
+            if (log.length === 0) return null;
+            let totalManDays = 0, workedDays = 0, maxCrew = 0;
+            log.forEach(d => {
+                if (d.skip) return;
+                totalManDays += (d.crewCount || 0) * (d.fraction || 1);
+                workedDays += (d.fraction || 1);
+                if ((d.crewCount || 0) > maxCrew) maxCrew = d.crewCount;
+            });
+            return { totalManDays, workedDays, maxCrew };
+        };
+
+        // Back-compat alias in case anything else calls the old name
+        window.autoCalcDays = function() { generateDailyLog(); };
 
         // Track which project we're logging actuals for
         window._actualsProjectId = null;
@@ -6870,18 +6971,15 @@ Only return JSON, no other text.`;
 
             // Pre-fill from project data
             document.getElementById('actualCrewLeader').value = project.assignedCrewLeader || '';
-            document.getElementById('actualCrewCount').value = project.crewSize || '';
             document.getElementById('actualHoursPerDay').value = 8;
 
             // Pre-fill from existing actuals if re-editing
             const existingActuals = project.actuals;
             if (existingActuals) {
                 document.getElementById('actualCrewLeader').value = existingActuals.crewLeader || project.assignedCrewLeader || '';
-                document.getElementById('actualCrewCount').value = existingActuals.crewCount || project.crewSize || '';
                 document.getElementById('actualHoursPerDay').value = existingActuals.hoursPerDay || 8;
                 document.getElementById('actualStartDate').value = existingActuals.startDate || '';
                 document.getElementById('actualEndDate').value = existingActuals.endDate || '';
-                document.getElementById('actualDays').value = existingActuals.days || '';
                 document.getElementById('actualCrewPayout').value = existingActuals.crewPayout || '';
                 document.getElementById('actualMaterialCost').value = existingActuals.materialCost || '';
                 document.getElementById('actualGallons').value = existingActuals.gallonsUsed || '';
@@ -6893,11 +6991,25 @@ Only return JSON, no other text.`;
                 // Load completion photos
                 window._completionPhotos = existingActuals.completionPhotos || { before: [], after: [] };
                 displayCompletionPhotos();
+                // Load daily log — use stored one, or reconstruct from legacy date+crewCount data
+                if (Array.isArray(existingActuals.dailyLog) && existingActuals.dailyLog.length > 0) {
+                    window._actualsDailyLog = existingActuals.dailyLog.map(d => ({ ...d }));
+                } else if (existingActuals.startDate && existingActuals.endDate && existingActuals.crewCount) {
+                    // Legacy reconstruction: uniform crew across the full date range
+                    window._actualsDailyLog = [];
+                    generateDailyLog();
+                    (window._actualsDailyLog || []).forEach(d => { d.crewCount = existingActuals.crewCount; });
+                } else {
+                    window._actualsDailyLog = [];
+                }
+                renderDailyLog();
             } else {
                 window._completionPhotos = { before: [], after: [] };
                 ['actualCrewPayout','actualMaterialCost','actualDays','actualGallons','actualStartDate','actualEndDate','actualNotesGood','actualNotesBad','actualNotesLearning'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
                 document.getElementById('actualDifficulty').value = 5;
                 document.getElementById('diffLabel').textContent = '5';
+                window._actualsDailyLog = [];
+                renderDailyLog();
             }
 
             document.getElementById('profitResultsCard').style.display = 'none';
@@ -6926,6 +7038,8 @@ Only return JSON, no other text.`;
                 document.getElementById('actualHoursPerDay').value = 8;
                 document.getElementById('actualDifficulty').value = 5;
                 document.getElementById('diffLabel').textContent = '5';
+                window._actualsDailyLog = [];
+                renderDailyLog();
                 document.getElementById('profitResultsCard').style.display = 'none';
                 document.getElementById('varianceCard').style.display = 'none';
                 calculateProfit();
@@ -6936,9 +7050,26 @@ Only return JSON, no other text.`;
         window.calculateProfit = function() {
             const crewPayout = parseFloat(document.getElementById('actualCrewPayout').value) || 0;
             const materialCost = parseFloat(document.getElementById('actualMaterialCost').value) || 0;
-            const days = parseFloat(document.getElementById('actualDays').value) || 0;
-            const crewCount = parseInt(document.getElementById('actualCrewCount').value) || 0;
             const hrsPerDay = parseFloat(document.getElementById('actualHoursPerDay').value) || 8;
+
+            // Derive days and man-days from the daily log. Fall back to legacy hidden fields
+            // if no log exists yet (e.g., re-editing a very old record that has crewCount/days).
+            const summary = window._summarizeDailyLog ? window._summarizeDailyLog() : null;
+            let days, crewCount, totalManDays;
+            if (summary) {
+                days = summary.workedDays;
+                crewCount = summary.maxCrew;
+                totalManDays = summary.totalManDays;
+            } else {
+                days = parseFloat(document.getElementById('actualDays')?.value) || 0;
+                crewCount = parseInt(document.getElementById('actualCrewCount')?.value) || 0;
+                totalManDays = days * crewCount;
+            }
+            // Sync hidden legacy fields so downstream code that still reads them stays consistent
+            const legacyDaysEl = document.getElementById('actualDays');
+            const legacyCrewEl = document.getElementById('actualCrewCount');
+            if (legacyDaysEl) legacyDaysEl.value = days || '';
+            if (legacyCrewEl) legacyCrewEl.value = crewCount || '';
 
             if (crewPayout <= 0 && materialCost <= 0) {
                 document.getElementById('profitResultsCard').style.display = 'none';
@@ -6950,7 +7081,8 @@ Only return JSON, no other text.`;
             const revenue = window._actualsRevenue || 0;
             const netProfit = revenue - totalCosts;
             const profitPct = revenue > 0 ? (netProfit / revenue) * 100 : 0;
-            const hourlyRate = (days > 0 && crewCount > 0) ? crewPayout / (days * hrsPerDay * crewCount) : 0;
+            const totalHours = totalManDays * hrsPerDay;
+            const hourlyRate = totalHours > 0 ? crewPayout / totalHours : 0;
             const profitPerDay = days > 0 ? netProfit / days : 0;
 
             let profitColor = '#ef4444';
@@ -6989,16 +7121,24 @@ Only return JSON, no other text.`;
 
         window.saveProfitActuals = async function() {
             const hrsPerDay = parseFloat(document.getElementById('actualHoursPerDay').value) || 8;
-            const days = parseFloat(document.getElementById('actualDays').value) || 0;
-            const crewCount = parseInt(document.getElementById('actualCrewCount').value) || 0;
             const crewPayout = parseFloat(document.getElementById('actualCrewPayout').value) || 0;
             const materialCost = parseFloat(document.getElementById('actualMaterialCost').value) || 0;
             const revenue = window._actualsRevenue || 0;
 
+            // Derive days / crewCount / totalManDays from the daily log (source of truth).
+            const summary = window._summarizeDailyLog ? window._summarizeDailyLog() : null;
+            const days = summary ? summary.workedDays : (parseFloat(document.getElementById('actualDays')?.value) || 0);
+            const crewCount = summary ? summary.maxCrew : (parseInt(document.getElementById('actualCrewCount')?.value) || 0);
+            const totalManDays = summary ? summary.totalManDays : days * crewCount;
+            const totalHours = totalManDays * hrsPerDay;
+            const dailyLog = (window._actualsDailyLog || []).slice();
+
             const actuals = {
                 crewLeader: document.getElementById('actualCrewLeader').value.trim(),
                 crewCount, hoursPerDay: hrsPerDay,
-                totalHours: days * hrsPerDay * crewCount,
+                totalHours,
+                totalManDays,
+                dailyLog,
                 startDate: document.getElementById('actualStartDate').value,
                 endDate: document.getElementById('actualEndDate').value,
                 days, crewPayout, materialCost,
@@ -7012,7 +7152,7 @@ Only return JSON, no other text.`;
                 revenue: revenue,
                 netProfit: revenue - (crewPayout + materialCost),
                 profitMargin: revenue > 0 ? ((revenue - (crewPayout + materialCost)) / revenue * 100) : 0,
-                hourlyRate: (days > 0 && crewCount > 0) ? crewPayout / (days * hrsPerDay * crewCount) : 0,
+                hourlyRate: totalHours > 0 ? crewPayout / totalHours : 0,
                 profitPerDay: days > 0 ? (revenue - (crewPayout + materialCost)) / days : 0,
                 estLabor: window._actualsEstLabor || 0,
                 estMaterial: window._actualsEstMaterial || 0,
