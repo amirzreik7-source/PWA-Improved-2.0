@@ -6895,9 +6895,11 @@ Only return JSON, no other text.`;
                 log.push(existingByDate[dateStr] || { date: dateStr, crewCount: defaultCrew, fraction: 1, skip: false });
                 cur.setDate(cur.getDate() + 1);
             }
-            // Keep any extra days the user added beyond the end date (touch-ups/callbacks)
+            // Preserve ONLY days explicitly added via "+ Add Extra Day" (marked extra:true).
+            // Any auto-generated days outside the new range are dropped so shrinking the date
+            // range doesn't leave behind rows from prior guesses.
             (window._actualsDailyLog || []).forEach(d => {
-                if (!log.find(l => l.date === d.date) && d.date > end) log.push(d);
+                if (d.extra && !log.find(l => l.date === d.date)) log.push(d);
             });
             window._actualsDailyLog = log;
             renderDailyLog();
@@ -6958,7 +6960,7 @@ Only return JSON, no other text.`;
             }
             const project = window._actualsProjectId ? projects.find(p => p.id === window._actualsProjectId) : null;
             const defaultCrew = project?.crewSize || 1;
-            log.push({ date: nextDate, crewCount: defaultCrew, fraction: 0.5, skip: false });
+            log.push({ date: nextDate, crewCount: defaultCrew, fraction: 0.5, skip: false, extra: true });
             window._actualsDailyLog = log;
             renderDailyLog();
             calculateProfit();
