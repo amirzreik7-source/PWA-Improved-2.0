@@ -7674,10 +7674,40 @@ Only return JSON, no other text.`;
             };
             
             try {
-                // Always create new proposal (keeps version history)
-                const newDoc = await addDoc(collection(db, 'jobs'), job);
-                window.editingJobId = newDoc.id;
-                window.isEditMode = true;
+                const existingJob = window.editingJobId ? jobs.find(j => j.id === window.editingJobId && !j.deleted) : null;
+                if (window.isEditMode && existingJob) {
+                    // Update-in-place: mutate the existing proposal. Preserve label/date/status/actuals
+                    // so post-completion data and sort order stay intact. Use "+ New" to create a new version.
+                    const updateFields = {
+                        customerId: job.customerId,
+                        customerName: job.customerName,
+                        jobName: job.jobName,
+                        jobType: job.jobType,
+                        profileId: job.profileId,
+                        projectId: job.projectId,
+                        rooms: job.rooms,
+                        basePrice: job.basePrice,
+                        priceOverride: job.priceOverride,
+                        discountType: job.discountType,
+                        discountValue: job.discountValue,
+                        discountName: job.discountName,
+                        discountAmount: job.discountAmount,
+                        credits: job.credits,
+                        projectSummaryNotes: job.projectSummaryNotes,
+                        totalLabor: job.totalLabor,
+                        totalMaterials: job.totalMaterials,
+                        grandTotal: job.grandTotal,
+                        companySignature: job.companySignature,
+                        customerSignature: job.customerSignature,
+                        updatedAt: new Date().toISOString()
+                    };
+                    await updateDoc(doc(db, 'jobs', window.editingJobId), updateFields);
+                } else {
+                    // Create new proposal (keeps version history for explicit "+ New")
+                    const newDoc = await addDoc(collection(db, 'jobs'), job);
+                    window.editingJobId = newDoc.id;
+                    window.isEditMode = true;
+                }
 
                 await loadJobs();
                 window._unsavedEstimate = false;
