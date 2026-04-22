@@ -2358,6 +2358,42 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             } catch(e) { alert('Error: ' + e.message); }
         };
 
+        window.unlandProposal = async function(projectId) {
+            const project = projects.find(p => p.id === projectId);
+            if (!project) return;
+            if (!confirm('Unmark this proposal as landed? You can then mark a different proposal as landed, or leave none landed.')) return;
+            try {
+                const updates = { landedProposalId: null };
+                if (project.status === 'Landed Job') {
+                    if (confirm('Project status is currently "Landed Job". Revert status to "Current Estimate"?')) {
+                        const history = project.statusHistory || [];
+                        history.push({ status: 'Current Estimate', date: new Date().toISOString(), note: 'Auto-reverted on unland' });
+                        updates.status = 'Current Estimate';
+                        updates.statusHistory = history;
+                    }
+                }
+                await updateDoc(doc(db, 'projects', projectId), updates);
+                await loadProjects();
+                viewProjectDetail(projectId);
+            } catch(e) { alert('Error: ' + e.message); }
+        };
+
+        // Returns the "effective" proposal for a project: landed if set, otherwise the most recent
+        // non-deleted proposal by date. Prevents stale reads of Proposal A when edits create B/C.
+        window.getEffectiveProposal = function(projectOrId) {
+            const project = typeof projectOrId === 'string'
+                ? projects.find(p => p.id === projectOrId)
+                : projectOrId;
+            if (!project) return null;
+            if (project.landedProposalId) {
+                const landed = jobs.find(j => j.id === project.landedProposalId);
+                if (landed && !landed.deleted) return landed;
+            }
+            return jobs
+                .filter(j => j.projectId === project.id && !j.deleted)
+                .sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null;
+        };
+
         window.viewProjectDetail = function(projectId) {
             const project = projects.find(p => p.id === projectId);
             if (!project) return;
@@ -2444,8 +2480,8 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 </div>
 
                 ${['Landed Job','Scheduled','In Progress','Complete'].includes(project.status) ? (() => {
-                    // Calculate estimated hours from landed proposal's spread rates
-                    const landedProp = project.landedProposalId ? projectProposals.find(p => p.id === project.landedProposalId) : projectProposals[0];
+                    // Calculate estimated hours from the effective proposal's spread rates
+                    const landedProp = getEffectiveProposal(project);
                     const estLaborCost = landedProp ? (landedProp.totalLabor || 0) : 0;
                     const estHours = PRICING.LaborRate > 0 ? estLaborCost / PRICING.LaborRate : 0;
                     const defaultCrewSize = project.crewSize || (estHours <= 16 ? 1 : estHours <= 40 ? 2 : 3);
@@ -2511,7 +2547,9 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                             <div style="display:flex;gap:6px;margin-top:8px;">
                                 <button class="btn btn-primary btn-small" onclick="regenerateProposal('${prop.id}')">👁️ View</button>
                                 <button class="btn btn-warning btn-small" onclick="viewJob('${prop.id}')">✏️ Edit</button>
-                                ${!isLanded ? `<button class="btn btn-success btn-small" onclick="markProposalLanded('${projectId}','${prop.id}')">Mark Landed</button>` : ''}
+                                ${!isLanded
+                                    ? `<button class="btn btn-success btn-small" onclick="markProposalLanded('${projectId}','${prop.id}')">Mark Landed</button>`
+                                    : `<button class="btn btn-info btn-small" onclick="unlandProposal('${projectId}')">↩ Unland</button>`}
                                 <button class="btn btn-danger btn-small" onclick="deleteEstimate('${prop.id}','${project.customerId}')">Del</button>
                             </div>
                         </div>
@@ -2522,7 +2560,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
             // Crew Proposals Section
             const crewProposals = project.crewProposals || [];
-            const crewBaseProp = project.landedProposalId ? jobs.find(j => j.id === project.landedProposalId) : projectProposals[0];
+            const crewBaseProp = getEffectiveProposal(project);
             const customerFinalPrice = crewBaseProp ? (crewBaseProp.grandTotal || crewBaseProp.basePrice || 0) : 0;
             // Estimated hours from spread rates (not affected by discounts/overrides)
             const estLaborCost = crewBaseProp ? (crewBaseProp.totalLabor || 0) : 0;
@@ -2541,7 +2579,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 const lp = projects.find(p => p.id === lid);
                 if (!lp) return;
                 linkedNames.push(lp.projectName);
-                const lpProp = lp.landedProposalId ? jobs.find(j => j.id === lp.landedProposalId) : jobs.find(j => j.projectId === lid && !j.deleted);
+                const lpProp = getEffectiveProposal(lp);
                 if (lpProp) {
                     combinedPrice += lpProp.grandTotal || lpProp.basePrice || 0;
                     const lpLabor = lpProp.totalLabor || 0;
@@ -3549,7 +3587,7 @@ Return:
                 const p = projects.find(pr => pr.id === pid);
                 if (!p) return;
                 projectNames.push(p.projectName);
-                const prop = p.landedProposalId ? jobs.find(j => j.id === p.landedProposalId) : jobs.find(j => j.projectId === pid && !j.deleted);
+                const prop = getEffectiveProposal(p);
                 if (prop) {
                     totalRevenue += prop.grandTotal || prop.basePrice || 0;
                     totalEstLabor += prop.totalLabor || 0;
@@ -3688,7 +3726,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 const p = projects.find(pr => pr.id === pid);
                 if (!p) return;
                 projectNames.push(p.projectName);
-                const prop = p.landedProposalId ? jobs.find(j => j.id === p.landedProposalId) : jobs.find(j => j.projectId === pid && !j.deleted);
+                const prop = getEffectiveProposal(p);
                 if (prop) {
                     combinedPrice += prop.grandTotal || prop.basePrice || 0;
                     const labor = prop.totalLabor || 0;
@@ -3728,8 +3766,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
             const project = projects.find(p => p.id === projectId);
 
             // Get customer final price (after discounts/credits/override)
-            const projectProposals = jobs.filter(j => j.projectId === projectId && !j.deleted);
-            const baseProp = project.landedProposalId ? jobs.find(j => j.id === project.landedProposalId) : projectProposals[0];
+            const baseProp = getEffectiveProposal(project);
             if (!baseProp) { alert('Create a customer proposal first'); return; }
 
             const customerFinalPrice = baseProp.grandTotal || baseProp.basePrice || 0;
@@ -3837,7 +3874,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 cp.linkedProjectIds.forEach(pid => {
                     const p = projects.find(pr => pr.id === pid);
                     if (!p) return;
-                    const prop = p.landedProposalId ? jobs.find(j => j.id === p.landedProposalId) : jobs.find(j => j.projectId === pid && !j.deleted);
+                    const prop = getEffectiveProposal(p);
                     if (!prop) return;
                     // Add project name as a header room
                     allRooms.push({ name: '── ' + p.projectName.toUpperCase() + ' ──', surfaces: [], additionalServices: [], notes: '' });
@@ -3848,7 +3885,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 });
                 jobName = customerName + ' - Combined';
             } else {
-                const landedProp = project.landedProposalId ? jobs.find(j => j.id === project.landedProposalId) : jobs.find(j => j.projectId === projectId && !j.deleted);
+                const landedProp = getEffectiveProposal(project);
                 if (!landedProp) { alert('No customer proposal found.'); return; }
                 allRooms = landedProp.rooms || [];
                 allNotes = landedProp.projectSummaryNotes ? [landedProp.projectSummaryNotes] : [];
@@ -6787,7 +6824,7 @@ Only return JSON, no other text.`;
             allProjectIds.forEach(pid => {
                 const p = projects.find(pr => pr.id === pid);
                 if (!p) return;
-                const prop = p.landedProposalId ? jobs.find(j => j.id === p.landedProposalId) : jobs.find(j => j.projectId === pid && !j.deleted);
+                const prop = getEffectiveProposal(p);
                 if (!prop) return;
                 const rev = prop.grandTotal || prop.basePrice || 0;
                 totalRevenue += rev;
