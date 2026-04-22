@@ -2562,6 +2562,12 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                         ${combinedMaterials > 0 ? `<p style="margin:2px 0;">Est. materials: <strong>$${estMaterialCost.toFixed(2)}</strong>${hasLinked ? ` <span style="color:#667eea;">(combined: $${combinedMaterials.toFixed(2)})</span>` : ''}</p>` : ''}
                         ${hasLinked ? `<p style="margin:4px 0 0;color:#667eea;font-size:11px;">Linked with: ${linkedNames.join(', ')}</p>` : ''}
                     </div>
+                    <div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:8px 10px;margin-bottom:8px;">
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#333;">
+                            <input type="checkbox" id="crewMaterialsInput_${projectId}" style="width:18px;height:18px;cursor:pointer;flex-shrink:0;">
+                            <span><strong>Crew buys paint/materials</strong> — material cost deducted from payout. Leave unchecked if NSP supplies materials (labor-only).</span>
+                        </label>
+                    </div>
                     <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;">
                         <input type="number" id="crewPctInput_${projectId}" value="40" min="1" max="100" step="1" style="width:65px;padding:8px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;">
                         <span style="color:#666;font-size:14px;">%</span>
@@ -2580,12 +2586,17 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                     // Calculate hourly rate: payout / total hours (crew × days × 8)
                     const totalCrewHours = crewDays * 8 * cp.crewSize;
                     const ratePerHour = totalCrewHours > 0 ? (cp.crewTotal / totalCrewHours).toFixed(2) : '0';
+                    const mode = cp.paymentMode || 'labor_only';
+                    const modeBadge = mode === 'labor_plus_materials'
+                        ? '<span style="background:#0ea5e9;color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;">LABOR + MATERIALS</span>'
+                        : '<span style="background:#6b7280;color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;">LABOR ONLY</span>';
                     html += `
                         <div style="padding:12px;margin-bottom:8px;border-radius:8px;border:2px solid ${isAccepted ? '#28a745' : '#e0e0e0'};background:${isAccepted ? '#d4edda' : '#f8f9fa'};">
                             <div style="display:flex;justify-content:space-between;align-items:center;">
                                 <strong style="font-size:16px;">$${cp.crewTotal.toFixed(2)} <span style="font-size:12px;color:#666;">(${cp.percentage}%)</span></strong>${cp.combined ? ' <span style="background:#667eea;color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;">COMBINED</span>' : ''}
                                 ${isAccepted ? '<span style="color:#28a745;font-weight:700;font-size:12px;">ACCEPTED</span>' : ''}
                             </div>
+                            <div style="margin:6px 0;">${modeBadge}</div>
                             <p style="color:#666;font-size:12px;margin:4px 0;">${cp.crewSize} crew • ${crewDays} day${crewDays !== 1 ? 's' : ''} • $${ratePerHour}/hr per person</p>
                             ${cp.notes ? '<p style="color:#555;font-size:12px;margin:4px 0;font-style:italic;">' + cp.notes + '</p>' : ''}
                             <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
@@ -3688,6 +3699,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
             const crewTotal = combinedPrice * (pct / 100);
             const crewSize = project?.crewSize || parseInt(prompt('How many crew members?', '3')) || 3;
             const notes = prompt('Notes for combined crew proposal (optional):') || '';
+            const materialsIncluded = document.getElementById('crewMaterialsInput_' + projectId)?.checked || false;
 
             try {
                 const crewProposals = [...(project?.crewProposals || [])];
@@ -3699,6 +3711,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
                     notes: (notes.trim() ? notes.trim() + ' — ' : '') + 'Combined: ' + projectNames.join(' + '),
                     combined: true,
                     linkedProjectIds: allProjectIds,
+                    paymentMode: materialsIncluded ? 'labor_plus_materials' : 'labor_only',
                     accepted: false,
                     createdAt: new Date().toISOString()
                 });
@@ -3727,6 +3740,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
             const estHours = PRICING.LaborRate > 0 ? estLaborCost / PRICING.LaborRate : 0;
             const crewSize = project?.crewSize || parseInt(prompt('How many crew members?', '3')) || 3;
             const notes = prompt('Notes for this crew proposal (optional):') || '';
+            const materialsIncluded = document.getElementById('crewMaterialsInput_' + projectId)?.checked || false;
 
             try {
                 const crewProposals = [...(project?.crewProposals || [])];
@@ -3736,6 +3750,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
                     estHours: estHours,
                     crewSize: crewSize,
                     notes: notes.trim(),
+                    paymentMode: materialsIncluded ? 'labor_plus_materials' : 'labor_only',
                     accepted: false,
                     createdAt: new Date().toISOString()
                 });
@@ -3785,10 +3800,19 @@ Based on the journal entries, calculate and return this JSON (no other text):
             const newNotes = prompt('Notes:', cp.notes || '');
             if (newNotes === null) return;
 
+            const currentMode = cp.paymentMode || 'labor_only';
+            const modeLabel = currentMode === 'labor_plus_materials' ? 'Labor + Materials' : 'Labor Only';
+            const newModeAns = prompt('Payment mode — currently: ' + modeLabel + '\n\nType "m" for Labor + Materials (crew buys paint)\nType "l" for Labor Only (NSP supplies paint)\nLeave blank to keep current:', '');
+            if (newModeAns === null) return;
+
             try {
                 crewProposals[idx].crewSize = parseInt(newCrewSize) || cp.crewSize;
                 crewProposals[idx].customDays = parseInt(newDays) || null;
                 crewProposals[idx].notes = newNotes.trim();
+                const ans = (newModeAns || '').trim().toLowerCase();
+                if (ans === 'm') crewProposals[idx].paymentMode = 'labor_plus_materials';
+                else if (ans === 'l') crewProposals[idx].paymentMode = 'labor_only';
+                else if (!crewProposals[idx].paymentMode) crewProposals[idx].paymentMode = 'labor_only';
                 await updateDoc(doc(db, 'projects', projectId), { crewProposals });
                 if (project) project.crewProposals = crewProposals;
                 viewProjectDetail(projectId);
@@ -7908,11 +7932,21 @@ Only return JSON, no other text.`;
                     if (si.length > 0) crewScheduleHTML = sectionTitle('CREW & SCHEDULE') + '<div style="margin:8px 0;font-size:10pt;">' + si.join('') + '</div>';
                 }
 
-                // Pricing section
-                crewPricingHTML = sectionTitle('LABOR & MATERIALS') + '<div style="margin:8px 0">' +
+                // Pricing section — section title, total label, and terms note depend on payment mode
+                const payMode = cpData?.paymentMode || 'labor_only';
+                const isLaborPlusMat = payMode === 'labor_plus_materials';
+                const payHeading = isLaborPlusMat ? 'LABOR & MATERIALS' : 'LABOR — NSP SUPPLIES MATERIALS';
+                const totalLabel = isLaborPlusMat ? 'Total (Labor + Materials)' : 'Total Labor Payout';
+                const termsNote = isLaborPlusMat
+                    ? 'Crew is responsible for purchasing all paint and materials on NSP\'s account at approved suppliers (Sherwin-Williams, Benjamin Moore, PPG). The actual material cost, per store receipts, will be deducted from the total payment shown above. Crew\'s net take-home = total − actual material receipts.'
+                    : 'NSP will supply all paint and materials for this job. The total shown above is the full labor payout with no material deductions.';
+                const termsBg = isLaborPlusMat ? '#eff6ff' : '#f8fafc';
+                const termsBorder = isLaborPlusMat ? '#2563eb' : '#64748b';
+                crewPricingHTML = sectionTitle(payHeading) + '<div style="margin:8px 0">' +
                     priceRow('Crew Size', crewSize + ' members') +
                     priceRow('Estimated Days', crewDays + ' day' + (crewDays !== 1 ? 's' : '')) +
-                    '<div style="display:flex;justify-content:space-between;padding:10px 0;font-size:13pt;font-weight:700;border-top:2px solid #1e3a8a;margin-top:6px;"><span>Total Labor & Materials</span><span>$' + crewPrice.toFixed(2) + '</span></div>' +
+                    '<div style="display:flex;justify-content:space-between;padding:10px 0;font-size:13pt;font-weight:700;border-top:2px solid #1e3a8a;margin-top:6px;"><span>' + totalLabel + '</span><span>$' + crewPrice.toFixed(2) + '</span></div>' +
+                    '<div style="background:' + termsBg + ';border-left:3px solid ' + termsBorder + ';padding:8px 10px;margin-top:8px;font-size:9pt;color:#333;line-height:1.45;">' + termsNote + '</div>' +
                     (cpData?.notes ? '<p style="font-style:italic;color:#666;font-size:9pt;margin-top:6px;">Notes: ' + cpData.notes + '</p>' : '') +
                     '</div>';
             }
