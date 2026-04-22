@@ -409,7 +409,8 @@
         <!-- PROFIT TRACKING MODAL -->
         <div id="profitTrackingScreen" class="screen">
             <button class="btn btn-back" onclick="closeProfitTracking()">← Back</button>
-            <h2 class="screen-title">Job Complete — Log Actuals</h2>
+            <h2 class="screen-title" id="actualsScreenTitle">Log Actuals</h2>
+            <div id="actualsStatusBanner" style="padding:8px 12px;border-radius:8px;margin-bottom:12px;font-size:13px;display:none;"></div>
 
             <!-- Revenue Summary (auto-populated, not editable) -->
             <div class="room-card" id="actualsRevenueCard" style="border-left:4px solid #10b981;">
@@ -522,7 +523,10 @@
                 </div>
             </div>
 
-            <button class="btn btn-success btn-large" onclick="saveProfitActuals()" style="width:100%;">Save & Complete Job</button>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+                <button class="btn btn-info btn-large" onclick="saveProfitActuals({markComplete: false})" style="width:100%;">💾 Save Actuals (keep current status)</button>
+                <button class="btn btn-success btn-large" onclick="saveProfitActuals({markComplete: true})" style="width:100%;">✅ Save & Complete Job</button>
+            </div>
         </div>
 
         <!-- ADDITIONAL SERVICE MODAL -->
@@ -2779,8 +2783,12 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                         html += analysisHTML;
                     }
                 } else {
+                    const statusHint = project.status === 'Complete'
+                        ? 'Status is Complete — finalize actuals.'
+                        : 'You can save as a draft now and mark the job Complete later, or both at once.';
                     html += `<div class="room-card" style="border-left:4px solid #f59e0b;">
-                        <button class="btn btn-success btn-large" onclick="openProjectActuals('${projectId}')" style="width:100%;">Log Actuals & Complete Job</button>
+                        <p style="font-size:12px;color:#666;margin:0 0 8px;">${statusHint}</p>
+                        <button class="btn btn-success btn-large" onclick="openProjectActuals('${projectId}')" style="width:100%;">Log Actuals</button>
                     </div>`;
                 }
             }
@@ -7014,6 +7022,27 @@ Only return JSON, no other text.`;
 
             document.getElementById('profitResultsCard').style.display = 'none';
             document.getElementById('varianceCard').style.display = 'none';
+
+            // Status banner at top reflects where the project sits.
+            const titleEl = document.getElementById('actualsScreenTitle');
+            const bannerEl = document.getElementById('actualsStatusBanner');
+            if (titleEl) titleEl.textContent = project.status === 'Complete' ? 'Edit Actuals' : 'Log Actuals';
+            if (bannerEl) {
+                if (project.status === 'Complete') {
+                    bannerEl.style.display = 'block';
+                    bannerEl.style.background = '#dcfce7';
+                    bannerEl.style.color = '#166534';
+                    bannerEl.style.border = '1px solid #86efac';
+                    bannerEl.textContent = '✅ Job is marked Complete — editing final actuals.';
+                } else {
+                    bannerEl.style.display = 'block';
+                    bannerEl.style.background = '#fef3c7';
+                    bannerEl.style.color = '#92400e';
+                    bannerEl.style.border = '1px solid #fcd34d';
+                    bannerEl.textContent = '📝 Draft mode — project status is "' + project.status + '". Save Actuals keeps the status; Save & Complete marks the job done.';
+                }
+            }
+
             calculateProfit();
             showScreen('profitTrackingScreen');
         };
@@ -7119,7 +7148,8 @@ Only return JSON, no other text.`;
             }
         };
 
-        window.saveProfitActuals = async function() {
+        window.saveProfitActuals = async function(opts) {
+            const markComplete = opts && opts.markComplete === true;
             const hrsPerDay = parseFloat(document.getElementById('actualHoursPerDay').value) || 8;
             const crewPayout = parseFloat(document.getElementById('actualCrewPayout').value) || 0;
             const materialCost = parseFloat(document.getElementById('actualMaterialCost').value) || 0;
@@ -7158,45 +7188,61 @@ Only return JSON, no other text.`;
                 estMaterial: window._actualsEstMaterial || 0,
                 linkedProjectIds: window._actualsLinkedProjectIds || [],
                 combined: (window._actualsLinkedProjectIds || []).length > 1,
-                completedAt: new Date().toISOString()
+                lastSavedAt: new Date().toISOString()
             };
 
             try {
                 const projectId = window._actualsProjectId;
 
                 if (projectId) {
-                    // Save actuals on the primary project
-                    await updateDoc(doc(db, 'projects', projectId), { actuals, status: 'Complete' });
-                    const p = projects.find(pr => pr.id === projectId);
-                    if (p) { p.actuals = actuals; p.status = 'Complete'; }
-
-                    // Mark all linked projects as Complete too
-                    const linkedIds = (window._actualsLinkedProjectIds || []).filter(id => id !== projectId);
-                    for (const lid of linkedIds) {
-                        await updateDoc(doc(db, 'projects', lid), { status: 'Complete', actualsRef: projectId });
-                        const lp = projects.find(pr => pr.id === lid);
-                        if (lp) { lp.status = 'Complete'; lp.actualsRef = projectId; }
+                    const proj = projects.find(pr => pr.id === projectId);
+                    // If marking complete now, stamp completedAt; otherwise preserve any prior completedAt.
+                    if (markComplete) {
+                        actuals.completedAt = new Date().toISOString();
+                    } else if (proj?.actuals?.completedAt) {
+                        actuals.completedAt = proj.actuals.completedAt;
                     }
 
-                    // Also update the landed proposal's status
-                    const proj = projects.find(pr => pr.id === projectId);
-                    if (proj?.landedProposalId) {
-                        await updateDoc(doc(db, 'jobs', proj.landedProposalId), { actuals, status: 'Complete' });
+                    // Save actuals; only flip status if markComplete is true.
+                    const projectUpdate = markComplete ? { actuals, status: 'Complete' } : { actuals };
+                    await updateDoc(doc(db, 'projects', projectId), projectUpdate);
+                    const p = projects.find(pr => pr.id === projectId);
+                    if (p) { p.actuals = actuals; if (markComplete) p.status = 'Complete'; }
+
+                    if (markComplete) {
+                        // Mark all linked projects as Complete too
+                        const linkedIds = (window._actualsLinkedProjectIds || []).filter(id => id !== projectId);
+                        for (const lid of linkedIds) {
+                            await updateDoc(doc(db, 'projects', lid), { status: 'Complete', actualsRef: projectId });
+                            const lp = projects.find(pr => pr.id === lid);
+                            if (lp) { lp.status = 'Complete'; lp.actualsRef = projectId; }
+                        }
+                        // Also update the landed proposal's status
+                        if (proj?.landedProposalId) {
+                            await updateDoc(doc(db, 'jobs', proj.landedProposalId), { actuals, status: 'Complete' });
+                            const job = jobs.find(j => j.id === proj.landedProposalId);
+                            if (job) { job.actuals = actuals; job.status = 'Complete'; }
+                        }
+                    } else if (proj?.landedProposalId) {
+                        // Draft save: mirror actuals onto the landed proposal without changing its status.
+                        await updateDoc(doc(db, 'jobs', proj.landedProposalId), { actuals });
                         const job = jobs.find(j => j.id === proj.landedProposalId);
-                        if (job) { job.actuals = actuals; job.status = 'Complete'; }
+                        if (job) { job.actuals = actuals; }
                     }
 
                     await loadProjects();
-                    alert('Job completed! Actuals saved.');
+                    alert(markComplete ? 'Job completed! Actuals saved.' : 'Actuals saved. Status unchanged.');
                     viewProjectDetail(projectId);
                 } else {
                     // Standalone job (legacy)
                     const jobId = window.currentJobIdForProfit;
                     if (!jobId) { alert('No job to save actuals for.'); return; }
-                    await updateDoc(doc(db, 'jobs', jobId), { actuals, status: 'Complete' });
+                    const jobUpdate = markComplete ? { actuals, status: 'Complete' } : { actuals };
+                    if (markComplete) actuals.completedAt = new Date().toISOString();
+                    await updateDoc(doc(db, 'jobs', jobId), jobUpdate);
                     const job = jobs.find(j => j.id === jobId);
-                    if (job) { job.actuals = actuals; job.status = 'Complete'; }
-                    alert('Job completed! Actuals saved.');
+                    if (job) { job.actuals = actuals; if (markComplete) job.status = 'Complete'; }
+                    alert(markComplete ? 'Job completed! Actuals saved.' : 'Actuals saved. Status unchanged.');
                     showScreen('estimateStep6Screen');
                 }
             } catch (error) { alert('Error saving actuals: ' + error.message); }
