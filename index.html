@@ -7080,6 +7080,7 @@ Only return JSON, no other text.`;
                 renderDailyLog();
             } else {
                 window._completionPhotos = { before: [], after: [] };
+                displayCompletionPhotos();
                 ['actualCrewPayout','actualMaterialCost','actualDays','actualGallons','actualStartDate','actualEndDate','actualNotesGood','actualNotesBad','actualNotesLearning'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
                 document.getElementById('actualDifficulty').value = 5;
                 document.getElementById('diffLabel').textContent = '5';
@@ -7136,6 +7137,8 @@ Only return JSON, no other text.`;
                 document.getElementById('diffLabel').textContent = '5';
                 window._actualsDailyLog = [];
                 renderDailyLog();
+                window._completionPhotos = { before: [], after: [] };
+                displayCompletionPhotos();
                 document.getElementById('profitResultsCard').style.display = 'none';
                 document.getElementById('varianceCard').style.display = 'none';
                 calculateProfit();
