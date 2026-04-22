@@ -790,7 +790,10 @@
                 <div class="room-stats" id="profitDisplayContent"></div>
             </div>
 
-            <button class="btn btn-warning btn-large" onclick="saveAndGenerateProposal()" style="width:100%;">📄 Customer PDF</button>
+            <div id="step6SaveActions" style="display:flex;flex-direction:column;gap:8px;">
+                <button id="saveChangesBtn" class="btn btn-success btn-large" onclick="saveProposalChanges()" style="width:100%;display:none;">💾 Save Changes to This Proposal</button>
+                <button id="saveAsPdfBtn" class="btn btn-warning btn-large" onclick="saveAndGenerateProposal()" style="width:100%;">📄 Customer PDF</button>
+            </div>
             <button class="btn btn-secondary btn-small" onclick="openProfitTracking()" style="width:100%;margin-top:10px;">📊 Log Actuals</button>
         </div>
 
@@ -1545,19 +1548,22 @@
             // Update Step 6 UI for edit vs new mode
             if (screenId === 'estimateStep6Screen') {
                 const titleEl = document.getElementById('step6Title');
-                const saveBtn = document.getElementById('saveEstimateBtn');
                 const stepInd = document.getElementById('step6StepIndicator');
                 const progBar = document.getElementById('step6ProgressBar');
+                const saveChangesBtn = document.getElementById('saveChangesBtn');
+                const saveAsPdfBtn = document.getElementById('saveAsPdfBtn');
                 if (window.isEditMode) {
-                    titleEl.textContent = 'Edit Proposal';
-                    saveBtn.textContent = '💾 Update Proposal';
-                    stepInd.textContent = 'Editing existing proposal';
-                    progBar.style.display = 'none';
+                    if (titleEl) titleEl.textContent = 'Edit Proposal';
+                    if (stepInd) stepInd.textContent = 'Editing existing proposal';
+                    if (progBar) progBar.style.display = 'none';
+                    if (saveChangesBtn) saveChangesBtn.style.display = 'block';
+                    if (saveAsPdfBtn) saveAsPdfBtn.textContent = '➕ Save As New Proposal & View PDF';
                 } else {
-                    titleEl.textContent = 'Review Estimate';
-                    saveBtn.textContent = '💾 Save Estimate';
-                    stepInd.textContent = 'Step 6 of 6';
-                    progBar.style.display = 'block';
+                    if (titleEl) titleEl.textContent = 'Review Estimate';
+                    if (stepInd) stepInd.textContent = 'Step 6 of 6';
+                    if (progBar) progBar.style.display = 'block';
+                    if (saveChangesBtn) saveChangesBtn.style.display = 'none';
+                    if (saveAsPdfBtn) saveAsPdfBtn.textContent = '📄 Save & View Customer PDF';
                 }
             }
 
@@ -6751,10 +6757,10 @@ Only return JSON, no other text.`;
             // Let the loading screen paint before doing heavy work
             await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-            // Save FIRST so the new proposal exists in Firebase with current data
-            if (window._unsavedEstimate) {
-                await saveEstimate({silent: true});
-            }
+            // Always save when the user clicks the PDF button — explicit intent > unsaved flag.
+            // From Step 6 this button means "save as new version & view PDF" (in edit mode) or
+            // "save & view PDF" (fresh estimate). Either way we want addDoc behavior.
+            await saveEstimate({mode: 'create', silent: true});
 
             // Then generate PDF from currentEstimate (which has all edits)
             await generateProposal();
@@ -6783,6 +6789,7 @@ Only return JSON, no other text.`;
             // Mark as overridden so it doesn't get recalculated
             currentEstimate.priceOverride = true;
             updateDiscountPreview();
+            markUnsaved();
         };
 
         // === PROFIT TRACKING ===
@@ -7674,10 +7681,20 @@ Only return JSON, no other text.`;
             };
             
             try {
+                // Explicit mode wins; otherwise auto (edit mode with existing job → update, else create).
+                const forceUpdate = opts && opts.mode === 'update';
+                const forceCreate = opts && opts.mode === 'create';
                 const existingJob = window.editingJobId ? jobs.find(j => j.id === window.editingJobId && !j.deleted) : null;
-                if (window.isEditMode && existingJob) {
+                const shouldUpdate = !forceCreate && (forceUpdate || (window.isEditMode && existingJob));
+
+                if (forceUpdate && !existingJob) {
+                    if (!silent) alert('Cannot find the original proposal to update. It may have been deleted.');
+                    return;
+                }
+
+                if (shouldUpdate && existingJob) {
                     // Update-in-place: mutate the existing proposal. Preserve label/date/status/actuals
-                    // so post-completion data and sort order stay intact. Use "+ New" to create a new version.
+                    // so post-completion data and sort order stay intact.
                     const updateFields = {
                         customerId: job.customerId,
                         customerName: job.customerName,
@@ -7703,7 +7720,7 @@ Only return JSON, no other text.`;
                     };
                     await updateDoc(doc(db, 'jobs', window.editingJobId), updateFields);
                 } else {
-                    // Create new proposal (keeps version history for explicit "+ New")
+                    // Create new proposal. Auto-label was already computed above from live jobs[].
                     const newDoc = await addDoc(collection(db, 'jobs'), job);
                     window.editingJobId = newDoc.id;
                     window.isEditMode = true;
@@ -7717,6 +7734,11 @@ Only return JSON, no other text.`;
             } catch (error) {
                 if (!silent) alert('Error saving: ' + error.message);
             }
+        };
+
+        // "Save Changes to This Proposal" — update in place without PDF transition.
+        window.saveProposalChanges = async function() {
+            await saveEstimate({mode: 'update'});
         };
 
         // Format contract text for PDF
