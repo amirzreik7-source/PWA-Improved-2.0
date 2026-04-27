@@ -456,16 +456,25 @@
 
             <div class="room-card">
                 <h3>Materials</h3>
+                <p style="color:#666;font-size:12px;margin:2px 0 10px;">Track paint and non-paint separately. Estimates only cover paint, so blending the two skews the variance.</p>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                     <div class="form-group">
-                        <label>Material Cost ($)</label>
-                        <input type="number" id="actualMaterialCost" step="0.01" min="0" placeholder="0.00" oninput="calculateProfit()">
+                        <label>Paint Cost ($)</label>
+                        <input type="number" id="actualPaintCost" step="0.01" min="0" placeholder="0.00" oninput="calculateProfit()">
+                        <p style="font-size:11px;color:#666;margin:3px 0 0;">What NSP paid the paint store for paint specifically.</p>
                     </div>
                     <div class="form-group">
-                        <label>Gallons Used</label>
-                        <input type="number" id="actualGallons" step="0.5" min="0" placeholder="0">
+                        <label>Non-paint Materials ($)</label>
+                        <input type="number" id="actualNonPaintCost" step="0.01" min="0" placeholder="0.00" oninput="calculateProfit()">
+                        <p style="font-size:11px;color:#666;margin:3px 0 0;">Plastic, tape, drop cloths, sandpaper, etc. NSP-charged → deducted from crew payout.</p>
                     </div>
                 </div>
+                <div class="form-group" style="margin-top:10px;">
+                    <label>Gallons Used</label>
+                    <input type="number" id="actualGallons" step="0.5" min="0" placeholder="0">
+                </div>
+                <!-- Hidden legacy input kept for backwards compat (older code paths reference it) -->
+                <input type="hidden" id="actualMaterialCost" value="">
             </div>
 
             <div class="room-card" id="profitResultsCard" style="display:none;border-left:4px solid #10b981;">
@@ -2776,7 +2785,10 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                         <div style="font-size:14px;">
                             <div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Revenue:</span><strong>$${(a.revenue || 0).toFixed(2)}</strong></div>
                             <div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Crew Payout:</span><span>$${a.crewPayout.toFixed(2)}</span></div>
-                            <div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Materials:</span><span>$${a.materialCost.toFixed(2)}</span></div>
+                            ${(a.paintCost !== undefined || a.nonPaintCost !== undefined)
+                                ? `<div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Paint:</span><span>$${(a.paintCost || 0).toFixed(2)}</span></div>
+                                   ${(a.nonPaintCost || 0) > 0 ? `<div style="display:flex;justify-content:space-between;padding:3px 0;color:#9ca3af;font-size:12px;"><span>Non-paint (deducted from crew):</span><span>$${a.nonPaintCost.toFixed(2)}</span></div>` : ''}`
+                                : `<div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Materials:</span><span>$${(a.materialCost || 0).toFixed(2)}</span></div>`}
                             <div style="display:flex;justify-content:space-between;padding:3px 0;border-top:2px solid #333;margin-top:4px;padding-top:6px;font-weight:700;"><span>Net Profit:</span><span style="color:${profitColor};">$${a.netProfit.toFixed(2)}</span></div>
                             <div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Margin:</span><span style="color:${profitColor};font-weight:700;">${a.profitMargin.toFixed(1)}%</span></div>
                             <div style="display:flex;justify-content:space-between;padding:3px 0;"><span>$/hr per person:</span><span>$${(a.hourlyRate || 0).toFixed(2)}</span></div>
@@ -2799,12 +2811,22 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                         <button class="btn btn-info btn-small" onclick="openProjectActuals('${projectId}')" style="width:100%;margin-top:10px;">Edit Actuals</button>
                     </div>`;
 
-                    // Post-job analysis — uses target-based variance (subcontractor model).
+                    // Post-job analysis — payment-mode-aware target + paint-only material variance.
                     const laborShare = PRICING.CrewLaborShare ?? 0.45;
-                    const materialShare = PRICING.CrewMaterialShare ?? 0.10;
+                    const materialShareSetting = PRICING.CrewMaterialShare ?? 0.10;
+                    const acceptedCp = (project.crewProposals || []).find(cp => cp.accepted);
+                    const projPaymentMode = acceptedCp?.paymentMode || 'labor_only';
+                    const materialShare = projPaymentMode === 'labor_plus_materials' ? materialShareSetting : 0;
                     const targetPayout = (a.estLabor || 0) * laborShare + (a.estMaterial || 0) * materialShare;
                     const payoutVar = targetPayout > 0 ? ((a.crewPayout - targetPayout) / targetPayout) * 100 : 0;
-                    const matVar = a.estMaterial > 0 ? ((a.materialCost - a.estMaterial) / a.estMaterial * 100) : 0;
+                    // Paint variance — use paintCost if available (new records), fall back to
+                    // legacy materialCost (which was paint-only in spirit anyway).
+                    const actualPaint = (a.paintCost !== undefined ? a.paintCost : a.materialCost) || 0;
+                    const matVar = a.estMaterial > 0 ? ((actualPaint - a.estMaterial) / a.estMaterial * 100) : 0;
+                    const hourlyRate = a.hourlyRate || 0;
+                    const hourlyHealthy = hourlyRate >= 27;
+                    const hourlyTight = hourlyRate >= 22 && hourlyRate < 27;
+                    const hourlyLow = hourlyRate > 0 && hourlyRate < 22;
                     const targetMargin = 40;
                     const idealPrice = a.totalCosts > 0 ? Math.round(a.totalCosts / (1 - targetMargin/100)) : 0;
                     const idealMargin = idealPrice > 0 ? ((idealPrice - a.totalCosts) / idealPrice * 100) : 0;
@@ -2812,30 +2834,61 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                     // Pattern detection — across completed jobs of same type, how often did we blow past target?
                     const sameType = projects.filter(pp => pp.status === 'Complete' && pp.actuals?.crewPayout > 0 && (projectProposals[0]?.jobType || '') === (jobs.find(j => j.id === pp.landedProposalId)?.jobType || ''));
                     const sameTypeVariances = sameType.map(pp => {
-                        const pt = (pp.actuals.estLabor || 0) * laborShare + (pp.actuals.estMaterial || 0) * materialShare;
+                        const ppCp = (pp.crewProposals || []).find(cp => cp.accepted);
+                        const ppMode = ppCp?.paymentMode || 'labor_only';
+                        const ppMatShare = ppMode === 'labor_plus_materials' ? materialShareSetting : 0;
+                        const pt = (pp.actuals.estLabor || 0) * laborShare + (pp.actuals.estMaterial || 0) * ppMatShare;
                         return pt > 0 ? ((pp.actuals.crewPayout - pt) / pt) * 100 : null;
                     }).filter(v => v !== null);
                     const overCount = sameTypeVariances.filter(v => v > 10).length;
 
+                    // Show the analysis card if hourly is concerning OR pricing margin is low OR
+                    // paint variance is significant. Target variance alone (without hourly drift)
+                    // doesn't trigger — operator's rule: hourly is the truer signal.
+                    const showAnalysis = hourlyTight || hourlyLow || a.profitMargin < targetMargin || Math.abs(matVar) > 15;
                     let analysisHTML = '';
-                    if (Math.abs(payoutVar) > 10 || a.profitMargin < targetMargin || Math.abs(matVar) > 15) {
+                    if (showAnalysis) {
                         analysisHTML += `<div class="room-card" style="border-left:4px solid #3b82f6;">
                             <h3>Job Analysis</h3>`;
 
-                        if (Math.abs(payoutVar) > 10) {
+                        // Hourly callout always first when hourly is sub-healthy.
+                        if (hourlyLow) {
+                            analysisHTML += `<div style="background:#fee2e2;padding:10px;border-radius:6px;margin-bottom:8px;font-size:13px;">
+                                <strong>Crew earned $${hourlyRate.toFixed(2)}/hr</strong> — below the $22 retention floor.
+                                Hourly is the binding signal here. Either the lump must rise or the job must move faster
+                                for this to be sustainable.
+                            </div>`;
+                        } else if (hourlyTight) {
+                            analysisHTML += `<div style="background:#fef3c7;padding:10px;border-radius:6px;margin-bottom:8px;font-size:13px;">
+                                <strong>Crew earned $${hourlyRate.toFixed(2)}/hr</strong> — borderline ($22-$27 zone).
+                                On its own this is workable, but if jobs in this category routinely produce this rate
+                                you'll hit retention drift.
+                            </div>`;
+                        }
+
+                        // Target variance is shown only if it's big AND hourly didn't already flag the job.
+                        // If hourly is healthy and target variance is high, the issue is pricing/structure, not crew pay.
+                        if (Math.abs(payoutVar) > 10 && !hourlyLow) {
                             const direction = payoutVar > 0 ? 'over' : 'under';
                             const dollarImpact = targetPayout - a.crewPayout;
                             const dollarFrame = dollarImpact >= 0 ? `NSP kept $${dollarImpact.toFixed(0)} vs target` : `NSP gave up $${Math.abs(dollarImpact).toFixed(0)} vs target`;
-                            analysisHTML += `<div style="background:#fef3c7;padding:10px;border-radius:6px;margin-bottom:8px;font-size:13px;">
-                                <strong>Crew payout was ${Math.abs(payoutVar).toFixed(0)}% ${direction} your target</strong> (${(laborShare*100).toFixed(0)}% labor + ${(materialShare*100).toFixed(0)}% materials = $${targetPayout.toFixed(0)}). ${dollarFrame}.
+                            const modeNote = projPaymentMode === 'labor_plus_materials'
+                                ? `${(laborShare*100).toFixed(0)}% labor + ${(materialShare*100).toFixed(0)}% materials = $${targetPayout.toFixed(0)} (Labor + Materials)`
+                                : `${(laborShare*100).toFixed(0)}% labor = $${targetPayout.toFixed(0)} (Labor Only — no material share)`;
+                            analysisHTML += `<div style="background:#eff6ff;padding:10px;border-radius:6px;margin-bottom:8px;font-size:13px;">
+                                <strong>Crew payout was ${Math.abs(payoutVar).toFixed(0)}% ${direction} target</strong> (${modeNote}). ${dollarFrame}.
+                                ${hourlyHealthy ? '<br><span style="color:#6b7280">Hourly is healthy — variance reflects pricing/structure, not crew pay.</span>' : ''}
                                 ${sameTypeVariances.length > 2 ? `<br>Across ${sameTypeVariances.length} similar jobs, ${overCount} ran over target.` : ''}
                             </div>`;
                         }
 
                         if (Math.abs(matVar) > 15 && a.estMaterial > 0) {
+                            const matModeNote = projPaymentMode === 'labor_plus_materials'
+                                ? 'Crew bought paint on NSP\'s account; receipt deducted from payout. Variance is informational here.'
+                                : 'Real NSP cost hit in Labor Only mode — crew may be overconsuming paint. Consider switching this crew to Labor + Materials next time to align incentives.';
                             analysisHTML += `<div style="background:#fff7ed;padding:10px;border-radius:6px;margin-bottom:8px;font-size:13px;">
-                                <strong>Materials ran ${Math.abs(matVar).toFixed(0)}% ${matVar > 0 ? 'over' : 'under'} estimate</strong> ($${a.estMaterial.toFixed(0)} → $${a.materialCost.toFixed(0)}).
-                                ${matVar > 15 ? '<br>Real NSP cost hit in labor-only mode — crew may be overconsuming paint. Consider switching this crew to Labor+Materials next time to align incentives.' : ''}
+                                <strong>Paint cost ran ${Math.abs(matVar).toFixed(0)}% ${matVar > 0 ? 'over' : 'under'} estimate</strong> ($${a.estMaterial.toFixed(0)} → $${actualPaint.toFixed(0)}).
+                                ${matVar > 15 ? '<br>' + matModeNote : ''}
                             </div>`;
                         }
 
@@ -3737,7 +3790,10 @@ Based on the journal entries, calculate and return this JSON (no other text):
                     if (result.crewSize) document.getElementById('actualCrewCount').value = Math.round(result.crewSize);
                     if (result.totalDays) document.getElementById('actualDays').value = result.totalDays;
                     if (result.crewPayout) document.getElementById('actualCrewPayout').value = result.crewPayout;
-                    if (result.materialCost) document.getElementById('actualMaterialCost').value = result.materialCost;
+                    // AI extracts a single `materialCost` from the journal — usually impossible
+                    // to know paint vs non-paint split from natural-language entries. Pre-fill
+                    // it as paint cost (conservative); operator splits out non-paint if needed.
+                    if (result.materialCost) document.getElementById('actualPaintCost').value = result.materialCost;
                     if (result.gallonsUsed) document.getElementById('actualGallons').value = result.gallonsUsed;
                     if (result.startDate) document.getElementById('actualStartDate').value = result.startDate;
                     if (result.endDate) document.getElementById('actualEndDate').value = result.endDate;
@@ -7058,6 +7114,17 @@ Only return JSON, no other text.`;
                 document.getElementById('actualStartDate').value = existingActuals.startDate || '';
                 document.getElementById('actualEndDate').value = existingActuals.endDate || '';
                 document.getElementById('actualCrewPayout').value = existingActuals.crewPayout || '';
+                // Material costs: prefer the new split fields. If only the legacy
+                // `materialCost` exists (records from before the split), treat the
+                // entire amount as paint and leave non-paint at 0 — that's the
+                // safest mapping since paint is the field that drives variance.
+                if (existingActuals.paintCost !== undefined || existingActuals.nonPaintCost !== undefined) {
+                    document.getElementById('actualPaintCost').value = existingActuals.paintCost || '';
+                    document.getElementById('actualNonPaintCost').value = existingActuals.nonPaintCost || '';
+                } else {
+                    document.getElementById('actualPaintCost').value = existingActuals.materialCost || '';
+                    document.getElementById('actualNonPaintCost').value = '';
+                }
                 document.getElementById('actualMaterialCost').value = existingActuals.materialCost || '';
                 document.getElementById('actualGallons').value = existingActuals.gallonsUsed || '';
                 document.getElementById('actualDifficulty').value = existingActuals.difficulty || 5;
@@ -7083,7 +7150,7 @@ Only return JSON, no other text.`;
             } else {
                 window._completionPhotos = { before: [], after: [] };
                 displayCompletionPhotos();
-                ['actualCrewPayout','actualMaterialCost','actualDays','actualGallons','actualStartDate','actualEndDate','actualNotesGood','actualNotesBad','actualNotesLearning'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+                ['actualCrewPayout','actualMaterialCost','actualPaintCost','actualNonPaintCost','actualDays','actualGallons','actualStartDate','actualEndDate','actualNotesGood','actualNotesBad','actualNotesLearning'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
                 document.getElementById('actualDifficulty').value = 5;
                 document.getElementById('diffLabel').textContent = '5';
                 window._actualsDailyLog = [];
@@ -7132,7 +7199,7 @@ Only return JSON, no other text.`;
                 window._actualsLinkedProjectIds = [];
                 const revEl = document.getElementById('actualsRevenueBreakdown');
                 if (revEl) revEl.innerHTML = `<div style="display:flex;justify-content:space-between;"><span>Customer Paid</span><strong>$${window._actualsRevenue.toFixed(2)}</strong></div>`;
-                ['actualCrewLeader','actualCrewPayout','actualMaterialCost','actualDays','actualGallons','actualStartDate','actualEndDate','actualNotesGood','actualNotesBad','actualNotesLearning'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+                ['actualCrewLeader','actualCrewPayout','actualMaterialCost','actualPaintCost','actualNonPaintCost','actualDays','actualGallons','actualStartDate','actualEndDate','actualNotesGood','actualNotesBad','actualNotesLearning'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
                 document.getElementById('actualCrewCount').value = '';
                 document.getElementById('actualHoursPerDay').value = 8;
                 document.getElementById('actualDifficulty').value = 5;
@@ -7150,7 +7217,19 @@ Only return JSON, no other text.`;
 
         window.calculateProfit = function() {
             const crewPayout = parseFloat(document.getElementById('actualCrewPayout').value) || 0;
-            const materialCost = parseFloat(document.getElementById('actualMaterialCost').value) || 0;
+            // Material cost is now split into paint vs non-paint:
+            //   - Paint = NSP's true material expense; what variance compares against estimate
+            //   - Non-paint = supplies/etc charged to NSP at the paint store, deducted from
+            //     crew payout (crew is responsible for those, NSP is just fronting the account)
+            // Legacy actuals records have only `materialCost`; loader populates paintCost from it.
+            const paintCostEl = document.getElementById('actualPaintCost');
+            const nonPaintCostEl = document.getElementById('actualNonPaintCost');
+            const paintCost = paintCostEl ? (parseFloat(paintCostEl.value) || 0) : 0;
+            const nonPaintCost = nonPaintCostEl ? (parseFloat(nonPaintCostEl.value) || 0) : 0;
+            const materialCost = paintCost + nonPaintCost;
+            // Keep hidden legacy field in sync for any downstream code still reading it.
+            const legacyMatEl = document.getElementById('actualMaterialCost');
+            if (legacyMatEl) legacyMatEl.value = materialCost || '';
             const hrsPerDay = parseFloat(document.getElementById('actualHoursPerDay').value) || 8;
 
             // Derive days and man-days from the daily log. Fall back to legacy hidden fields
@@ -7190,10 +7269,13 @@ Only return JSON, no other text.`;
             if (profitPct >= 40) profitColor = '#10b981';
             else if (profitPct >= 25) profitColor = '#f59e0b';
 
-            // Crew effective hourly: colour-coded against subcontractor health range.
-            // <$20/hr = retention risk; $20-25 = tight but workable; $25+/hr = healthy.
-            const hourlyColor = hourlyRate >= 25 ? '#10b981' : hourlyRate >= 20 ? '#f59e0b' : '#ef4444';
-            const hourlyLabel = hourlyRate >= 25 ? '🟢 Healthy' : hourlyRate >= 20 ? '🟡 Tight' : '🔴 Retention risk';
+            // Crew effective hourly: the PRIMARY signal for crew satisfaction. Operator's
+            // rule of thumb: ~$30/hr is good, "couple bucks below is fine". Bands reflect that:
+            //   ≥ $27/hr → 🟢 Healthy   (operator's "$30 ± $3" comfort zone)
+            //   $22-$27 → 🟡 Tight      (workable but watch retention if it drifts)
+            //   < $22/hr → 🔴 Retention risk
+            const hourlyColor = hourlyRate >= 27 ? '#10b981' : hourlyRate >= 22 ? '#f59e0b' : '#ef4444';
+            const hourlyLabel = hourlyRate >= 27 ? '🟢 Healthy' : hourlyRate >= 22 ? '🟡 Tight' : '🔴 Retention risk';
             const hourlyEl = document.getElementById('profitHourlyRate');
             hourlyEl.innerHTML = `<span style="color:${hourlyColor};font-weight:700;">$${hourlyRate.toFixed(2)}/hr</span> <span style="font-size:11px;color:${hourlyColor};">${hourlyRate > 0 ? hourlyLabel : ''}</span>`;
             document.getElementById('profitPerDay').textContent = '$' + profitPerDay.toFixed(2);
@@ -7207,46 +7289,84 @@ Only return JSON, no other text.`;
             document.getElementById('profitResultsCard').style.display = 'block';
 
             // === CREW PAY vs TARGET (subcontractor-model variance) ===
-            // Replaces the old "labor was X% under/over estimate" framing which compared
-            // subcontractor payouts against customer billing rate — structurally misleading.
-            // The new target = laborShare × proposal.totalLabor + materialShare × proposal.totalMaterials.
+            // Two important rules baked in here:
+            //
+            // 1. The 10% material share only applies if crew is contractually buying
+            //    materials (Labor + Materials mode on the accepted crew proposal). In
+            //    Labor Only mode, NSP buys paint directly — crew isn't handling the
+            //    purchase, so they shouldn't get the 10% material share. Including it
+            //    inflates the target and creates a false "underpaid" signal.
+            //
+            // 2. Hourly rate is the PRIMARY signal for crew satisfaction. Target is a
+            //    pricing/structure signal. If hourly is healthy ($27+), small variance
+            //    vs target is informational. If hourly is low, variance just adds context
+            //    to a problem that hourly already flagged.
             const estLabor = window._actualsEstLabor || 0;
             const estMaterial = window._actualsEstMaterial || 0;
             const laborShare = PRICING.CrewLaborShare ?? 0.45;
-            const materialShare = PRICING.CrewMaterialShare ?? 0.10;
+            const materialShareSetting = PRICING.CrewMaterialShare ?? 0.10;
+
+            // Read the accepted crew proposal's payment mode. Default labor_only when
+            // no proposal exists (Quick Project flow) or when no proposal is accepted.
+            const projectForMode = window._actualsProjectId
+                ? (projects || []).find(p => p.id === window._actualsProjectId) : null;
+            const acceptedCp = projectForMode?.crewProposals?.find(cp => cp.accepted);
+            const paymentMode = acceptedCp?.paymentMode || 'labor_only';
+            const materialShare = paymentMode === 'labor_plus_materials' ? materialShareSetting : 0;
             const targetCrewPayout = (estLabor * laborShare) + (estMaterial * materialShare);
 
             if (targetCrewPayout > 0 && crewPayout > 0) {
                 const variance = ((crewPayout - targetCrewPayout) / targetCrewPayout) * 100;
                 const dollarImpact = targetCrewPayout - crewPayout; // +ve = NSP saved vs target; -ve = NSP paid more
 
-                // Five-band color scheme — richer signal than simple green/yellow/red.
-                let band, bandColor, bandLabel, interpretation;
-                if (variance > 15) {
-                    band = 'deep-over'; bandColor = '#ef4444'; bandLabel = '🔴 Deep over target';
-                    interpretation = 'Job overran or was underbid. Check execution (did days/man-count exceed plan?) or review estimate — this is your loudest pricing signal.';
-                } else if (variance > 5) {
-                    band = 'over'; bandColor = '#f59e0b'; bandLabel = '🟡 Over target';
-                    interpretation = 'NSP margin tightened. If this repeats, labor/material spec on the proposal is likely too low.';
-                } else if (variance >= -5) {
-                    band = 'on-target'; bandColor = '#10b981'; bandLabel = '🟢 On target';
-                    interpretation = 'Model working as designed. Your pricing, crew negotiation, and execution are in sync.';
-                } else if (variance >= -15) {
-                    band = 'under'; bandColor = '#f59e0b'; bandLabel = '🟡 Under target';
-                    interpretation = 'NSP margin looks strong, but watch for drift — if crews average well under, retention gets risky.';
+                // Variance bands (for the % chip color only — interpretation is hourly-driven)
+                let varColor;
+                if (Math.abs(variance) <= 5) varColor = '#10b981';
+                else if (Math.abs(variance) <= 15) varColor = '#f59e0b';
+                else varColor = '#ef4444';
+
+                // ── Hourly-first interpretation ─────────────────────────────────
+                // Two-part sentence:
+                //   Primary: how is the crew's hourly looking?
+                //   Secondary: what does the target variance tell us in dollar terms?
+                let primary;
+                if (hourlyRate >= 27) {
+                    primary = `Crew earning $${hourlyRate.toFixed(2)}/hr — comfortably above the $27 healthy floor.`;
+                } else if (hourlyRate >= 22) {
+                    primary = `Crew at $${hourlyRate.toFixed(2)}/hr — borderline. If jobs in this category routinely produce $22-27/hr, retention drifts.`;
+                } else if (hourlyRate > 0) {
+                    primary = `Crew at $${hourlyRate.toFixed(2)}/hr — below the $22 retention floor. Hourly is the binding signal here.`;
                 } else {
-                    band = 'deep-under'; bandColor = '#ef4444'; bandLabel = '🔴 Deep under target';
-                    interpretation = 'Either hard negotiation or proposal labor/materials were spec\'d too high. Crew may feel squeezed — check their effective hourly.';
+                    primary = `Hourly rate not computed yet — daily log needs entries.`;
                 }
 
-                // Pull prior jobs' variances for trend context (last 3 completed with actuals, excluding this project).
+                let secondary;
+                if (Math.abs(variance) <= 5) {
+                    secondary = `Right on target ($${crewPayout.toFixed(0)} actual vs $${targetCrewPayout.toFixed(0)} target).`;
+                } else if (variance > 15) {
+                    secondary = `Significantly over target — NSP gave up $${Math.abs(dollarImpact).toFixed(0)}. Investigate execution (job ran long?) or pricing (estimate too low?).`;
+                } else if (variance > 5) {
+                    secondary = `Over target by ${variance.toFixed(0)}% — NSP gave up $${Math.abs(dollarImpact).toFixed(0)}.`;
+                } else if (variance < -15) {
+                    secondary = `Significantly under target — NSP kept $${dollarImpact.toFixed(0)}. Pricing may be conservative on this job type.`;
+                } else {
+                    secondary = `Under target by ${Math.abs(variance).toFixed(0)}% — NSP kept $${dollarImpact.toFixed(0)}.`;
+                }
+                const interpretation = `${primary} ${secondary}`;
+
+                // Pull prior jobs' variances for trend context. We use the SAME paymentMode
+                // logic as the current job for each prior — so historical pre-paymentMode
+                // records get treated as labor_only by default, which matches their state.
                 const thisProjectId = window._actualsProjectId;
                 const priorVariances = (projects || [])
                     .filter(p => p.status === 'Complete' && p.id !== thisProjectId && p.actuals?.crewPayout > 0 && p.actuals?.completedAt)
                     .sort((a, b) => new Date(b.actuals.completedAt) - new Date(a.actuals.completedAt))
                     .slice(0, 3)
                     .map(p => {
-                        const pt = ((p.actuals.estLabor || 0) * laborShare) + ((p.actuals.estMaterial || 0) * materialShare);
+                        const pAcceptedCp = p.crewProposals?.find(cp => cp.accepted);
+                        const pMode = pAcceptedCp?.paymentMode || 'labor_only';
+                        const pMatShare = pMode === 'labor_plus_materials' ? materialShareSetting : 0;
+                        const pt = ((p.actuals.estLabor || 0) * laborShare) + ((p.actuals.estMaterial || 0) * pMatShare);
                         return pt > 0 ? ((p.actuals.crewPayout - pt) / pt) * 100 : null;
                     })
                     .filter(v => v !== null);
@@ -7265,38 +7385,64 @@ Only return JSON, no other text.`;
                     </div>`;
                 }
 
-                // Material variance stays — still genuinely useful (especially in labor-only mode).
-                const matVar = estMaterial > 0 ? ((materialCost - estMaterial) / estMaterial * 100) : 0;
+                // Material variance now compares estimated material against PAINT cost only.
+                // The proposal's `totalMaterials` is paint-only (the estimator only models paint),
+                // so comparing it against blended paint+non-paint was producing false overrun signals.
+                // Non-paint cost is informational and shown as a footnote; it's recovered from crew.
+                const matVar = estMaterial > 0 ? ((paintCost - estMaterial) / estMaterial * 100) : 0;
                 const matColor = Math.abs(matVar) > 20 ? '#ef4444' : Math.abs(matVar) > 10 ? '#f59e0b' : '#10b981';
                 const matLabel = matVar > 10 ? '⬆ OVER' : matVar < -10 ? '⬇ UNDER' : '✓ OK';
+                const matNote = paymentMode === 'labor_plus_materials'
+                    ? `Crew bought paint on NSP's account; receipt deducted from payout. Variance is informational here.`
+                    : `Labor Only mode — paint is NSP's expense. An overrun here is a real margin hit.`;
+                const nonPaintFootnote = nonPaintCost > 0
+                    ? `<div style="color:#9ca3af;font-size:11px;margin-top:6px;border-top:1px dashed #e5e7eb;padding-top:4px;">Non-paint materials: $${nonPaintCost.toFixed(0)} — deducted from crew payout (not part of paint variance).</div>`
+                    : '';
                 const matHTML = estMaterial > 0 ? `<div style="margin-top:10px;padding:8px 10px;background:#f9fafb;border-radius:6px;font-size:12px;">
-                    <strong>Materials:</strong> Est. $${estMaterial.toFixed(0)} → Actual $${materialCost.toFixed(0)}
+                    <strong>Paint:</strong> Est. $${estMaterial.toFixed(0)} → Actual $${paintCost.toFixed(0)}
                     <span style="color:${matColor};font-weight:700;margin-left:6px;">${matVar.toFixed(0)}% ${matLabel}</span>
-                    <div style="color:#666;font-size:11px;margin-top:2px;">Still useful — an overrun here is a real NSP cost hit in labor-only mode.</div>
+                    <div style="color:#666;font-size:11px;margin-top:2px;">${matNote}</div>
+                    ${nonPaintFootnote}
                 </div>` : '';
 
+                // Outer card border = HOURLY color. Hourly is the primary signal; variance
+                // gets its own colored chip but doesn't dominate the card framing.
                 document.getElementById('varianceContent').innerHTML = `
-                    <div style="padding:12px;background:${bandColor}15;border:2px solid ${bandColor};border-radius:10px;">
-                        <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px;">
-                            <strong style="font-size:15px;">Crew Pay vs Target</strong>
-                            <span style="color:${bandColor};font-weight:700;font-size:13px;">${bandLabel}</span>
+                    <div style="padding:12px;background:${hourlyColor}15;border:2px solid ${hourlyColor};border-radius:10px;">
+                        <!-- Headline: hourly rate as the primary signal -->
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:6px;">
+                            <div>
+                                <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:0.5px;">Crew Effective Hourly</div>
+                                <strong style="font-size:22px;color:${hourlyColor};">$${hourlyRate.toFixed(2)}/hr</strong>
+                            </div>
+                            <span style="color:${hourlyColor};font-weight:700;font-size:13px;">${hourlyLabel}</span>
                         </div>
-                        <div style="font-size:12px;color:#666;margin-top:6px;line-height:1.5;">
-                            Target = <strong>${(laborShare*100).toFixed(0)}%</strong> × $${estLabor.toFixed(0)} labor
-                            + <strong>${(materialShare*100).toFixed(0)}%</strong> × $${estMaterial.toFixed(0)} materials
-                            = <strong style="color:#1e3a8a;">$${targetCrewPayout.toFixed(0)}</strong>
+
+                        <!-- Target detail (secondary) -->
+                        <div style="margin-top:14px;padding-top:10px;border-top:1px solid #e5e7eb;">
+                            <div style="display:flex;justify-content:space-between;align-items:baseline;">
+                                <strong style="font-size:13px;">Crew Pay vs Target</strong>
+                                <span style="font-size:11px;color:#666;">${paymentMode === 'labor_plus_materials' ? 'Labor + Materials' : 'Labor Only'}</span>
+                            </div>
+                            <div style="font-size:12px;color:#666;margin-top:4px;line-height:1.5;">
+                                Target = <strong>${(laborShare*100).toFixed(0)}%</strong> × $${estLabor.toFixed(0)} labor
+                                ${materialShare > 0
+                                    ? `+ <strong>${(materialShare*100).toFixed(0)}%</strong> × $${estMaterial.toFixed(0)} materials`
+                                    : '<span style="color:#9ca3af;">(no material share — Labor Only mode)</span>'}
+                                = <strong style="color:#1e3a8a;">$${targetCrewPayout.toFixed(0)}</strong>
+                            </div>
+                            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px;font-size:13px;">
+                                <div><div style="color:#666;font-size:11px;">Target</div><strong>$${targetCrewPayout.toFixed(0)}</strong></div>
+                                <div><div style="color:#666;font-size:11px;">Actual</div><strong>$${crewPayout.toFixed(0)}</strong></div>
+                                <div><div style="color:#666;font-size:11px;">Variance</div><strong style="color:${varColor};">${variance >= 0 ? '+' : ''}${variance.toFixed(1)}%</strong></div>
+                            </div>
                         </div>
-                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px;font-size:13px;">
-                            <div><div style="color:#666;font-size:11px;">Target</div><strong>$${targetCrewPayout.toFixed(0)}</strong></div>
-                            <div><div style="color:#666;font-size:11px;">Actual</div><strong>$${crewPayout.toFixed(0)}</strong></div>
-                            <div><div style="color:#666;font-size:11px;">Variance</div><strong style="color:${bandColor};">${variance >= 0 ? '+' : ''}${variance.toFixed(1)}%</strong></div>
+
+                        <!-- Interpretation (hourly-first prose) -->
+                        <div style="margin-top:10px;padding:8px;background:#fff;border-radius:6px;font-size:12px;line-height:1.5;color:#374151;">
+                            ${interpretation}
                         </div>
-                        <div style="margin-top:8px;padding:8px;background:#fff;border-radius:6px;font-size:12px;">
-                            <strong style="color:${dollarImpact >= 0 ? '#10b981' : '#ef4444'};">
-                                ${dollarImpact >= 0 ? `NSP kept $${dollarImpact.toFixed(0)} vs target` : `NSP gave up $${Math.abs(dollarImpact).toFixed(0)} vs target`}
-                            </strong>
-                            <div style="color:#555;margin-top:4px;line-height:1.4;">${interpretation}</div>
-                        </div>
+
                         ${trendHTML}
                     </div>
                     ${matHTML}
@@ -7311,7 +7457,12 @@ Only return JSON, no other text.`;
             const markComplete = opts && opts.markComplete === true;
             const hrsPerDay = parseFloat(document.getElementById('actualHoursPerDay').value) || 8;
             const crewPayout = parseFloat(document.getElementById('actualCrewPayout').value) || 0;
-            const materialCost = parseFloat(document.getElementById('actualMaterialCost').value) || 0;
+            // Material costs split into paint vs non-paint. Total = paint + non-paint
+            // is preserved in the legacy `materialCost` field for downstream tooling
+            // that hasn't been migrated yet (BI dashboard, AI close-out, etc.).
+            const paintCost = parseFloat(document.getElementById('actualPaintCost')?.value) || 0;
+            const nonPaintCost = parseFloat(document.getElementById('actualNonPaintCost')?.value) || 0;
+            const materialCost = paintCost + nonPaintCost;
             const revenue = window._actualsRevenue || 0;
 
             // Derive days / crewCount / totalManDays from the daily log (source of truth).
@@ -7330,7 +7481,10 @@ Only return JSON, no other text.`;
                 dailyLog,
                 startDate: document.getElementById('actualStartDate').value,
                 endDate: document.getElementById('actualEndDate').value,
-                days, crewPayout, materialCost,
+                days, crewPayout,
+                paintCost,           // NSP's true paint expense (drives material variance)
+                nonPaintCost,        // Charged to NSP at the paint store, deducted from crew
+                materialCost,        // = paintCost + nonPaintCost (legacy compatibility)
                 gallonsUsed: parseFloat(document.getElementById('actualGallons').value) || 0,
                 difficulty: parseInt(document.getElementById('actualDifficulty').value) || 5,
                 notesGood: document.getElementById('actualNotesGood')?.value?.trim() || '',
