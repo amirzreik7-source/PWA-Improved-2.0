@@ -1336,7 +1336,7 @@
         // Import Firebase modules
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
-        import { getFirestore, collection, addDoc, getDocs, getDoc, doc, updateDoc, deleteDoc, query, where, orderBy, enableIndexedDbPersistence, serverTimestamp, runTransaction } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        import { getFirestore, collection, addDoc, getDocs, getDoc, doc, updateDoc, deleteDoc, deleteField, query, where, orderBy, enableIndexedDbPersistence, serverTimestamp, runTransaction } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
         import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js';
 
         // Firebase configuration
@@ -2449,6 +2449,38 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             } catch(e) { alert('Error: ' + e.message); }
         };
 
+        // Clears actualsRef on a project so it stops being treated as a linked subsidiary.
+        // Used to recover from circular subsidiary references (when both linked projects
+        // have actualsRef pointing at each other and both disappear from the dashboard).
+        window.unlinkSubsidiary = async function(projectId) {
+            const project = projects.find(p => p.id === projectId);
+            if (!project) return;
+            if (!project.actualsRef) {
+                alert('This project is not currently a linked subsidiary.');
+                return;
+            }
+            const primary = projects.find(p => p.id === project.actualsRef);
+            const reciprocal = primary && primary.actualsRef === projectId;
+            const msg = reciprocal
+                ? `Circular subsidiary reference detected.\n\nThis will clear actualsRef on this project, making it the primary. The other project (${primary.jobNumber}) will remain a subsidiary of this one.\n\nProceed?`
+                : `Clear actualsRef on this project so it becomes a primary again? Note: ${primary?.jobNumber || 'the other project'} will no longer have a primary attached — you may need to re-link.`;
+            if (!confirm(msg)) return;
+            try {
+                // Use deleteField so the field is fully removed (matches the pattern
+                // we use when clearing qb_invoice_id elsewhere — Firestore filters that
+                // check `!p.actualsRef` work with both null and missing fields, but a
+                // missing field is cleanest).
+                await updateDoc(doc(db, 'projects', projectId), {
+                    actualsRef: deleteField(),
+                });
+                if (project) delete project.actualsRef;
+                alert('Subsidiary status cleared. This project is now a primary and will appear on the dashboard.');
+                viewProjectDetail(projectId);
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+        };
+
         window.unlandProposal = async function(projectId) {
             const project = projects.find(p => p.id === projectId);
             if (!project) return;
@@ -2526,6 +2558,33 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                     let linkHTML = `<div class="room-card">
                         <h3>Linked Projects</h3>
                         <p style="color:#666;font-size:12px;margin-bottom:8px;">Link projects done together for combined crew proposals & actuals</p>`;
+
+                    // ── Subsidiary status callout ──
+                    // When a project has actualsRef set, it's marked as a "linked subsidiary"
+                    // — i.e. the dashboard / agent treats another project as the primary that
+                    // owns the actuals. If actualsRef is set BACK at this project (or at a
+                    // primary that itself has actualsRef set), it's a circular ref and the
+                    // project disappears from the dashboard. Surface this here with a one-tap
+                    // fix.
+                    if (project.actualsRef) {
+                        const primary = projects.find(p => p.id === project.actualsRef);
+                        const primaryLabel = primary
+                            ? `${primary.jobNumber || '(no #)'} — ${primary.projectName || '(no name)'}`
+                            : `id=${project.actualsRef} (not found)`;
+                        const reciprocal = primary && primary.actualsRef === projectId;
+                        linkHTML += `<div style="padding:10px;background:${reciprocal ? '#fee2e2' : '#fef3c7'};border:1px solid ${reciprocal ? '#fca5a5' : '#fcd34d'};border-radius:8px;margin-bottom:8px;font-size:13px;">
+                            <div style="font-weight:600;color:${reciprocal ? '#991b1b' : '#92400e'};margin-bottom:4px;">
+                                ${reciprocal ? '🔴 Circular subsidiary reference' : 'ℹ️ Linked subsidiary'}
+                            </div>
+                            <div style="color:#374151;line-height:1.5;">
+                                This project is marked as a subsidiary of <strong>${primaryLabel}</strong>.
+                                ${reciprocal
+                                    ? ` That project also lists THIS one as its primary — circular reference. Both are excluded from the dashboard. Click "Unlink subsidiary" on whichever project you want to be the primary.`
+                                    : ' The primary project owns the actuals; this one is excluded from dashboards. Open the primary to manage actuals.'}
+                            </div>
+                            <button class="btn btn-info btn-small" onclick="unlinkSubsidiary('${projectId}')" style="margin-top:8px;width:100%;">↩ Unlink subsidiary (make this project primary)</button>
+                        </div>`;
+                    }
 
                     if (linkedList.length > 0) {
                         linkHTML += linkedList.map(lp => `
@@ -7625,6 +7684,26 @@ Only return JSON, no other text.`;
 
         window.saveProfitActuals = async function(opts) {
             const markComplete = opts && opts.markComplete === true;
+
+            // Prevent circular subsidiary references: if this project is itself a
+            // linked subsidiary (actualsRef is set), Save & Complete would stamp
+            // the primary as a subsidiary of THIS one, creating a loop. Redirect
+            // the operator to the primary instead. (Draft saves are still fine —
+            // they don't touch actualsRef on linked projects.)
+            const currentProjectId = window._actualsProjectId;
+            const currentProject = currentProjectId
+                ? (projects || []).find(p => p.id === currentProjectId) : null;
+            if (markComplete && currentProject?.actualsRef) {
+                const primary = (projects || []).find(p => p.id === currentProject.actualsRef);
+                const primaryLabel = primary ? `${primary.jobNumber} — ${primary.projectName}` : 'the primary';
+                alert(
+                    `This project is a linked subsidiary of ${primaryLabel}.\n\n` +
+                    `Save & Complete should be run from the primary, not the subsidiary — ` +
+                    `otherwise the relationship becomes circular and both projects disappear from the dashboard.\n\n` +
+                    `Open the primary project and run Save & Complete there.`
+                );
+                return;
+            }
             const hrsPerDay = parseFloat(document.getElementById('actualHoursPerDay').value) || 8;
             // crewPayout is now the GROSS lump. crewNetTake (computed) is what crew
             // actually receives after deductions.
