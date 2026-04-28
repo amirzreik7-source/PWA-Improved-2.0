@@ -8023,89 +8023,489 @@ Only return JSON, no other text.`;
         }
 
         // === BUSINESS INTELLIGENCE DASHBOARD ===
-        window.showDashboard = function() {
-            const completed = jobs.filter(j => j.actuals && j.actuals.completedAt);
-            const content = document.getElementById('dashboardContent');
+        //
+        // Design principles:
+        //   1. Clean source of truth: a project counts as "completed" if its
+        //      CURRENT status === 'Complete' AND it has actuals AND it's not
+        //      deleted AND it's not a linked subsidiary. So a job that was
+        //      Complete then moved to Dead does NOT count anymore — fixes the
+        //      "shows 7 but only 3 done" bug.
+        //   2. Hourly rate is the PRIMARY signal for crew satisfaction.
+        //      Target variance is the secondary signal for pricing structure.
+        //      Margin is for NSP profitability. Each gets its own headline.
+        //   3. Replace "Labor accuracy" (which was 100 - |labor variance|, where
+        //      labor variance was structurally misleading in subcontractor mode)
+        //      with the target-based variance we use everywhere else.
+        //   4. Material variance uses paintCost only (paint is what NSP estimates).
+        //   5. Surface insights, not just numbers. Rules engine generates
+        //      plain-English action items so you don't have to hunt for them.
+        //   6. Job Quality Score: single 0-100 number per job combining hourly,
+        //      margin, and variance. Lets you scan recent jobs at a glance.
 
-            if (completed.length === 0) {
-                content.innerHTML = '<div style="text-align:center;padding:40px;color:#999;"><p style="font-size:48px;">📊</p><p>No completed jobs yet.</p><p style="font-size:13px;">Complete jobs and log actuals to see your business intelligence here.</p></div>';
+        // ── Helpers ────────────────────────────────────────────────────
+
+        // Computes 0-100 score from the three signals that matter:
+        //   40 pts hourly (≥$30=full, $20=0, linear)
+        //   30 pts margin (≥40%=full, 0%=0)
+        //   30 pts variance (within ±5%=full, ±20%=0)
+        function _jobQualityScore(hourlyRate, margin, variance) {
+            const h = Math.max(0, Math.min(40, (hourlyRate - 20) * 4));
+            const m = Math.max(0, Math.min(30, margin * 0.75));
+            const v = Math.max(0, 30 - Math.min(30, Math.abs(variance) * 1.5));
+            return Math.round(h + m + v);
+        }
+
+        function _qualityColor(score) {
+            return score >= 80 ? '#10b981' : score >= 60 ? '#f59e0b' : '#ef4444';
+        }
+
+        function _hourlyColor(h) {
+            return h >= 27 ? '#10b981' : h >= 22 ? '#f59e0b' : '#ef4444';
+        }
+
+        function _marginColor(m) {
+            return m >= 40 ? '#10b981' : m >= 25 ? '#f59e0b' : '#ef4444';
+        }
+
+        function _varianceColor(v) {
+            return Math.abs(v) <= 5 ? '#10b981' : Math.abs(v) <= 15 ? '#f59e0b' : '#ef4444';
+        }
+
+        // Standard deviation — used for "most consistent crew leader"
+        function _stdev(arr) {
+            if (arr.length < 2) return 0;
+            const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+            return Math.sqrt(arr.reduce((s, v) => s + (v - mean) ** 2, 0) / arr.length);
+        }
+
+        // Build the canonical list of REALLY-completed project records with all
+        // derived metrics ready to query. This is the "clean" dataset the rest
+        // of the dashboard reads from.
+        function _buildCompletedDataset() {
+            const laborShare = PRICING.CrewLaborShare ?? 0.45;
+            const materialShareSetting = PRICING.CrewMaterialShare ?? 0.10;
+
+            return (projects || [])
+                .filter(p =>
+                    p.status === 'Complete' &&
+                    p.actuals?.completedAt &&
+                    !p.deleted &&
+                    !p.actualsRef          // exclude linked subsidiaries
+                )
+                .map(p => {
+                    const proposal = jobs.find(j => j.id === p.landedProposalId);
+                    // paymentMode: prefer the snapshot saved on the actuals (newest records),
+                    // else read from accepted crew proposal, else default labor_only.
+                    const acceptedCp = (p.crewProposals || []).find(cp => cp.accepted);
+                    const paymentMode = p.actuals.paymentMode || acceptedCp?.paymentMode || 'labor_only';
+                    const matShare = paymentMode === 'labor_plus_materials' ? materialShareSetting : 0;
+                    const target = (p.actuals.estLabor || 0) * laborShare + (p.actuals.estMaterial || 0) * matShare;
+                    const variance = target > 0 ? ((p.actuals.crewPayout - target) / target * 100) : 0;
+                    // paintCost: prefer new field; fall back to legacy materialCost (which was paint-only conceptually)
+                    const paintCost = p.actuals.paintCost !== undefined ? p.actuals.paintCost : (p.actuals.materialCost || 0);
+                    const paintVariance = (p.actuals.estMaterial || 0) > 0
+                        ? ((paintCost - p.actuals.estMaterial) / p.actuals.estMaterial * 100)
+                        : 0;
+                    const hourlyRate = p.actuals.hourlyRate || 0;
+                    const margin = p.actuals.profitMargin || 0;
+                    return {
+                        project: p,
+                        proposal,
+                        actuals: p.actuals,
+                        jobType: proposal?.jobType || 'Other',
+                        jobNumber: p.jobNumber,
+                        customerName: p.customerName,
+                        crewLeader: p.actuals.crewLeader || '',
+                        paymentMode,
+                        target,
+                        variance,
+                        paintCost,
+                        paintVariance,
+                        completedAt: new Date(p.actuals.completedAt),
+                        hourlyRate,
+                        margin,
+                        profit: p.actuals.netProfit || 0,
+                        revenue: p.actuals.revenue || 0,
+                        crewPayout: p.actuals.crewPayout || 0,
+                        crewNetTake: p.actuals.crewNetTake !== undefined ? p.actuals.crewNetTake : (p.actuals.crewPayout || 0),
+                        qualityScore: _jobQualityScore(hourlyRate, margin, variance),
+                    };
+                })
+                .sort((a, b) => b.completedAt - a.completedAt);  // newest first
+        }
+
+        // Rules-based insight engine — looks at the dataset and surfaces
+        // specific, actionable findings. Returns array of {severity, icon, text}.
+        function _generateInsights(data) {
+            const out = [];
+            if (data.length === 0) return out;
+            const total = data.length;
+
+            // ── HOURLY signals (the operator's "binding" metric) ──
+            const avgHourly = data.reduce((s, j) => s + j.hourlyRate, 0) / total;
+            const lowHourlyJobs = data.filter(j => j.hourlyRate > 0 && j.hourlyRate < 22);
+            if (lowHourlyJobs.length > 0) {
+                out.push({
+                    severity: 'high', icon: '🔴',
+                    text: `<strong>${lowHourlyJobs.length} of your last ${total} jobs ran below $22/hr</strong> for the crew — retention risk forming. Investigate ${lowHourlyJobs.slice(0, 2).map(j => j.jobNumber).join(', ')}.`,
+                });
+            } else if (avgHourly > 0 && avgHourly < 27) {
+                out.push({
+                    severity: 'med', icon: '🟡',
+                    text: `Avg crew hourly is <strong>$${avgHourly.toFixed(2)}/hr</strong> — borderline ($22-$27 zone). Watch for drift.`,
+                });
+            } else if (avgHourly >= 27) {
+                out.push({
+                    severity: 'low', icon: '🟢',
+                    text: `Avg crew hourly is <strong>$${avgHourly.toFixed(2)}/hr</strong> — comfortably above the $27 healthy floor.`,
+                });
+            }
+
+            // Trend: last 3 vs prior 3 — only if we have 6+ jobs
+            if (data.length >= 6) {
+                const last3 = data.slice(0, 3);
+                const prior3 = data.slice(3, 6);
+                const lastH = last3.reduce((s, j) => s + j.hourlyRate, 0) / 3;
+                const priorH = prior3.reduce((s, j) => s + j.hourlyRate, 0) / 3;
+                const drop = priorH - lastH;
+                if (drop > 3) {
+                    out.push({
+                        severity: 'high', icon: '⚠️',
+                        text: `<strong>Crew hourly dropped from $${priorH.toFixed(2)} → $${lastH.toFixed(2)}/hr</strong> over the last 3 jobs (vs prior 3). Diagnose before it normalizes.`,
+                    });
+                } else if (lastH - priorH > 3) {
+                    out.push({
+                        severity: 'low', icon: '📈',
+                        text: `Crew hourly trending up: $${priorH.toFixed(2)} → <strong>$${lastH.toFixed(2)}/hr</strong> (last 3 vs prior 3). Keep doing what you're doing.`,
+                    });
+                }
+            }
+
+            // ── TARGET VARIANCE signals ──
+            const withTarget = data.filter(j => j.target > 0);
+            if (withTarget.length >= 3) {
+                const avgVar = withTarget.reduce((s, j) => s + j.variance, 0) / withTarget.length;
+                if (avgVar > 10) {
+                    out.push({
+                        severity: 'med', icon: '📊',
+                        text: `Crew payouts averaging <strong>+${avgVar.toFixed(0)}% over target</strong> — labor estimates may be too low or jobs are running long. Consider raising labor spread rates.`,
+                    });
+                } else if (avgVar < -10) {
+                    out.push({
+                        severity: 'low', icon: '💰',
+                        text: `Crew payouts averaging <strong>${avgVar.toFixed(0)}% under target</strong> — pricing is conservative on this mix of jobs (NSP keeps the margin).`,
+                    });
+                }
+            }
+
+            // ── MARGIN signals ──
+            const avgMargin = data.reduce((s, j) => s + j.margin, 0) / total;
+            if (avgMargin < 25) {
+                out.push({
+                    severity: 'high', icon: '🔴',
+                    text: `<strong>Avg margin ${avgMargin.toFixed(1)}%</strong> — below the 25% urgent floor. Pricing review needed across the board.`,
+                });
+            } else if (avgMargin < 40) {
+                out.push({
+                    severity: 'med', icon: '🟡',
+                    text: `Avg margin <strong>${avgMargin.toFixed(1)}%</strong> — below 40% target. Look for jobs/types where margin is dragging you down.`,
+                });
+            }
+
+            // ── PAINT VARIANCE signals (per job type) ──
+            const byType = {};
+            data.forEach(j => {
+                if (!j.paintCost || (j.actuals.estMaterial || 0) <= 0) return;
+                if (!byType[j.jobType]) byType[j.jobType] = [];
+                byType[j.jobType].push(j.paintVariance);
+            });
+            Object.entries(byType).forEach(([type, vars]) => {
+                if (vars.length < 2) return;
+                const avg = vars.reduce((a, b) => a + b, 0) / vars.length;
+                if (avg > 20) {
+                    out.push({
+                        severity: 'med', icon: '🎨',
+                        text: `${type} paint cost averaging <strong>+${avg.toFixed(0)}% over estimate</strong> — review paint price/gallon in Pricing Settings.`,
+                    });
+                } else if (avg < -20) {
+                    out.push({
+                        severity: 'low', icon: '🎨',
+                        text: `${type} paint estimates running ${avg.toFixed(0)}% over actual — your gallon prices might be set too high.`,
+                    });
+                }
+            });
+
+            // ── CREW LEADER signals ──
+            const byLeader = {};
+            data.filter(j => j.crewLeader).forEach(j => {
+                if (!byLeader[j.crewLeader]) byLeader[j.crewLeader] = [];
+                byLeader[j.crewLeader].push(j);
+            });
+            const leaderEntries = Object.entries(byLeader).filter(([, jobs]) => jobs.length >= 2);
+            if (leaderEntries.length >= 2) {
+                // Sort by avg hourly (descending)
+                const ranked = leaderEntries
+                    .map(([name, jobs]) => ({
+                        name,
+                        n: jobs.length,
+                        avgH: jobs.reduce((s, j) => s + j.hourlyRate, 0) / jobs.length,
+                        stdev: _stdev(jobs.map(j => j.variance)),
+                    }))
+                    .sort((a, b) => b.avgH - a.avgH);
+                const gap = ranked[0].avgH - ranked[ranked.length - 1].avgH;
+                if (gap > 4) {
+                    out.push({
+                        severity: 'med', icon: '👥',
+                        text: `Hourly gap between top and bottom crew leaders: <strong>$${gap.toFixed(2)}/hr</strong> (${ranked[0].name} $${ranked[0].avgH.toFixed(2)} vs ${ranked[ranked.length - 1].name} $${ranked[ranked.length - 1].avgH.toFixed(2)}). What makes ${ranked[0].name}'s jobs efficient?`,
+                    });
+                }
+                // Most consistent (lowest variance stdev)
+                if (leaderEntries.length >= 2 && data.length >= 5) {
+                    const consistent = [...ranked].sort((a, b) => a.stdev - b.stdev)[0];
+                    if (consistent && consistent.stdev < 8) {
+                        out.push({
+                            severity: 'low', icon: '🎯',
+                            text: `<strong>${consistent.name}</strong> is your most consistent crew leader (variance σ: ${consistent.stdev.toFixed(1)}% across ${consistent.n} jobs).`,
+                        });
+                    }
+                }
+            }
+
+            // ── HALL OF FAME ──
+            const best = [...data].sort((a, b) => b.qualityScore - a.qualityScore)[0];
+            if (best && best.qualityScore >= 80) {
+                out.push({
+                    severity: 'low', icon: '🏆',
+                    text: `Best job (Quality Score ${best.qualityScore}/100): <strong>${best.customerName} — ${best.jobNumber}</strong> ($${best.hourlyRate.toFixed(2)}/hr, ${best.margin.toFixed(0)}% margin).`,
+                });
+            }
+
+            // Order: high severity first, then med, then low. Within tiers, keep order of insertion.
+            const order = { high: 0, med: 1, low: 2 };
+            return out.sort((a, b) => order[a.severity] - order[b.severity]);
+        }
+
+        // ── Main entry point ───────────────────────────────────────────
+
+        window.showDashboard = function() {
+            const content = document.getElementById('dashboardContent');
+            const data = _buildCompletedDataset();
+
+            if (data.length === 0) {
+                content.innerHTML = `<div style="text-align:center;padding:40px;color:#999;">
+                    <p style="font-size:48px;">📊</p>
+                    <p>No completed jobs yet.</p>
+                    <p style="font-size:13px;">A "completed job" is a project whose status is currently <strong>Complete</strong> with actuals saved.<br>
+                    Projects later moved to Dead/etc. don't count.</p>
+                </div>`;
                 showScreen('dashboardScreen');
                 return;
             }
 
-            // KPIs
-            const totalRevenue = completed.reduce((s, j) => s + (j.actuals.estTotal || j.grandTotal || 0), 0);
-            const totalProfit = completed.reduce((s, j) => s + (j.actuals.netProfit || 0), 0);
-            const avgMargin = completed.reduce((s, j) => s + (j.actuals.profitMargin || 0), 0) / completed.length;
-            const totalCosts = completed.reduce((s, j) => s + (j.actuals.totalCosts || 0), 0);
+            // ── Aggregates ──
+            const total = data.length;
+            const totalRevenue = data.reduce((s, j) => s + j.revenue, 0);
+            const totalProfit = data.reduce((s, j) => s + j.profit, 0);
+            const avgHourly = data.reduce((s, j) => s + j.hourlyRate, 0) / total;
+            const avgMargin = data.reduce((s, j) => s + j.margin, 0) / total;
+            const withTarget = data.filter(j => j.target > 0);
+            const avgVariance = withTarget.length > 0
+                ? withTarget.reduce((s, j) => s + j.variance, 0) / withTarget.length : 0;
 
-            // By job type
-            const byType = {};
-            completed.forEach(j => {
-                const t = j.jobType || 'Other';
-                if (!byType[t]) byType[t] = { count: 0, profit: 0, margin: 0 };
-                byType[t].count++;
-                byType[t].profit += j.actuals.netProfit || 0;
-                byType[t].margin += j.actuals.profitMargin || 0;
-            });
-            Object.values(byType).forEach(v => v.margin = v.margin / v.count);
+            // Trend arrows: compare last 3 vs prior 3 (only when we have data for both)
+            const arrow = (recent, prior, threshold = 0.5) => {
+                if (recent.length === 0 || prior.length === 0) return '';
+                const r = recent.reduce((a, b) => a + b, 0) / recent.length;
+                const p = prior.reduce((a, b) => a + b, 0) / prior.length;
+                const diff = r - p;
+                if (Math.abs(diff) < threshold) return '<span style="color:#9ca3af;">→</span>';
+                return diff > 0 ? '<span style="color:#10b981;">↑</span>' : '<span style="color:#ef4444;">↓</span>';
+            };
+            const last3 = data.slice(0, 3);
+            const prior3 = data.slice(3, 6);
+            const hourlyArrow = arrow(last3.map(j => j.hourlyRate), prior3.map(j => j.hourlyRate), 0.5);
+            const marginArrow = arrow(last3.map(j => j.margin), prior3.map(j => j.margin), 1);
+            const varArrow    = arrow(last3.map(j => j.variance), prior3.map(j => j.variance), 1);
 
-            // Estimation accuracy
-            const withVariance = completed.filter(j => j.actuals.estLabor > 0);
-            let avgLaborVar = 0, avgMatVar = 0;
-            if (withVariance.length > 0) {
-                avgLaborVar = withVariance.reduce((s, j) => s + ((j.actuals.crewPayout - j.actuals.estLabor) / j.actuals.estLabor * 100), 0) / withVariance.length;
-                avgMatVar = withVariance.reduce((s, j) => {
-                    if (!j.actuals.estMaterial || j.actuals.estMaterial === 0) return s;
-                    return s + ((j.actuals.materialCost - j.actuals.estMaterial) / j.actuals.estMaterial * 100);
-                }, 0) / withVariance.filter(j => j.actuals.estMaterial > 0).length || 0;
-            }
+            // ── Insights ──
+            const insights = _generateInsights(data);
 
-            // Crew leader performance
+            // ── Recent jobs (top 10) ──
+            const recent = data.slice(0, 10);
+
+            // ── Crew leader breakdown ──
             const byLeader = {};
-            completed.filter(j => j.actuals.crewLeader).forEach(j => {
-                const l = j.actuals.crewLeader;
-                if (!byLeader[l]) byLeader[l] = { count: 0, margin: 0, profit: 0 };
-                byLeader[l].count++;
-                byLeader[l].margin += j.actuals.profitMargin || 0;
-                byLeader[l].profit += j.actuals.netProfit || 0;
+            data.filter(j => j.crewLeader).forEach(j => {
+                if (!byLeader[j.crewLeader]) byLeader[j.crewLeader] = [];
+                byLeader[j.crewLeader].push(j);
             });
-            Object.values(byLeader).forEach(v => v.margin = v.margin / v.count);
+            const leaderRows = Object.entries(byLeader).map(([name, jobs]) => {
+                const n = jobs.length;
+                const avgH = jobs.reduce((s, j) => s + j.hourlyRate, 0) / n;
+                const avgM = jobs.reduce((s, j) => s + j.margin, 0) / n;
+                const withT = jobs.filter(j => j.target > 0);
+                const avgV = withT.length > 0 ? withT.reduce((s, j) => s + j.variance, 0) / withT.length : 0;
+                const last3 = jobs.slice(0, 3); // already sorted newest-first by parent
+                return { name, n, avgH, avgM, avgV, last3 };
+            }).sort((a, b) => b.avgH - a.avgH);
 
-            // Profit per month (last 6 months)
+            // ── By job type (target variance + paint variance + margin + hourly) ──
+            const byType = {};
+            data.forEach(j => {
+                if (!byType[j.jobType]) byType[j.jobType] = [];
+                byType[j.jobType].push(j);
+            });
+            const typeRows = Object.entries(byType).map(([type, jobs]) => {
+                const n = jobs.length;
+                const avgH = jobs.reduce((s, j) => s + j.hourlyRate, 0) / n;
+                const avgM = jobs.reduce((s, j) => s + j.margin, 0) / n;
+                const withT = jobs.filter(j => j.target > 0);
+                const avgV = withT.length > 0 ? withT.reduce((s, j) => s + j.variance, 0) / withT.length : 0;
+                const withPaint = jobs.filter(j => (j.actuals.estMaterial || 0) > 0);
+                const avgPaintV = withPaint.length > 0
+                    ? withPaint.reduce((s, j) => s + j.paintVariance, 0) / withPaint.length : 0;
+                return { type, n, avgH, avgM, avgV, avgPaintV };
+            }).sort((a, b) => b.n - a.n);
+
+            // ── Monthly profit (last 6 months) ──
             const monthlyProfit = {};
-            completed.forEach(j => {
-                const d = new Date(j.actuals.completedAt);
-                const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-                monthlyProfit[key] = (monthlyProfit[key] || 0) + (j.actuals.netProfit || 0);
+            data.forEach(j => {
+                const key = j.completedAt.getFullYear() + '-' + String(j.completedAt.getMonth() + 1).padStart(2, '0');
+                monthlyProfit[key] = (monthlyProfit[key] || 0) + j.profit;
             });
             const months = Object.entries(monthlyProfit).sort((a, b) => a[0].localeCompare(b[0])).slice(-6);
             const maxMonthly = Math.max(...months.map(m => m[1]), 1);
 
-            const profitColor = (m) => m >= 40 ? '#10b981' : (m >= 25 ? '#f59e0b' : '#ef4444');
+            // ── Render ──
+            const sevBg = { high: '#fee2e2', med: '#fef3c7', low: '#f0fdf4' };
+            const sevBorder = { high: '#ef4444', med: '#f59e0b', low: '#10b981' };
+            const sevText = { high: '#991b1b', med: '#92400e', low: '#166534' };
 
             content.innerHTML = `
-                <!-- KPI Cards -->
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:15px;">
-                    <div style="text-align:center;padding:15px;background:#f0fdf4;border-radius:12px;">
-                        <div style="font-size:24px;font-weight:700;color:#10b981;">$${totalProfit.toFixed(0)}</div>
-                        <div style="font-size:12px;color:#666;">Total Profit</div>
+                <!-- ─── Section 1: Health Snapshot ─── -->
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">
+                    <div style="padding:14px 10px;background:${_hourlyColor(avgHourly)}15;border:2px solid ${_hourlyColor(avgHourly)};border-radius:12px;text-align:center;">
+                        <div style="font-size:10px;color:#666;text-transform:uppercase;letter-spacing:0.5px;">Avg Crew Hourly</div>
+                        <div style="font-size:22px;font-weight:700;color:${_hourlyColor(avgHourly)};">$${avgHourly.toFixed(2)}<span style="font-size:11px;color:#666;font-weight:400;">/hr</span></div>
+                        <div style="font-size:11px;color:#666;">${hourlyArrow} vs prior 3</div>
                     </div>
-                    <div style="text-align:center;padding:15px;background:#eff6ff;border-radius:12px;">
-                        <div style="font-size:24px;font-weight:700;color:${profitColor(avgMargin)};">${avgMargin.toFixed(1)}%</div>
-                        <div style="font-size:12px;color:#666;">Avg Margin</div>
+                    <div style="padding:14px 10px;background:${_marginColor(avgMargin)}15;border:2px solid ${_marginColor(avgMargin)};border-radius:12px;text-align:center;">
+                        <div style="font-size:10px;color:#666;text-transform:uppercase;letter-spacing:0.5px;">NSP Avg Margin</div>
+                        <div style="font-size:22px;font-weight:700;color:${_marginColor(avgMargin)};">${avgMargin.toFixed(1)}%</div>
+                        <div style="font-size:11px;color:#666;">${marginArrow} vs prior 3</div>
                     </div>
-                    <div style="text-align:center;padding:15px;background:#fef3c7;border-radius:12px;">
-                        <div style="font-size:24px;font-weight:700;color:#f59e0b;">$${totalRevenue.toFixed(0)}</div>
-                        <div style="font-size:12px;color:#666;">Revenue</div>
-                    </div>
-                    <div style="text-align:center;padding:15px;background:#f8f9fa;border-radius:12px;">
-                        <div style="font-size:24px;font-weight:700;color:#667eea;">${completed.length}</div>
-                        <div style="font-size:12px;color:#666;">Jobs Done</div>
+                    <div style="padding:14px 10px;background:${_varianceColor(avgVariance)}15;border:2px solid ${_varianceColor(avgVariance)};border-radius:12px;text-align:center;">
+                        <div style="font-size:10px;color:#666;text-transform:uppercase;letter-spacing:0.5px;">Crew vs Target</div>
+                        <div style="font-size:22px;font-weight:700;color:${_varianceColor(avgVariance)};">${avgVariance >= 0 ? '+' : ''}${avgVariance.toFixed(1)}%</div>
+                        <div style="font-size:11px;color:#666;">${varArrow} vs prior 3</div>
                     </div>
                 </div>
 
-                <!-- Monthly Profit Trend -->
+                <!-- Secondary stats row -->
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;font-size:13px;">
+                    <div style="text-align:center;padding:8px;background:#f8fafc;border-radius:8px;">
+                        <div style="color:#666;font-size:11px;">Profit</div>
+                        <div style="font-weight:700;color:#10b981;">$${totalProfit.toFixed(0)}</div>
+                    </div>
+                    <div style="text-align:center;padding:8px;background:#f8fafc;border-radius:8px;">
+                        <div style="color:#666;font-size:11px;">Revenue</div>
+                        <div style="font-weight:700;">$${totalRevenue.toFixed(0)}</div>
+                    </div>
+                    <div style="text-align:center;padding:8px;background:#f8fafc;border-radius:8px;">
+                        <div style="color:#666;font-size:11px;">Jobs Done</div>
+                        <div style="font-weight:700;color:#667eea;">${total}</div>
+                    </div>
+                </div>
+
+                <!-- ─── Section 2: Insights ─── -->
+                ${insights.length > 0 ? `<div class="room-card">
+                    <h3>What to Look At</h3>
+                    <p style="font-size:12px;color:#666;margin-bottom:10px;">Auto-generated from your data. Higher severity at top.</p>
+                    ${insights.map(ins => `
+                        <div style="padding:10px 12px;background:${sevBg[ins.severity]};border-left:4px solid ${sevBorder[ins.severity]};border-radius:6px;margin-bottom:8px;font-size:13px;color:${sevText[ins.severity]};line-height:1.5;">
+                            ${ins.icon} ${ins.text}
+                        </div>
+                    `).join('')}
+                </div>` : ''}
+
+                <!-- ─── Section 3: Recent Jobs (Quality Score) ─── -->
+                <div class="room-card">
+                    <h3>Recent Jobs</h3>
+                    <p style="font-size:12px;color:#666;margin-bottom:8px;">Each job's <strong>Quality Score</strong> (0-100) blends hourly rate (40pts), margin (30pts), and target variance (30pts).</p>
+                    ${recent.map(j => {
+                        const qc = _qualityColor(j.qualityScore);
+                        const dateStr = j.completedAt.toLocaleDateString('en-US', {month: 'short', day: 'numeric'});
+                        return `<div style="display:grid;grid-template-columns:48px 1fr;gap:10px;padding:8px 0;border-bottom:1px solid #e5e7eb;align-items:center;cursor:pointer;" onclick="viewProjectDetail('${j.project.id}')">
+                            <div style="width:42px;height:42px;border-radius:50%;background:${qc};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;">${j.qualityScore}</div>
+                            <div>
+                                <div style="font-weight:600;font-size:13px;">${j.customerName} <span style="color:#6b7280;font-weight:400;">— ${j.jobNumber}</span></div>
+                                <div style="font-size:11px;color:#6b7280;margin-top:2px;">
+                                    <span style="color:${_hourlyColor(j.hourlyRate)};">$${j.hourlyRate.toFixed(2)}/hr</span> ·
+                                    <span style="color:${_marginColor(j.margin)};">${j.margin.toFixed(0)}% margin</span> ·
+                                    <span style="color:${_varianceColor(j.variance)};">${j.variance >= 0 ? '+' : ''}${j.variance.toFixed(0)}% vs target</span> ·
+                                    ${j.jobType} · ${dateStr}
+                                </div>
+                            </div>
+                        </div>`;
+                    }).join('')}
+                    ${data.length > 10 ? `<p style="text-align:center;color:#9ca3af;font-size:12px;margin-top:6px;">+ ${data.length - 10} more</p>` : ''}
+                </div>
+
+                <!-- ─── Section 4: Crew Leader Scorecard ─── -->
+                ${leaderRows.length > 0 ? `<div class="room-card">
+                    <h3>Crew Leader Scorecard</h3>
+                    <p style="font-size:12px;color:#666;margin-bottom:8px;">Hourly rate (primary), target variance, margin contribution. Last-3-jobs trend pills.</p>
+                    ${leaderRows.map(l => {
+                        const trendPills = l.last3.map(j => {
+                            const c = _qualityColor(j.qualityScore);
+                            return `<span style="display:inline-block;padding:1px 5px;background:${c};color:#fff;border-radius:3px;font-size:10px;font-weight:600;margin-right:2px;" title="${j.jobNumber}: ${j.qualityScore}/100">${j.qualityScore}</span>`;
+                        }).join('');
+                        return `<div style="padding:10px;background:#f8fafc;border-radius:8px;margin-bottom:6px;">
+                            <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px;">
+                                <strong>${l.name}</strong>
+                                <span style="color:#666;font-size:12px;">${l.n} job${l.n === 1 ? '' : 's'}</span>
+                            </div>
+                            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:6px;font-size:12px;">
+                                <div><div style="color:#666;font-size:10px;">Avg hourly</div><strong style="color:${_hourlyColor(l.avgH)};">$${l.avgH.toFixed(2)}</strong></div>
+                                <div><div style="color:#666;font-size:10px;">Vs target</div><strong style="color:${_varianceColor(l.avgV)};">${l.avgV >= 0 ? '+' : ''}${l.avgV.toFixed(0)}%</strong></div>
+                                <div><div style="color:#666;font-size:10px;">Avg margin</div><strong style="color:${_marginColor(l.avgM)};">${l.avgM.toFixed(0)}%</strong></div>
+                            </div>
+                            ${trendPills ? `<div style="margin-top:6px;font-size:10px;color:#666;">Recent: ${trendPills}</div>` : ''}
+                        </div>`;
+                    }).join('')}
+                </div>` : ''}
+
+                <!-- ─── Section 5: Pricing Health by Job Type ─── -->
+                <div class="room-card">
+                    <h3>Pricing Health by Job Type</h3>
+                    <p style="font-size:12px;color:#666;margin-bottom:8px;">Crew vs target = pricing/structure signal. Paint variance = paint cost vs estimate (uses paint cost only — non-paint is excluded).</p>
+                    ${typeRows.map(t => {
+                        const issues = [];
+                        if (t.avgM < 40) issues.push(`Margin below 40% target — pricing review`);
+                        if (Math.abs(t.avgV) > 10) issues.push(`Crew payouts ${Math.abs(t.avgV).toFixed(0)}% ${t.avgV > 0 ? 'over' : 'under'} target`);
+                        if (Math.abs(t.avgPaintV) > 15) issues.push(`Paint cost ${Math.abs(t.avgPaintV).toFixed(0)}% ${t.avgPaintV > 0 ? 'over' : 'under'} estimate`);
+                        if (t.avgH > 0 && t.avgH < 22) issues.push(`Hourly below $22 retention floor`);
+                        const onTrack = issues.length === 0;
+                        return `<div style="padding:10px;background:#f8fafc;border-radius:8px;margin-bottom:6px;">
+                            <div style="display:flex;justify-content:space-between;align-items:baseline;">
+                                <strong>${t.type}</strong>
+                                <span style="color:#666;font-size:12px;">${t.n} job${t.n === 1 ? '' : 's'}</span>
+                            </div>
+                            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-top:6px;font-size:12px;">
+                                <div><div style="color:#666;font-size:10px;">Hourly</div><strong style="color:${_hourlyColor(t.avgH)};">$${t.avgH.toFixed(2)}</strong></div>
+                                <div><div style="color:#666;font-size:10px;">Vs target</div><strong style="color:${_varianceColor(t.avgV)};">${t.avgV >= 0 ? '+' : ''}${t.avgV.toFixed(0)}%</strong></div>
+                                <div><div style="color:#666;font-size:10px;">Paint var.</div><strong style="color:${_varianceColor(t.avgPaintV)};">${t.avgPaintV >= 0 ? '+' : ''}${t.avgPaintV.toFixed(0)}%</strong></div>
+                                <div><div style="color:#666;font-size:10px;">Margin</div><strong style="color:${_marginColor(t.avgM)};">${t.avgM.toFixed(0)}%</strong></div>
+                            </div>
+                            ${onTrack
+                                ? `<div style="background:#f0fdf4;padding:5px 8px;border-radius:4px;margin-top:6px;font-size:11px;color:#166534;">✓ All signals on track</div>`
+                                : `<div style="background:#fef3c7;padding:5px 8px;border-radius:4px;margin-top:6px;font-size:11px;color:#92400e;">${issues.map(i => '· ' + i).join('<br>')}</div>`
+                            }
+                        </div>`;
+                    }).join('')}
+                </div>
+
+                <!-- ─── Section 6: Monthly Profit Trend ─── -->
                 ${months.length > 1 ? `<div class="room-card">
                     <h3>Monthly Profit</h3>
                     ${months.map(([month, profit]) => {
@@ -8120,90 +8520,7 @@ Only return JSON, no other text.`;
                         </div>`;
                     }).join('')}
                 </div>` : ''}
-
-                <!-- By Job Type -->
-                <div class="room-card">
-                    <h3>By Job Type</h3>
-                    ${Object.entries(byType).map(([type, data]) => `
-                        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e5e7eb;">
-                            <div><strong>${type}</strong> (${data.count} jobs)</div>
-                            <div style="text-align:right;">
-                                <span style="color:${profitColor(data.margin)};font-weight:600;">${data.margin.toFixed(1)}%</span>
-                                <span style="color:#666;font-size:12px;"> | $${data.profit.toFixed(0)}</span>
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-
-                <!-- Estimation Accuracy -->
-                ${withVariance.length > 0 ? `<div class="room-card">
-                    <h3>Estimation Accuracy</h3>
-                    <p style="font-size:13px;color:#666;margin-bottom:8px;">Based on ${withVariance.length} completed jobs</p>
-                    <div style="display:flex;justify-content:space-between;padding:8px 0;">
-                        <span>Labor Estimates</span>
-                        <span style="color:${Math.abs(avgLaborVar) > 15 ? '#ef4444' : '#10b981'};font-weight:600;">${avgLaborVar > 0 ? '+' : ''}${avgLaborVar.toFixed(1)}%</span>
-                    </div>
-                    <div style="display:flex;justify-content:space-between;padding:8px 0;">
-                        <span>Material Estimates</span>
-                        <span style="color:${Math.abs(avgMatVar) > 15 ? '#ef4444' : '#10b981'};font-weight:600;">${avgMatVar > 0 ? '+' : ''}${avgMatVar.toFixed(1)}%</span>
-                    </div>
-                    ${avgLaborVar > 15 ? '<p style="background:#fef3c7;padding:8px;border-radius:6px;font-size:12px;margin-top:8px;">Your labor estimates are consistently ' + avgLaborVar.toFixed(0) + '% low. Consider increasing labor rates in pricing settings.</p>' : ''}
-                </div>` : ''}
-
-                <!-- Crew Leaders -->
-                ${Object.keys(byLeader).length > 0 ? `<div class="room-card">
-                    <h3>Crew Leader Performance</h3>
-                    ${Object.entries(byLeader).sort((a, b) => b[1].margin - a[1].margin).map(([leader, data]) => `
-                        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e5e7eb;">
-                            <div><strong>${leader}</strong> (${data.count} jobs)</div>
-                            <span style="color:${profitColor(data.margin)};font-weight:600;">${data.margin.toFixed(1)}% avg margin</span>
-                        </div>
-                    `).join('')}
-                </div>` : ''}
             `;
-
-            // Pricing Health section
-            const completedWithActuals = completed.filter(j => j.actuals?.estLabor > 0);
-            if (completedWithActuals.length >= 3) {
-                const byType = {};
-                completedWithActuals.forEach(j => {
-                    const t = j.jobType || 'Other';
-                    if (!byType[t]) byType[t] = { labor: [], material: [], margins: [], count: 0 };
-                    byType[t].count++;
-                    byType[t].labor.push(((j.actuals.crewPayout - j.actuals.estLabor) / j.actuals.estLabor * 100));
-                    if (j.actuals.estMaterial > 0) byType[t].material.push(((j.actuals.materialCost - j.actuals.estMaterial) / j.actuals.estMaterial * 100));
-                    byType[t].margins.push(j.actuals.profitMargin || 0);
-                });
-
-                const avg = arr => arr.length > 0 ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
-                const pColor = v => v >= 40 ? '#10b981' : v >= 25 ? '#f59e0b' : '#ef4444';
-                const aColor = v => v >= 90 ? '#10b981' : v >= 80 ? '#f59e0b' : '#ef4444';
-
-                let healthHTML = '<div class="room-card"><h3>Pricing Health</h3>';
-                Object.entries(byType).forEach(([type, data]) => {
-                    if (data.count < 2) return;
-                    const laborAcc = 100 - Math.abs(avg(data.labor));
-                    const matAcc = data.material.length > 0 ? 100 - Math.abs(avg(data.material)) : 100;
-                    const margin = avg(data.margins);
-                    const laborVar = avg(data.labor);
-                    const needsAction = margin < 40 || laborAcc < 80;
-
-                    healthHTML += `<div style="padding:12px;background:#f8f9fa;border-radius:8px;margin-bottom:8px;">
-                        <strong>${type}</strong> (${data.count} jobs)
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;font-size:13px;">
-                            <div>Labor accuracy: <strong style="color:${aColor(laborAcc)}">${laborAcc.toFixed(0)}%</strong> ${laborVar > 0 ? '⬆' : '⬇'}</div>
-                            <div>Material accuracy: <strong style="color:${aColor(matAcc)}">${matAcc.toFixed(0)}%</strong></div>
-                            <div>Avg margin: <strong style="color:${pColor(margin)}">${margin.toFixed(0)}%</strong> <span style="color:#999;">target: 40%</span></div>
-                        </div>
-                        ${needsAction
-                            ? `<div style="background:#fef3c7;padding:6px;border-radius:4px;margin-top:6px;font-size:12px;color:#92400e;">${margin < 40 ? 'Consider increasing labor rates' : 'Review estimation accuracy'}</div>`
-                            : `<div style="background:#f0fdf4;padding:6px;border-radius:4px;margin-top:6px;font-size:12px;color:#166534;">On track</div>`
-                        }
-                    </div>`;
-                });
-                healthHTML += '</div>';
-                content.innerHTML += healthHTML;
-            }
 
             showScreen('dashboardScreen');
         };
