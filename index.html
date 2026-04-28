@@ -6786,51 +6786,98 @@ Only return JSON, no other text.`;
 
             updateDiscountPreview();
 
-            // Pricing Advisor — contextual suggestions from completed jobs
+            // Pricing Advisor — contextual suggestions from completed jobs.
+            //
+            // Important rule (driven by operator workflow):
+            // The basePrice on a proposal is sometimes overridden UPWARD as a
+            // discount-presentation tactic — operator inflates the base so the
+            // displayed discount looks bigger to the customer, but the post-
+            // discount price is what NSP actually wanted to charge. So basePrice
+            // (overridden) and grandTotal (after discount) BOTH carry tactical
+            // adjustments. The thing that doesn't lie is the CALCULATED price:
+            //   calculatedPrice = totalLabor + totalMaterials
+            // …i.e. what the system computed from spread rates × scope. That's
+            // the apples-to-apples number for cross-job comparison.
+            //
+            // So this advisor:
+            //   - Anchors "This estimate" on calculated, not basePrice
+            //   - Compares against past calculated averages, not grand totals
+            //   - Shows basePrice / grandTotal as CONTEXT (so operator sees
+            //     their tactical adjustments) but doesn't anchor analysis on them
+            //   - Material variance uses paintCost (paint/non-paint split)
+            //     with fallback to legacy materialCost.
             const advisorEl = document.getElementById('pricingAdvisorContent');
             if (advisorEl) {
                 const completed = jobs.filter(j => j.actuals && j.actuals.completedAt && j.jobType === currentEstimate.jobType);
-                const basePrice = currentEstimate.basePrice || (totalLabor + totalMaterials);
+                const calculatedPrice = totalLabor + totalMaterials;
+                const basePrice = currentEstimate.basePrice || calculatedPrice;
+                const isOverridden = currentEstimate.priceOverride && Math.abs(basePrice - calculatedPrice) > 0.01;
 
                 if (completed.length < 3) {
                     advisorEl.innerHTML = `<p style="color:#999;">Complete ${3 - completed.length} more ${currentEstimate.jobType?.toLowerCase() || ''} job(s) to unlock pricing insights.</p>`;
                 } else {
-                    // Calculate variances
-                    const withLabor = completed.filter(j => j.actuals.estLabor > 0);
-                    const avgLaborVar = withLabor.length >= 3 ? withLabor.reduce((s, j) => s + ((j.actuals.crewPayout - j.actuals.estLabor) / j.actuals.estLabor * 100), 0) / withLabor.length : 0;
-                    const withMat = completed.filter(j => j.actuals.estMaterial > 0);
-                    const avgMatVar = withMat.length >= 3 ? withMat.reduce((s, j) => s + ((j.actuals.materialCost - j.actuals.estMaterial) / j.actuals.estMaterial * 100), 0) / withMat.length : 0;
+                    // Past calculated price = totalLabor + totalMaterials (system-computed,
+                    // free of override gaming).
+                    const calcOf = j => (j.totalLabor || 0) + (j.totalMaterials || 0);
+                    const avgCalculated = completed.reduce((s, j) => s + calcOf(j), 0) / completed.length;
+                    const avgGrandTotal = completed.reduce((s, j) => s + (j.grandTotal || 0), 0) / completed.length;
                     const avgMargin = completed.reduce((s, j) => s + (j.actuals.profitMargin || 0), 0) / completed.length;
-                    const avgTotal = completed.reduce((s, j) => s + (j.grandTotal || 0), 0) / completed.length;
+
+                    // Material variance — uses paintCost (new) with fallback to legacy materialCost.
+                    const withMat = completed.filter(j => j.actuals.estMaterial > 0);
+                    const avgMatVar = withMat.length >= 3
+                        ? withMat.reduce((s, j) => {
+                            const paint = j.actuals.paintCost !== undefined ? j.actuals.paintCost : (j.actuals.materialCost || 0);
+                            return s + ((paint - j.actuals.estMaterial) / j.actuals.estMaterial * 100);
+                        }, 0) / withMat.length
+                        : 0;
+
+                    // Suggestion — pure margin-based: if past margins under-target, suggest
+                    // a calculated-price bump that would have moved past avg margin to 40%.
+                    // (We don't use the structurally-broken labor variance for this anymore.)
+                    const targetMargin = 40;
+                    const isUnderMargin = avgMargin < targetMargin && avgMargin > 0;
+                    let suggestedCalc = 0;
+                    let suggestedAdjust = 0;
+                    if (isUnderMargin) {
+                        // To hit 40% margin, revenue must equal cost / (1 - 0.40)
+                        // Past avg costs ≈ avgGrandTotal × (1 - avgMargin/100)
+                        const avgPastCost = avgGrandTotal * (1 - avgMargin / 100);
+                        const avgRevenueForTarget = avgPastCost / (1 - targetMargin / 100);
+                        const ratioForTarget = avgRevenueForTarget / avgCalculated;  // multiplier vs calculated
+                        suggestedCalc = Math.round(calculatedPrice * ratioForTarget);
+                        suggestedAdjust = suggestedCalc - Math.round(calculatedPrice);
+                    }
+                    const isUnder = isUnderMargin && suggestedAdjust > 50;
                     const confidence = Math.min(95, 30 + completed.length * 8);
 
-                    // Calculate suggested adjustment
-                    const laborAdjust = avgLaborVar > 10 ? totalLabor * (avgLaborVar / 100) * 0.7 : 0;
-                    const suggestedPrice = Math.round(basePrice + laborAdjust);
-                    const suggestedAdjust = suggestedPrice - Math.round(basePrice);
-                    const isUnder = suggestedAdjust > 50; // Only show if meaningful (>$50)
-
                     let html = `<div style="background:${isUnder ? '#fef3c7' : '#f0fdf4'};padding:14px;border-radius:10px;border:1px solid ${isUnder ? '#fcd34d' : '#86efac'};">
-                        <div style="font-size:15px;font-weight:600;margin-bottom:8px;">This ${currentEstimate.jobType.toLowerCase()} estimate: $${Math.round(basePrice).toLocaleString()}</div>`;
+                        <div style="font-size:15px;font-weight:600;margin-bottom:4px;">
+                            This ${currentEstimate.jobType.toLowerCase()} estimate (calculated): <strong>$${Math.round(calculatedPrice).toLocaleString()}</strong>
+                        </div>
+                        <div style="font-size:11px;color:#6b7280;margin-bottom:10px;line-height:1.5;">
+                            Pricing Advisor analysis is based on the calculated value (labor + materials, system-computed) — not on tactical overrides or post-discount totals. ${isOverridden ? `Your override ($${Math.round(basePrice).toLocaleString()}) and final ($${Math.round(currentEstimate.grandTotal || 0).toLocaleString()}) are shown elsewhere as context.` : ''}
+                        </div>`;
 
                     if (isUnder) {
                         html += `<div style="background:#fff;padding:10px;border-radius:8px;margin-bottom:8px;">
-                            <div style="color:#dc2626;font-weight:600;">Your ${currentEstimate.jobType.toLowerCase()} labor has been ${Math.abs(avgLaborVar).toFixed(0)}% ${avgLaborVar > 0 ? 'over' : 'under'} on average</div>
-                            <div style="margin-top:4px;">Suggested: <strong style="color:#059669;">+$${suggestedAdjust.toLocaleString()} → $${suggestedPrice.toLocaleString()}</strong></div>
+                            <div style="color:#dc2626;font-weight:600;">Past ${currentEstimate.jobType.toLowerCase()} jobs averaged ${avgMargin.toFixed(0)}% margin (target: 40%)</div>
+                            <div style="margin-top:4px;">To hit target margin on this scope, calculated price would need to be: <strong style="color:#059669;">$${suggestedCalc.toLocaleString()}</strong> (+$${suggestedAdjust.toLocaleString()})</div>
                         </div>`;
                     }
 
                     // Material accuracy
                     html += `<div style="margin-bottom:6px;">${Math.abs(avgMatVar) < 10
-                        ? '<span style="color:#059669;">✓</span> Material estimates accurate'
-                        : '<span style="color:#d97706;">⚠</span> Materials vary by ' + Math.abs(avgMatVar).toFixed(0) + '% on avg'}</div>`;
+                        ? '<span style="color:#059669;">✓</span> Paint estimates accurate (within ' + Math.abs(avgMatVar).toFixed(0) + '%)'
+                        : '<span style="color:#d97706;">⚠</span> Paint cost varies by ' + Math.abs(avgMatVar).toFixed(0) + '% on avg'}</div>`;
 
-                    // Similar jobs average
-                    const diffPct = Math.round(((basePrice - avgTotal) / avgTotal) * 100);
-                    html += `<div style="margin-bottom:6px;">Similar jobs averaged <strong>$${Math.round(avgTotal).toLocaleString()}</strong>. `;
+                    // Similar jobs average — calculated vs calculated (apples-to-apples)
+                    const diffPct = Math.round(((calculatedPrice - avgCalculated) / avgCalculated) * 100);
+                    html += `<div style="margin-bottom:6px;">Similar jobs averaged <strong>$${Math.round(avgCalculated).toLocaleString()}</strong> calculated. `;
                     if (Math.abs(diffPct) > 5) {
-                        html += `This is ${Math.abs(diffPct)}% ${diffPct < 0 ? 'below' : 'above'} average.`;
+                        html += `This estimate is ${Math.abs(diffPct)}% ${diffPct < 0 ? 'below' : 'above'} average.`;
                     } else { html += 'On target.'; }
+                    html += `<span style="color:#9ca3af;font-size:11px;"> (Avg final after discounts: $${Math.round(avgGrandTotal).toLocaleString()})</span>`;
                     html += '</div>';
 
                     // Avg margin + confidence
@@ -6838,11 +6885,12 @@ Only return JSON, no other text.`;
                     html += `<div style="margin-bottom:6px;">Avg margin: <strong style="color:${marginColor};">${avgMargin.toFixed(1)}%</strong> across ${completed.length} jobs</div>`;
                     html += `<div style="color:#666;font-size:12px;margin-bottom:10px;">Confidence: ${confidence}% (${completed.length} similar completed jobs)</div>`;
 
-                    // Action buttons
+                    // Action buttons — adjust the basePrice to the suggested CALCULATED amount.
+                    // Operator can still apply their override-for-discount tactic on top of this.
                     if (isUnder) {
-                        html += `<div style="display:flex;gap:8px;">
-                            <button class="btn btn-success btn-small" onclick="currentEstimate.basePrice=${suggestedPrice};currentEstimate.priceOverride=true;updateDiscountPreview();document.getElementById('pricingAdvisorContent').querySelector('.advisor-actions')?.remove();alert('Price adjusted to $${suggestedPrice.toLocaleString()}')" style="flex:1;">Adjust to $${suggestedPrice.toLocaleString()}</button>
-                            <button class="btn btn-secondary btn-small" onclick="this.parentElement.remove()" style="flex:1;">Keep $${Math.round(basePrice).toLocaleString()}</button>
+                        html += `<div style="display:flex;gap:8px;" class="advisor-actions">
+                            <button class="btn btn-success btn-small" onclick="currentEstimate.basePrice=${suggestedCalc};currentEstimate.priceOverride=true;updateDiscountPreview();document.getElementById('pricingAdvisorContent').querySelector('.advisor-actions')?.remove();alert('Base price adjusted to $${suggestedCalc.toLocaleString()} — apply discount on top as usual.')" style="flex:1;">Adjust base to $${suggestedCalc.toLocaleString()}</button>
+                            <button class="btn btn-secondary btn-small" onclick="this.parentElement.remove()" style="flex:1;">Keep current</button>
                         </div>`;
                     }
 
