@@ -8570,6 +8570,107 @@ Only return JSON, no other text.`;
         //   → {brand:'Benjamin Moore', color:'Cloud White', code:'OC-130', finish:'Eggshell'}
         //   "SW Snowbound satin" → {brand:'Sherwin-Williams', color:'Snowbound', finish:'Satin'}
         //   "BM Aura Cloud White" → {brand:'Benjamin Moore', color:'Aura Cloud White'}
+        // ── AI helpers for the conversation ─────────────────────────────
+
+        // Heuristic: does this look like the contractor asking a question
+        // mid-flow (vs. answering the current prompt)?
+        function _isLikelyQuestion(text) {
+            const t = (text || '').trim();
+            if (!t) return false;
+            if (t.endsWith('?')) return true;
+            // Question starters — be permissive but not greedy
+            if (/^(what|which|how|why|when|where|should|can|could|would|do(?:es)?|is|are|recommend|recommendation|suggest|suggestion|tell\s+me|help|advice|opinion|tip|tips)\b/i.test(t)) return true;
+            return false;
+        }
+
+        // Free-form Q&A in the middle of the report flow. Claude answers as a
+        // senior interior-design / paint expert; conversation state does NOT
+        // advance — operator can then type their actual answer.
+        async function _reportAskAI(question) {
+            const f = window._reportFlow;
+            if (!f) return;
+            const area = f.palette[f.currentAreaIdx];
+            const surf = f.surfaces?.[f.currentSurfaceIdx];
+            const proposal = f.proposalRef || {};
+
+            _reportSay(question, { user: true });
+            const thinking = _reportSay('<em style="color:#9ca3af;">💭 Thinking…</em>', { transient: true });
+
+            const sys = `You are a senior interior designer and paint expert helping a painting contractor (Northern Star Painters) capture a customer completion report. Answer their mid-flow questions briefly and concretely — 2-4 sentences max. Confident, expert tone. When they ask for a color/finish/brand recommendation, give a specific answer (brand + name + code when possible) and a one-line reason. Never sales-y.`;
+            const completedAreas = f.palette
+                .filter(a => Object.values(a.surfaces || {}).some(s => s?.color))
+                .map(a => `${a.area}: ${Object.entries(a.surfaces).filter(([, v]) => v?.color).map(([s, v]) => `${s}=${v.brand || ''} ${v.color || ''} ${v.finish || ''}`).join(' | ')}`)
+                .join('\n');
+            const ctx = `Current area: "${area?.area || 'unknown'}"
+Current surface: "${surf || 'unknown'}"
+Job type: "${proposal.jobType || 'painting'}"
+Areas already captured:\n${completedAreas || '(none yet)'}\n
+Question from contractor: ${question}`;
+
+            try {
+                const res = await fetch('https://damp-moon-203c.amirzreik7.workers.dev', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: 'claude-sonnet-4-20250514',
+                        max_tokens: 400,
+                        system: sys,
+                        messages: [{ role: 'user', content: ctx }],
+                    }),
+                });
+                if (!res.ok) throw new Error(`AI request failed (${res.status})`);
+                const data = await res.json();
+                const text = (data.content?.[0]?.text || '').trim() || "I'm not sure — could you rephrase?";
+                thinking?.remove();
+                _reportSay(`<span style="color:${REPORT_PALETTE.gold};font-weight:600;">💡 Expert tip:</span> ${text}<br><span style="color:#6b7280;font-size:12px;font-style:italic;">— now go ahead and answer the original question</span>`);
+            } catch (e) {
+                thinking?.remove();
+                _reportSay(`<em style="color:#dc2626;">Couldn't reach the AI: ${e.message}. Just type your answer to keep going.</em>`);
+            }
+        }
+
+        // Last-resort parser: when the regex misses, ask Claude to extract
+        // structured paint info from the contractor's casual sentence and
+        // (when possible) fill in standard codes from color names.
+        async function _aiParseColorAnswer(text, surfaceName, jobType) {
+            const sys = `Extract paint info from a contractor's casual sentence. Return ONLY this JSON object — no markdown fences, no preamble:
+{"brand": "Benjamin Moore" | "Sherwin-Williams" | "Behr" | "PPG" | "Valspar" | null,
+ "color": "<color name in proper Title Case>" | null,
+ "code": "<color code like OC-130 or SW 7004>" | null,
+ "finish": "Flat" | "Matte" | "Eggshell" | "Satin" | "Semi-Gloss" | "Gloss" | "Pearl" | null}
+
+Rules:
+- Fix typos and casing in color names (e.g. "cload wite" → "Cloud White", "egshell" → finish:"Eggshell").
+- If you recognize a well-known color, fill in its standard brand code (e.g. "Cloud White" + Benjamin Moore → "OC-130", "White Dove" → "OC-17", "Pure White" + Sherwin-Williams → "SW 7005").
+- Use null for any field you can't determine confidently.
+- Output ONLY the JSON object.`;
+
+            const user = `Surface being painted: ${surfaceName}\nJob type: ${jobType || 'painting'}\nContractor said: "${text}"`;
+            const res = await fetch('https://damp-moon-203c.amirzreik7.workers.dev', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: 'claude-sonnet-4-20250514',
+                    max_tokens: 250,
+                    system: sys,
+                    messages: [{ role: 'user', content: user }],
+                }),
+            });
+            if (!res.ok) throw new Error('AI parse failed');
+            const data = await res.json();
+            const raw = (data.content?.[0]?.text || '').trim();
+            const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+            const parsed = JSON.parse(cleaned);
+            return {
+                brand: parsed.brand || null,
+                color: parsed.color || null,
+                code: parsed.code || null,
+                finish: parsed.finish || null,
+                raw: text,
+                _aiAssisted: true,
+            };
+        }
+
         function _parseColorAnswer(text) {
             const s = (text || '').trim();
             const lower = s.toLowerCase();
@@ -8852,14 +8953,15 @@ Only return JSON, no other text.`;
             const areaCount = palette.length;
             return `Hi! Let's build a beautiful completion report for <strong>${name}</strong>. ` +
                    `I'll walk through ${areaCount} ${areaCount === 1 ? 'area' : 'areas'} of this ${type} job and ask about colors, finishes, and any special techniques. ` +
-                   `Answer naturally — like "Benjamin Moore Cloud White OC-130 eggshell" — and I'll figure out the details. ` +
+                   `Answer naturally — like "BM Cloud White OC-130 eggshell" — typos are fine, I'll clean them up.<br><br>` +
+                   `<span style="color:${REPORT_PALETTE.gold};font-weight:600;">💡 Need help mid-flow?</span> Just ask — type any question (<em>"what sheen for ceilings?"</em>, <em>"what pairs with OC-130?"</em>) and I'll answer without losing your place.<br><br>` +
                    `Tap <strong>Done</strong> any time to finish early.`;
         }
 
         // ── Chat rendering ───────────────────────────────────────────────
         function _reportSay(html, opts) {
             const chat = document.getElementById('reportFlowChat');
-            if (!chat) return;
+            if (!chat) return null;
             const isUser = !!(opts && opts.user);
             const bubble = document.createElement('div');
             bubble.style.cssText = `display:flex;${isUser ? 'justify-content:flex-end;' : ''}margin:8px 0;`;
@@ -8871,7 +8973,10 @@ Only return JSON, no other text.`;
             chat.appendChild(bubble);
             chat.scrollTop = chat.scrollHeight;
             const flow = window._reportFlow;
-            if (flow) flow.conversation.push({ role: isUser ? 'user' : 'assistant', text: html, at: new Date().toISOString() });
+            if (flow && !(opts && opts.transient)) {
+                flow.conversation.push({ role: isUser ? 'user' : 'assistant', text: html, at: new Date().toISOString() });
+            }
+            return bubble;
         }
 
         function _reportSetQuickReplies(items) {
@@ -8999,9 +9104,17 @@ Only return JSON, no other text.`;
             _reportFinishConversation();
         };
 
-        function _reportHandleAnswer(text) {
+        async function _reportHandleAnswer(text) {
             const f = window._reportFlow;
             if (!f) return;
+
+            // Q&A escape hatch — if it looks like a question, route to Claude
+            // and DON'T advance state. Operator's actual answer comes next.
+            if (_isLikelyQuestion(text)) {
+                await _reportAskAI(text);
+                return;
+            }
+
             _reportSay(text, { user: true });
 
             // Handle pending follow-ups (finish/brand/technique)
@@ -9051,16 +9164,40 @@ Only return JSON, no other text.`;
                 return;
             }
 
-            // Default: parse the color answer
-            const parsed = _parseColorAnswer(text);
+            // Default: parse the color answer (regex first, AI fallback if missing fields)
             if (!area || !surf) { _reportAskNext(); return; }
+            let parsed = _parseColorAnswer(text);
+
+            // AI fallback when regex couldn't pull out brand+color OR found no
+            // code despite knowing both brand and a name (we'd like to fill it).
+            const regexMissed = !parsed.color
+                || (!parsed.brand && !parsed.finish)
+                || (parsed.brand && parsed.color && !parsed.code);
+            if (regexMissed) {
+                const thinking = _reportSay('<em style="color:#9ca3af;">🧠 Reading your answer…</em>', { transient: true });
+                try {
+                    const ai = await _aiParseColorAnswer(text, surf, f.proposalRef?.jobType || '');
+                    thinking?.remove();
+                    parsed = {
+                        brand: parsed.brand || ai.brand,
+                        color: parsed.color || ai.color,
+                        code: parsed.code || ai.code,
+                        finish: parsed.finish || ai.finish,
+                        raw: text,
+                    };
+                } catch (e) {
+                    thinking?.remove();
+                    // Silent fallback to regex result; conversation continues.
+                }
+            }
+
             area.surfaces[surf] = {
                 color: parsed.color || text,
                 code: parsed.code || '',
                 brand: parsed.brand || '',
                 finish: parsed.finish || '',
-                coats: 2,  // default; can edit later
-                hex: '',   // populated later if we add color database
+                coats: 2,
+                hex: '',
             };
 
             // Decide on follow-ups based on what's missing
@@ -9075,7 +9212,6 @@ Only return JSON, no other text.`;
                 return;
             }
 
-            // We got everything in one shot — confirm and advance
             const summary = [parsed.brand, parsed.color, parsed.code, parsed.finish].filter(Boolean).join(' · ');
             _reportSay(`✓ ${_titleCase(surf)}: ${summary}`);
             f.currentSurfaceIdx++;
@@ -9286,6 +9422,15 @@ Only return JSON, no other text.`;
                 areaCount: f.palette.length,
             };
 
+            // Polish pass — clean typos/casing in the contractor's raw inputs
+            // before they reach the customer-facing artifact. Falls back to the
+            // unpolished palette on any error.
+            try {
+                f.palette = await _polishPaletteWithAI(f.palette);
+            } catch (e) {
+                console.warn('Polish pass failed, using raw palette:', e);
+            }
+
             // AI narrative — single batched call (fast, cached on the doc)
             let aiContent = { introduction: '', colorStory: '', proTips: {}, closingMessage: '' };
             try {
@@ -9331,6 +9476,80 @@ Only return JSON, no other text.`;
 
             window._reportFlow = null;
             viewCompletionReport(f.projectId);
+        }
+
+        // Polish-on-finish pass: cleans typos / casing in everything the
+        // contractor typed (color names, brands, techniques) WITHOUT changing
+        // meaning. Customer-facing artifact reads clean even when input was
+        // messy. Falls back to the original palette on any error.
+        async function _polishPaletteWithAI(palette) {
+            const slim = palette.map((a, i) => ({
+                idx: i,
+                area: a.area,
+                technique: a.technique || '',
+                surfaces: Object.fromEntries(
+                    Object.entries(a.surfaces || {}).map(([k, v]) => [k, {
+                        color: v?.color || '',
+                        brand: v?.brand || '',
+                        code: v?.code || '',
+                        finish: v?.finish || '',
+                    }])
+                ),
+            }));
+
+            const sys = `You normalize a painting contractor's quick-typed notes into clean, customer-facing text. Fix typos, capitalization, and grammar — but DO NOT change meaning, invent details, or add words the contractor didn't imply. Output ONLY a JSON array matching the input shape exactly.`;
+            const user = `Input array (each item describes one area of a painting job):
+${JSON.stringify(slim, null, 2)}
+
+Rules:
+- Color names → Title Case ("cload wite" → "Cloud White").
+- Brands → exact spelling ("benjamin moore" → "Benjamin Moore").
+- Color codes → uppercase, hyphenated when standard ("oc130" → "OC-130").
+- Finish → one of Flat/Matte/Eggshell/Satin/Semi-Gloss/Gloss/Pearl (or empty).
+- Technique → fix typos and grammar, keep contractor's intent. Empty stays empty.
+- Area names → leave as-is (don't translate or change them).
+- Return the SAME JSON shape, same idx values, same keys. No markdown fences. No commentary.`;
+
+            const res = await fetch('https://damp-moon-203c.amirzreik7.workers.dev', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: 'claude-sonnet-4-20250514',
+                    max_tokens: 2000,
+                    system: sys,
+                    messages: [{ role: 'user', content: user }],
+                }),
+            });
+            if (!res.ok) throw new Error('Polish request failed');
+            const data = await res.json();
+            const raw = (data.content?.[0]?.text || '').trim();
+            const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+            const polished = JSON.parse(cleaned);
+            if (!Array.isArray(polished)) throw new Error('Polish returned non-array');
+
+            // Merge back: only overwrite the text fields, preserve everything
+            // else (sqft, _jobType, _sourceProjectId, coats, hex, completed).
+            return palette.map((a, i) => {
+                const p = polished.find(x => x.idx === i) || polished[i];
+                if (!p) return a;
+                const cleanedSurfaces = {};
+                Object.keys(a.surfaces || {}).forEach(k => {
+                    const orig = a.surfaces[k] || {};
+                    const fixed = (p.surfaces && p.surfaces[k]) || {};
+                    cleanedSurfaces[k] = {
+                        ...orig,
+                        color: fixed.color || orig.color || '',
+                        brand: fixed.brand || orig.brand || '',
+                        code: fixed.code || orig.code || '',
+                        finish: fixed.finish || orig.finish || '',
+                    };
+                });
+                return {
+                    ...a,
+                    technique: typeof p.technique === 'string' ? p.technique : a.technique,
+                    surfaces: cleanedSurfaces,
+                };
+            });
         }
 
         // Calls Claude via the existing Cloudflare Worker proxy. Returns the
