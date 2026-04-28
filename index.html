@@ -2938,18 +2938,32 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
                     <!-- ─── Completion Report (the customer keepsake) ─── -->
                     ${(() => {
-                        const cr = project.completionReport;
+                        // Subsidiary in a combined report? Read the canonical from the primary.
+                        let cr = project.completionReport;
+                        let canonicalProjectId = projectId;
+                        if (project.completionReportRef && project.completionReportRef !== projectId) {
+                            const primary = projects.find(p => p.id === project.completionReportRef);
+                            if (primary?.completionReport) {
+                                cr = primary.completionReport;
+                                canonicalProjectId = primary.id;
+                            }
+                        }
                         const hasReport = cr && (cr.colorPalette?.length > 0 || cr.status === 'published');
+                        const isCombined = cr?.scope === 'combined';
+                        const linkedCount = (project.linkedProjects || []).length;
                         const bg = hasReport ? 'linear-gradient(135deg, #1A2B4A 0%, #2C4870 100%)' : 'linear-gradient(135deg, #D4AF37 0%, #B8941F 100%)';
                         const label = hasReport ? '📖 View / Edit Completion Report' : '✨ Create Completion Report';
+                        const scopeBadge = isCombined ? `<span style="background:${REPORT_PALETTE.gold};color:${REPORT_PALETTE.navy};font-size:10px;padding:2px 8px;border-radius:10px;letter-spacing:1px;text-transform:uppercase;font-weight:600;margin-left:8px;vertical-align:middle;">Combined · ${(cr.scopeProjectIds || []).length} halves</span>` : '';
+                        const linkedHint = (!hasReport && linkedCount > 0) ? `<div style="background:rgba(255,255,255,0.12);border-left:3px solid ${REPORT_PALETTE.gold};padding:8px 12px;margin-bottom:10px;font-size:12px;line-height:1.4;">This project is linked to ${linkedCount} other ${linkedCount === 1 ? 'half' : 'halves'}. You'll be asked whether to generate a combined report (recommended) or just this side.</div>` : '';
                         const sub = hasReport
                             ? `Magazine-quality keepsake for ${project.customerName}. Ready to print, share, and refer.`
                             : `Build a stunning branded keepsake for ${project.customerName}. AI walks you through colors, photos, and the rest. Customers love it.`;
                         return `<div class="room-card" style="background:${bg};color:#fff;border:none;margin-top:10px;">
-                            <h3 style="margin:0 0 6px;color:#fff;font-weight:600;">Customer Completion Report</h3>
+                            <h3 style="margin:0 0 6px;color:#fff;font-weight:600;">Customer Completion Report${scopeBadge}</h3>
                             <p style="font-size:13px;color:#e5e7eb;margin:0 0 12px;line-height:1.5;">${sub}</p>
+                            ${linkedHint}
                             <button class="btn" onclick="openCompletionReport('${projectId}')" style="width:100%;background:#fff;color:#1A2B4A;font-weight:600;padding:10px 14px;border-radius:8px;border:none;cursor:pointer;">${label}</button>
-                            ${hasReport && cr.shareSlug ? `<button class="btn" onclick="viewCompletionReport('${projectId}')" style="width:100%;background:rgba(255,255,255,0.15);color:#fff;font-weight:500;padding:8px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.3);cursor:pointer;margin-top:6px;">👁️ View report</button>` : ''}
+                            ${hasReport && cr.shareSlug ? `<button class="btn" onclick="viewCompletionReport('${canonicalProjectId}')" style="width:100%;background:rgba(255,255,255,0.15);color:#fff;font-weight:500;padding:8px 14px;border-radius:8px;border:1px solid rgba(255,255,255,0.3);cursor:pointer;margin-top:6px;">👁️ View report</button>` : ''}
                         </div>`;
                     })()}`;
 
@@ -8631,37 +8645,185 @@ Only return JSON, no other text.`;
                 technique: '',
                 sqft: r.sqft || 0,
                 tip: '',          // AI-generated later
-                completed: false  // operator can mark when done
+                completed: false, // operator can mark when done
+                _jobType: proposal?.jobType || '',
+                _sourceProjectId: '',
             }));
         }
 
+        // ── Linked-project scope helpers ────────────────────────────────
+        // A "report scope" is the set of project ids covered by one report.
+        // Single = just the project clicked. Combined = the project + all of
+        // its linkedProjects (so the customer gets one document covering
+        // their entire interior + exterior job).
+
+        function _resolveScopeIds(projectId, mode) {
+            const project = projects.find(p => p.id === projectId);
+            if (!project) return [projectId];
+            const linked = (project.linkedProjects || [])
+                .filter(id => projects.find(p => p.id === id));
+            if (mode === 'combined' && linked.length > 0) {
+                return [projectId, ...linked];
+            }
+            return [projectId];
+        }
+
+        // Primary = lowest jobNumber across the scope. Stable regardless of
+        // which side the operator clicks from, so the report always lands on
+        // the same project record.
+        function _primaryFromScope(scopeIds) {
+            const found = scopeIds.map(id => projects.find(p => p.id === id)).filter(Boolean);
+            if (found.length === 0) return scopeIds[0];
+            found.sort((a, b) => (a.jobNumber || '').localeCompare(b.jobNumber || ''));
+            return found[0].id;
+        }
+
+        // Seed palette across multiple projects. Tags each entry with its
+        // _jobType + _sourceProjectId so the renderer can group them, and
+        // prefixes area names on collision (e.g. both halves had "Front Door").
+        function _seedColorPaletteFromScope(scopeIds) {
+            const scope = scopeIds.map(id => {
+                const proj = projects.find(p => p.id === id);
+                const job = jobs.find(j => j.id === proj?.landedProposalId);
+                return { proj, job };
+            }).filter(s => s.job);
+
+            const nameCounts = {};
+            scope.forEach(s => (s.job.rooms || []).filter(r => !r.deleted).forEach(r => {
+                const n = (r.name || 'Area').trim();
+                nameCounts[n] = (nameCounts[n] || 0) + 1;
+            }));
+
+            const out = [];
+            scope.forEach(s => {
+                (s.job.rooms || []).filter(r => !r.deleted).forEach(r => {
+                    const baseName = (r.name || 'Area').trim();
+                    const jobType = s.job.jobType || '';
+                    const finalName = (nameCounts[baseName] > 1 && jobType)
+                        ? `${jobType} · ${baseName}`
+                        : baseName;
+                    out.push({
+                        area: finalName,
+                        surfaces: {},
+                        technique: '',
+                        sqft: r.sqft || 0,
+                        tip: '',
+                        completed: false,
+                        _jobType: jobType,
+                        _sourceProjectId: s.proj?.id || '',
+                    });
+                });
+            });
+            return out;
+        }
+
+        // Aggregate actuals fields across the scope. Used at finish time so
+        // combined-report stats reflect the entire job, not just one half.
+        function _aggregateScopeStats(scopeIds) {
+            const out = { totalHours: 0, totalManDays: 0, gallonsUsed: 0, days: 0, crewSize: 0, completedAt: '' };
+            scopeIds.forEach(id => {
+                const p = projects.find(pr => pr.id === id);
+                const a = p?.actuals || {};
+                out.totalHours += (a.totalHours || 0);
+                out.totalManDays += (a.totalManDays || 0);
+                out.gallonsUsed += (a.gallonsUsed || 0);
+                out.days = Math.max(out.days, a.days || 0);
+                out.crewSize = Math.max(out.crewSize, a.crewCount || 0);
+                const cAt = a.completedAt || a.lastSavedAt;
+                if (cAt && (!out.completedAt || cAt > out.completedAt)) out.completedAt = cAt;
+            });
+            return out;
+        }
+
         // ── Entry point ──────────────────────────────────────────────────
-        window.openCompletionReport = function(projectId, forceEdit) {
+        window.openCompletionReport = function(projectId, forceEdit, mode) {
             const project = projects.find(p => p.id === projectId);
             if (!project) { alert('Project not found'); return; }
-            const landed = jobs.find(j => j.id === project.landedProposalId);
 
-            window._reportProjectId = projectId;
-            window._reportProject = project;
-            window._reportProposal = landed;
-
-            // If a published report already exists AND we're not forcing edit mode,
-            // jump straight to the viewer.
-            if (project.completionReport?.status === 'published' && !forceEdit) {
-                viewCompletionReport(projectId);
-                return;
+            // Subsidiary of a combined report? Follow the ref so operator
+            // always edits/views the canonical document.
+            if (project.completionReportRef && project.completionReportRef !== projectId) {
+                const primary = projects.find(p => p.id === project.completionReportRef);
+                if (primary) return openCompletionReport(primary.id, forceEdit, mode);
             }
 
-            // Initialize / resume the report draft
+            // Existing report on this project: respect its stored scope.
             const existing = project.completionReport;
-            const paletteSeed = existing?.colorPalette?.length > 0
+            if (existing && (existing.colorPalette?.length > 0 || existing.status === 'published')) {
+                if (existing.status === 'published' && !forceEdit) {
+                    viewCompletionReport(projectId);
+                    return;
+                }
+                mode = (existing.scopeProjectIds && existing.scopeProjectIds.length > 1) ? 'combined' : 'single';
+                return _openReportFlow(projectId, mode, existing);
+            }
+
+            // First-time generation on a linked project — ask the operator.
+            const linkedIds = (project.linkedProjects || [])
+                .filter(id => projects.find(p => p.id === id));
+            if (!mode && linkedIds.length > 0) {
+                const otherNames = linkedIds.map(id => {
+                    const p = projects.find(pr => pr.id === id);
+                    return p ? (p.jobNumber || p.projectName || 'linked') : 'linked';
+                }).join(', ');
+                const combined = confirm(
+                    `This project is linked to: ${otherNames}.\n\n` +
+                    `Generate ONE combined report covering both halves?\n\n` +
+                    `OK = Combined report (recommended — covers all linked halves)\n` +
+                    `Cancel = Just this project (you can do another for the other half later)`
+                );
+                mode = combined ? 'combined' : 'single';
+            }
+
+            // If combined and any scope project already has a report, warn.
+            if (mode === 'combined') {
+                const scopePeek = _resolveScopeIds(projectId, 'combined');
+                const conflicts = scopePeek
+                    .map(id => projects.find(p => p.id === id))
+                    .filter(p => p && p.id !== projectId && p.completionReport?.colorPalette?.length > 0);
+                if (conflicts.length > 0) {
+                    const names = conflicts.map(p => p.jobNumber || p.projectName).join(', ');
+                    if (!confirm(`Note: ${names} already has its own report. Generating a combined report won't delete it, but new shares will go to the combined version. Continue?`)) {
+                        return;
+                    }
+                }
+            }
+
+            return _openReportFlow(projectId, mode || 'single', null);
+        };
+
+        function _openReportFlow(projectId, mode, existing) {
+            const scopeIds = (mode === 'combined')
+                ? _resolveScopeIds(projectId, 'combined')
+                : [projectId];
+            const primaryId = (mode === 'combined') ? _primaryFromScope(scopeIds) : projectId;
+            const primary = projects.find(p => p.id === primaryId);
+            const landed = jobs.find(j => j.id === primary?.landedProposalId);
+
+            // If we're switching the canonical record from a subsidiary to a
+            // primary (combined mode, operator clicked from the non-primary side),
+            // load the primary's existing report instead of the original side's.
+            if (mode === 'combined' && primaryId !== projectId) {
+                existing = primary?.completionReport || existing;
+            }
+
+            window._reportProjectId = primaryId;
+            window._reportProject = primary;
+            window._reportProposal = landed;
+
+            const paletteSeed = (existing?.colorPalette?.length > 0)
                 ? existing.colorPalette
-                : _seedColorPaletteFromProposal(landed);
+                : (mode === 'combined'
+                    ? _seedColorPaletteFromScope(scopeIds)
+                    : _seedColorPaletteFromProposal(landed));
 
             window._reportFlow = {
-                projectId,
-                projectRef: project,
+                projectId: primaryId,
+                projectRef: primary,
                 proposalRef: landed,
+                scope: mode,
+                scopeProjectIds: scopeIds,
+                primaryProjectId: primaryId,
                 palette: paletteSeed,
                 photos: existing?.photos || { cover: null, rooms: {} },
                 stats: existing?.stats || {},
@@ -8670,7 +8832,7 @@ Only return JSON, no other text.`;
                 currentSurfaceIdx: 0,
                 surfaces: (landed?.jobType === 'Exterior') ? REPORT_SURFACES_EXTERIOR : REPORT_SURFACES_INTERIOR,
                 done: false,
-                pendingFollowup: null,  // 'finish' | 'brand' | 'technique' | 'photos'
+                pendingFollowup: null,
                 askedTechnique: {},
                 askedPhotos: false,
             };
@@ -8680,10 +8842,9 @@ Only return JSON, no other text.`;
             document.getElementById('reportFlowChat').innerHTML = '';
             document.getElementById('reportFlowInput').value = '';
 
-            // Greeting + first question
-            _reportSay(_greeting(project, landed, paletteSeed));
+            _reportSay(_greeting(primary, landed, paletteSeed));
             _reportAskNext();
-        };
+        }
 
         function _greeting(project, proposal, palette) {
             const name = project.customerName || 'this customer';
@@ -8748,6 +8909,9 @@ Only return JSON, no other text.`;
             }
 
             const area = f.palette[f.currentAreaIdx];
+            // Combined scope: surfaces switch per area's job type.
+            if (area._jobType === 'Exterior') f.surfaces = REPORT_SURFACES_EXTERIOR;
+            else if (area._jobType === 'Interior') f.surfaces = REPORT_SURFACES_INTERIOR;
             _reportSetProgress(`${f.currentAreaIdx + 1}/${f.palette.length} · ${area.area}`);
 
             // Pending follow-up takes priority (we asked "what brand" or similar)
@@ -9097,19 +9261,28 @@ Only return JSON, no other text.`;
             _reportSetQuickReplies([]);
             _reportSay(`Generating your report — one moment, the AI is writing some personalized prose…`);
 
-            // Compute stats
+            // Compute stats — aggregate across scope when combined.
             const proposal = f.proposalRef || {};
             const totalSqft = (f.palette || []).reduce((s, a) => s + (a.sqft || 0), 0);
-            const a = f.projectRef.actuals || {};
+            const scopeIds = f.scopeProjectIds || [f.projectId];
+            const agg = _aggregateScopeStats(scopeIds);
+            const jobTypesInScope = scopeIds.map(id => {
+                const p = projects.find(pr => pr.id === id);
+                const j = jobs.find(jb => jb.id === p?.landedProposalId);
+                return j?.jobType;
+            }).filter(Boolean);
+            const jobTypeStr = (f.scope === 'combined' && jobTypesInScope.length > 1)
+                ? jobTypesInScope.join(' + ')
+                : (proposal.jobType || '');
             const stats = {
                 totalSqft: totalSqft,
-                totalHours: a.totalHours || 0,
-                totalManDays: a.totalManDays || 0,
-                gallonsUsed: a.gallonsUsed || 0,
-                crewSize: a.crewCount || (proposal && (proposal.rooms || []).reduce((m, r) => Math.max(m, r.crewSize || 0), 0)) || 0,
-                daysToComplete: a.days || 0,
-                completedAt: a.completedAt || a.lastSavedAt || new Date().toISOString(),
-                jobType: proposal.jobType || '',
+                totalHours: agg.totalHours,
+                totalManDays: agg.totalManDays,
+                gallonsUsed: agg.gallonsUsed,
+                crewSize: agg.crewSize || (proposal && (proposal.rooms || []).reduce((m, r) => Math.max(m, r.crewSize || 0), 0)) || 0,
+                daysToComplete: agg.days,
+                completedAt: agg.completedAt || new Date().toISOString(),
+                jobType: jobTypeStr,
                 areaCount: f.palette.length,
             };
 
@@ -9133,10 +9306,24 @@ Only return JSON, no other text.`;
                 aiContent,
                 shareSlug: f.projectRef.completionReport?.shareSlug || _slug(),
                 viewCount: f.projectRef.completionReport?.viewCount || 0,
+                scope: f.scope || 'single',
+                scopeProjectIds: scopeIds,
+                primaryProjectId: f.primaryProjectId || f.projectId,
             };
             try {
                 await updateDoc(doc(db, 'projects', f.projectId), { completionReport: reportDoc });
                 f.projectRef.completionReport = reportDoc;
+
+                // Combined: point each subsidiary at the primary so opening
+                // from either side lands on the canonical document.
+                if (f.scope === 'combined') {
+                    for (const sid of scopeIds) {
+                        if (sid === f.projectId) continue;
+                        await updateDoc(doc(db, 'projects', sid), { completionReportRef: f.projectId });
+                        const sp = projects.find(p => p.id === sid);
+                        if (sp) sp.completionReportRef = f.projectId;
+                    }
+                }
             } catch (e) {
                 alert('Save failed: ' + e.message);
                 return;
@@ -9216,8 +9403,19 @@ Generate JSON with these EXACT keys:
         // REPORT VIEWER — renders the actual artifact (printable + on-screen)
         // ═════════════════════════════════════════════════════════════════════
         window.viewCompletionReport = function(projectId) {
-            const project = projects.find(p => p.id === projectId);
-            if (!project || !project.completionReport) {
+            let project = projects.find(p => p.id === projectId);
+            if (!project) { alert('Project not found'); return; }
+
+            // Subsidiary in a combined report? Follow the ref to the canonical.
+            if (project.completionReportRef && project.completionReportRef !== projectId) {
+                const primary = projects.find(p => p.id === project.completionReportRef);
+                if (primary?.completionReport) {
+                    project = primary;
+                    projectId = primary.id;
+                }
+            }
+
+            if (!project.completionReport) {
                 alert('No completion report yet for this project.');
                 return;
             }
@@ -9299,7 +9497,21 @@ Generate JSON with these EXACT keys:
                         </div>
                     </div>` : '';
 
-                return `<section style="page-break-before:always;padding:48px 56px 64px;background:${P.cream};color:${P.text};">
+                // Combined-scope jobType divider — emit before the first area
+                // of each new jobType when scope spans more than one type.
+                const distinctTypes = Array.from(new Set(palette.map(p => p._jobType).filter(Boolean)));
+                const isCombined = (report.scope === 'combined') && distinctTypes.length > 1;
+                const prevType = idx > 0 ? palette[idx - 1]._jobType : null;
+                const showDivider = isCombined && area._jobType && area._jobType !== prevType;
+                const dividerSection = showDivider ? `
+                    <section style="page-break-before:always;padding:120px 64px;background:linear-gradient(135deg, ${P.navyDeep} 0%, ${P.navy} 100%);color:#fff;text-align:center;min-height:600px;display:flex;flex-direction:column;justify-content:center;">
+                        <div style="font-family:'Inter',sans-serif;font-size:11pt;color:${P.gold};letter-spacing:5px;text-transform:uppercase;font-weight:600;margin-bottom:24px;">${area._jobType === 'Exterior' ? 'Part Two' : 'Part One'}</div>
+                        <h2 style="font-family:'Playfair Display',serif;font-size:64pt;color:#fff;font-weight:600;margin:0;letter-spacing:-1px;line-height:1;">${area._jobType}</h2>
+                        <div style="width:80px;height:2px;background:${P.gold};margin:24px auto 0;"></div>
+                        <div style="font-family:'Playfair Display',serif;font-style:italic;font-size:16pt;color:${P.gold};margin-top:24px;font-weight:300;">${area._jobType === 'Exterior' ? '— The Outside —' : '— The Inside —'}</div>
+                    </section>` : '';
+
+                return `${dividerSection}<section style="page-break-before:always;padding:48px 56px 64px;background:${P.cream};color:${P.text};">
                     ${sectionHead('Area ' + (idx + 1) + ' of ' + palette.length, area.area)}
                     ${photosBlock}
                     <div style="background:#fff;border:1px solid ${P.line};border-radius:8px;padding:20px 24px;margin-bottom:18px;">
