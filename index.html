@@ -9738,6 +9738,60 @@ Generate JSON with these EXACT keys:
         // ═════════════════════════════════════════════════════════════════════
         // REPORT VIEWER — renders the actual artifact (printable + on-screen)
         // ═════════════════════════════════════════════════════════════════════
+
+        // Find the source room for a palette entry by name. Tries the tagged
+        // _sourceProjectId first (combined scope), then falls back to scope.
+        function _findRoomForArea(area, scopeProjectIds) {
+            const wantRaw = (area.area || '').replace(/^(Interior|Exterior)\s*·\s*/i, '').trim().toLowerCase();
+            const order = [];
+            if (area._sourceProjectId) order.push(area._sourceProjectId);
+            (scopeProjectIds || []).forEach(id => { if (!order.includes(id)) order.push(id); });
+            for (const pid of order) {
+                const proj = projects.find(p => p.id === pid);
+                const job = jobs.find(j => j.id === proj?.landedProposalId);
+                if (!job) continue;
+                const room = (job.rooms || []).filter(r => !r.deleted).find(r =>
+                    (r.name || '').trim().toLowerCase() === wantRaw);
+                if (room) return room;
+            }
+            return null;
+        }
+
+        // View-time backfill: recompute palette sqft + total stats from source
+        // rooms whenever the saved values are missing or stale. Mutates the
+        // report object in place (cheap; only affects the viewer's render).
+        function _backfillReportStats(project, report) {
+            if (!report || !Array.isArray(report.colorPalette)) return;
+            const scopeIds = report.scopeProjectIds && report.scopeProjectIds.length
+                ? report.scopeProjectIds : [project.id];
+
+            // Recompute per-area sqft if missing
+            report.colorPalette.forEach(area => {
+                if (!area.sqft || area.sqft === 0) {
+                    const room = _findRoomForArea(area, scopeIds);
+                    if (room) area.sqft = _computeRoomSqft(room);
+                }
+            });
+
+            report.stats = report.stats || {};
+            const newTotalSqft = report.colorPalette.reduce((s, a) => s + (a.sqft || 0), 0);
+            if (!report.stats.totalSqft || report.stats.totalSqft === 0) {
+                report.stats.totalSqft = newTotalSqft;
+            }
+
+            // Gallons fallback (estimate-derived) when actuals weren't logged
+            if (!report.stats.gallonsUsed || report.stats.gallonsUsed === 0) {
+                const allRooms = scopeIds.flatMap(id => {
+                    const p = projects.find(pr => pr.id === id);
+                    const j = jobs.find(jb => jb.id === p?.landedProposalId);
+                    return (j?.rooms || []).filter(r => !r.deleted);
+                });
+                const g = _estimateGallons(allRooms);
+                if (g) report.stats.gallonsUsed = g;
+            }
+        }
+
+
         window.viewCompletionReport = async function(projectId) {
             let project = projects.find(p => p.id === projectId);
             if (!project) { alert('Project not found'); return; }
@@ -9759,6 +9813,9 @@ Generate JSON with these EXACT keys:
             _ensureReportFonts();
             // Load authoritative paint color DB before rendering so swatches use real hex
             await _ensurePaintDB();
+            // Backfill palette sqft + stats for older reports that were saved
+            // before the dimension-based computation existed
+            _backfillReportStats(project, project.completionReport);
             const html = _renderReportHTML(project, project.completionReport);
             document.getElementById('reportContent').innerHTML = html;
             showScreen('reportViewScreen');
