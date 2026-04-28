@@ -860,10 +860,10 @@
             <div id="reportFlowChat" style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:14px;min-height:280px;max-height:55vh;overflow-y:auto;margin-bottom:12px;"></div>
             <div id="reportFlowControls" style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:12px;">
                 <div id="reportFlowQuickReplies" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;"></div>
-                <div style="display:flex;gap:8px;align-items:flex-end;">
-                    <textarea id="reportFlowInput" rows="2" placeholder="Type your answer… (or tap mic to speak)" style="flex:1;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;resize:vertical;"></textarea>
-                    <button id="reportFlowMicBtn" class="btn btn-secondary" onclick="reportFlowToggleMic()" style="padding:8px 12px;" title="Voice input">🎤</button>
-                    <button class="btn btn-success" onclick="reportFlowSendInput()" style="padding:10px 16px;">Send</button>
+                <textarea id="reportFlowInput" rows="4" placeholder="Type your answer here — typos are fine, AI cleans them up. Or ask a question (e.g. 'what sheen for ceilings?')." style="width:100%;padding:14px;border:1px solid #d1d5db;border-radius:10px;font-size:16px;line-height:1.5;resize:vertical;font-family:inherit;min-height:96px;box-sizing:border-box;"></textarea>
+                <div style="display:flex;gap:8px;margin-top:10px;align-items:center;">
+                    <button id="reportFlowMicBtn" class="btn btn-secondary" onclick="reportFlowToggleMic()" style="flex:0 0 auto;padding:12px 16px;font-size:18px;" title="Voice input">🎤</button>
+                    <button class="btn btn-success" onclick="reportFlowSendInput()" style="flex:1;padding:12px 20px;font-size:15px;font-weight:600;">Send →</button>
                 </div>
                 <div style="display:flex;gap:6px;margin-top:8px;">
                     <button class="btn btn-secondary btn-small" onclick="reportFlowSkipQuestion()" style="flex:1;font-size:12px;">Skip this question</button>
@@ -879,9 +879,27 @@
                 <button id="reportPrintBtn" class="btn btn-success" onclick="printReport()" style="flex:1;min-width:140px;">🖨️ Print / Save PDF</button>
                 <button class="btn btn-info btn-small" onclick="reportShareLink()" style="flex:0 0 auto;">🔗 Share</button>
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
-                <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;">✏️ Edit</button>
+                <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
+                <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
+        </div>
+
+        <!-- COMPLETION REPORT — QUICK EDIT (form view of every field, no AI re-walk) -->
+        <div id="reportQuickEditScreen" class="screen">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+                <button class="btn btn-back" onclick="exitReportQuickEdit()">← Back</button>
+                <div style="flex:1;text-align:right;">
+                    <button class="btn btn-success" onclick="saveReportQuickEdit()" style="padding:10px 18px;">💾 Save changes</button>
+                </div>
+            </div>
+            <h2 class="screen-title" style="margin-bottom:6px;">Quick Edit</h2>
+            <p style="color:#6b7280;font-size:13px;text-align:center;margin-bottom:18px;line-height:1.5;">Fix typos, swap colors, tweak techniques — anything wrong in the report.<br>Saving regenerates only the AI prose if the colors actually changed.</p>
+            <div id="reportQuickEditContent" style="background:#fff;"></div>
+            <div style="display:flex;gap:8px;margin-top:18px;">
+                <button class="btn btn-secondary" onclick="exitReportQuickEdit()" style="flex:1;">Cancel</button>
+                <button class="btn btn-success" onclick="saveReportQuickEdit()" style="flex:2;padding:14px;font-weight:600;">💾 Save changes</button>
+            </div>
         </div>
 
         <!-- AI ESTIMATE GENERATOR SCREEN -->
@@ -10102,6 +10120,195 @@ Generate JSON with these EXACT keys:
             if (/purple|lavender|violet|plum/.test(key)) return '#8B7AA8';
             return '#E8E4DA';
         }
+
+        // ─── Quick Edit (no-AI form view of every report field) ────────
+        // Operator clicked "Quick Edit" on the viewer. Renders a form with
+        // every editable field — colors, brands, codes, finishes, techniques,
+        // even the AI narrative paragraphs — so they can fix a typo without
+        // walking the whole conversation again. Save updates Firestore and
+        // regenerates the narrative ONLY if the palette signature changed.
+
+        function _qeInput(name, value, placeholder) {
+            const v = (value || '').replace(/"/g, '&quot;');
+            return `<input type="text" data-qe="${name}" value="${v}" placeholder="${placeholder || ''}" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;font-size:15px;font-family:inherit;">`;
+        }
+        function _qeTextarea(name, value, placeholder, rows) {
+            const v = (value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+            return `<textarea data-qe="${name}" rows="${rows || 3}" placeholder="${placeholder || ''}" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;font-size:15px;font-family:inherit;line-height:1.5;resize:vertical;">${v}</textarea>`;
+        }
+
+        window.openReportQuickEdit = function(projectId) {
+            // Follow ref if subsidiary
+            let project = projects.find(p => p.id === projectId);
+            if (!project) { alert('Project not found'); return; }
+            if (project.completionReportRef && project.completionReportRef !== projectId) {
+                const primary = projects.find(p => p.id === project.completionReportRef);
+                if (primary?.completionReport) { project = primary; projectId = primary.id; }
+            }
+            const cr = project.completionReport;
+            if (!cr) { alert('No report to edit yet — generate one first.'); return; }
+
+            window._qeProjectId = projectId;
+            window._qeOriginalSig = cr.paletteSignature || _paletteSignature(cr.colorPalette || []);
+
+            const palette = cr.colorPalette || [];
+            const ai = cr.aiContent || {};
+            const P = REPORT_PALETTE;
+
+            // Build the form
+            let html = `
+                <div style="background:${P.cream};border:1px solid ${P.line};border-radius:10px;padding:16px;margin-bottom:18px;">
+                    <div style="font-family:Inter;font-size:10pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:8px;">Report-Wide Copy</div>
+                    <div style="margin-bottom:12px;">
+                        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;color:#374151;">Welcome / Introduction</label>
+                        ${_qeTextarea('ai.introduction', ai.introduction, 'Welcome paragraph addressed to the customer', 3)}
+                    </div>
+                    <div style="margin-bottom:12px;">
+                        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;color:#374151;">Color Story</label>
+                        ${_qeTextarea('ai.colorStory', ai.colorStory, 'Narrative tying the palette together', 4)}
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;color:#374151;">Closing / Thank You</label>
+                        ${_qeTextarea('ai.closingMessage', ai.closingMessage, 'Closing message', 3)}
+                    </div>
+                </div>
+            `;
+
+            palette.forEach((area, areaIdx) => {
+                const surfaces = Object.entries(area.surfaces || {});
+                const proTip = ai.proTips?.[area.area] || area.tip || '';
+                html += `
+                    <div style="background:#fff;border:1px solid ${P.line};border-radius:10px;padding:16px;margin-bottom:14px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                            <div>
+                                <div style="font-family:Inter;font-size:9pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;">Area ${areaIdx + 1}</div>
+                                <input type="text" data-qe="palette.${areaIdx}.area" value="${(area.area || '').replace(/"/g, '&quot;')}" style="font-family:'Playfair Display',serif;font-size:18pt;color:${P.navy};font-weight:600;border:none;outline:none;width:100%;padding:2px 0;background:transparent;border-bottom:1px dashed ${P.line};">
+                            </div>
+                        </div>
+                        <div style="margin-bottom:10px;">
+                            <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151;">Special Technique <span style="color:#9ca3af;font-weight:400;">(blank if none)</span></label>
+                            ${_qeInput(`palette.${areaIdx}.technique`, area.technique, 'e.g. Accent wall, color wash, sponge')}
+                        </div>
+                        <div style="margin-bottom:10px;">
+                            <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151;">Pro Tip in Report</label>
+                            ${_qeTextarea(`proTip.${area.area}`, proTip, 'Customer-facing tip for this area', 2)}
+                        </div>
+                        ${surfaces.length === 0 ? '<div style="color:#9ca3af;font-style:italic;font-size:13px;">No surfaces captured for this area.</div>' : ''}
+                        ${surfaces.map(([surfName, v]) => {
+                            const sw = v?.hex || _colorHex(v?.color, v?.brand);
+                            return `<div style="border-top:1px solid ${P.line};padding-top:10px;margin-top:10px;">
+                                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                                    <div style="width:28px;height:28px;border-radius:6px;background:${sw};border:1px solid #ccc;flex:0 0 auto;"></div>
+                                    <div style="font-family:Inter;font-size:11pt;color:${P.navy};text-transform:capitalize;font-weight:600;">${surfName}</div>
+                                </div>
+                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                    <div><label style="display:block;font-size:11px;color:#6b7280;margin-bottom:2px;">Brand</label>${_qeInput(`palette.${areaIdx}.surfaces.${surfName}.brand`, v?.brand, 'Benjamin Moore')}</div>
+                                    <div><label style="display:block;font-size:11px;color:#6b7280;margin-bottom:2px;">Color name</label>${_qeInput(`palette.${areaIdx}.surfaces.${surfName}.color`, v?.color, 'Cloud White')}</div>
+                                    <div><label style="display:block;font-size:11px;color:#6b7280;margin-bottom:2px;">Code</label>${_qeInput(`palette.${areaIdx}.surfaces.${surfName}.code`, v?.code, 'OC-130')}</div>
+                                    <div><label style="display:block;font-size:11px;color:#6b7280;margin-bottom:2px;">Finish</label>${_qeInput(`palette.${areaIdx}.surfaces.${surfName}.finish`, v?.finish, 'Eggshell')}</div>
+                                </div>
+                            </div>`;
+                        }).join('')}
+                    </div>
+                `;
+            });
+
+            document.getElementById('reportQuickEditContent').innerHTML = html;
+            showScreen('reportQuickEditScreen');
+            window.scrollTo(0, 0);
+        };
+
+        window.exitReportQuickEdit = function() {
+            const projectId = window._qeProjectId;
+            window._qeProjectId = null;
+            if (projectId) viewCompletionReport(projectId);
+            else showScreen('homeScreen');
+        };
+
+        window.saveReportQuickEdit = async function() {
+            const projectId = window._qeProjectId;
+            const project = projects.find(p => p.id === projectId);
+            if (!project?.completionReport) { alert('Lost the report reference — please go back and try again.'); return; }
+            const cr = project.completionReport;
+
+            // Read every data-qe input back into a structured update
+            const inputs = document.querySelectorAll('#reportQuickEditContent [data-qe]');
+            const updates = {};
+            inputs.forEach(el => {
+                const path = el.dataset.qe;
+                const val = el.value || '';
+                // Walk the path into updates object
+                const parts = path.split('.');
+                let cur = updates;
+                for (let i = 0; i < parts.length - 1; i++) {
+                    const k = parts[i];
+                    if (!(k in cur)) cur[k] = isNaN(parts[i + 1]) ? {} : [];
+                    cur = cur[k];
+                }
+                cur[parts[parts.length - 1]] = val;
+            });
+
+            // Apply to a working copy of completionReport
+            const newCr = JSON.parse(JSON.stringify(cr));
+            newCr.aiContent = newCr.aiContent || {};
+            if (updates.ai) {
+                newCr.aiContent.introduction = updates.ai.introduction ?? newCr.aiContent.introduction;
+                newCr.aiContent.colorStory = updates.ai.colorStory ?? newCr.aiContent.colorStory;
+                newCr.aiContent.closingMessage = updates.ai.closingMessage ?? newCr.aiContent.closingMessage;
+            }
+            if (updates.proTip) {
+                newCr.aiContent.proTips = newCr.aiContent.proTips || {};
+                Object.entries(updates.proTip).forEach(([area, tip]) => {
+                    newCr.aiContent.proTips[area] = tip;
+                });
+            }
+            if (updates.palette) {
+                Object.entries(updates.palette).forEach(([idx, areaUpdates]) => {
+                    const i = parseInt(idx, 10);
+                    if (!newCr.colorPalette[i]) return;
+                    const a = newCr.colorPalette[i];
+                    if (areaUpdates.area !== undefined) a.area = areaUpdates.area;
+                    if (areaUpdates.technique !== undefined) a.technique = areaUpdates.technique;
+                    if (areaUpdates.surfaces) {
+                        Object.entries(areaUpdates.surfaces).forEach(([surfName, surfUpdates]) => {
+                            if (!a.surfaces[surfName]) a.surfaces[surfName] = {};
+                            const s = a.surfaces[surfName];
+                            if (surfUpdates.brand !== undefined) s.brand = surfUpdates.brand;
+                            if (surfUpdates.color !== undefined) s.color = surfUpdates.color;
+                            if (surfUpdates.code !== undefined) s.code = surfUpdates.code;
+                            if (surfUpdates.finish !== undefined) s.finish = surfUpdates.finish;
+                            // Hex stays as-is unless color/brand changed materially
+                        });
+                    }
+                });
+            }
+
+            // Did palette content change? If yes, clear stored hex on changed surfaces
+            // so the next polish/render fills them in fresh.
+            const newSig = _paletteSignature(newCr.colorPalette);
+            const paletteChanged = newSig !== window._qeOriginalSig;
+            if (paletteChanged) {
+                newCr.colorPalette.forEach(a => Object.values(a.surfaces || {}).forEach(s => { if (s) s.hex = ''; }));
+            }
+            newCr.paletteSignature = newSig;
+            newCr.updatedAt = new Date().toISOString();
+
+            // Save
+            const btns = document.querySelectorAll('#reportQuickEditScreen button');
+            btns.forEach(b => b.disabled = true);
+            try {
+                await updateDoc(doc(db, 'projects', projectId), { completionReport: newCr });
+                project.completionReport = newCr;
+                alert(paletteChanged
+                    ? 'Saved. Colors changed — open & re-finish to refresh AI prose, or keep this version.'
+                    : 'Saved. No color changes — narrative kept as-is.');
+                viewCompletionReport(projectId);
+            } catch (e) {
+                alert('Save failed: ' + e.message);
+            } finally {
+                btns.forEach(b => b.disabled = false);
+            }
+        };
 
         // ─── Print ──────────────────────────────────────────────────────
         // Report-specific print path. Pre-decodes images so Safari doesn't
