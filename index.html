@@ -9543,6 +9543,10 @@ Rules:
         // meaning. Customer-facing artifact reads clean even when input was
         // messy. Falls back to the original palette on any error.
         async function _polishPaletteWithAI(palette) {
+            // Make sure the authoritative paint DB is loaded so we can prefer
+            // its ground-truth hex over anything the AI returns.
+            await _ensurePaintDB();
+
             const slim = palette.map((a, i) => ({
                 idx: i,
                 area: a.area,
@@ -9598,12 +9602,18 @@ Rules:
                 Object.keys(a.surfaces || {}).forEach(k => {
                     const orig = a.surfaces[k] || {};
                     const fixed = (p.surfaces && p.surfaces[k]) || {};
-                    const hexValue = (fixed.hex && /^#[0-9a-f]{6}$/i.test(fixed.hex)) ? fixed.hex : (orig.hex || '');
+                    const finalBrand = fixed.brand || orig.brand || '';
+                    const finalCode = fixed.code || orig.code || '';
+                    const finalColor = fixed.color || orig.color || '';
+                    // Prefer authoritative DB > AI's hex > existing stored hex.
+                    const dbHex = _paintColorLookup(finalBrand, finalCode, finalColor);
+                    const aiHex = (fixed.hex && /^#[0-9a-f]{6}$/i.test(fixed.hex)) ? fixed.hex : '';
+                    const hexValue = dbHex || aiHex || orig.hex || '';
                     cleanedSurfaces[k] = {
                         ...orig,
-                        color: fixed.color || orig.color || '',
-                        brand: fixed.brand || orig.brand || '',
-                        code: fixed.code || orig.code || '',
+                        color: finalColor,
+                        brand: finalBrand,
+                        code: finalCode,
                         finish: fixed.finish || orig.finish || '',
                         hex: hexValue,
                     };
@@ -9686,7 +9696,7 @@ Generate JSON with these EXACT keys:
         // ═════════════════════════════════════════════════════════════════════
         // REPORT VIEWER — renders the actual artifact (printable + on-screen)
         // ═════════════════════════════════════════════════════════════════════
-        window.viewCompletionReport = function(projectId) {
+        window.viewCompletionReport = async function(projectId) {
             let project = projects.find(p => p.id === projectId);
             if (!project) { alert('Project not found'); return; }
 
@@ -9705,6 +9715,8 @@ Generate JSON with these EXACT keys:
             }
             window._reportProjectId = projectId;
             _ensureReportFonts();
+            // Load authoritative paint color DB before rendering so swatches use real hex
+            await _ensurePaintDB();
             const html = _renderReportHTML(project, project.completionReport);
             document.getElementById('reportContent').innerHTML = html;
             showScreen('reportViewScreen');
@@ -9752,7 +9764,7 @@ Generate JSON with these EXACT keys:
                 const surfaceList = Object.entries(surfaces)
                     .filter(([, v]) => v && v.color)
                     .map(([surfName, v]) => {
-                        const swatch = v.hex || _colorHex(v.color, v.brand);
+                        const swatch = (v.hex || _paintColorLookup(v.brand, v.code, v.color) || _colorHex(v.color, v.brand));
                         return `<div style="display:grid;grid-template-columns:24px 1fr;gap:12px;padding:10px 0;border-bottom:1px solid ${P.line};align-items:flex-start;">
                             <div style="width:20px;height:20px;border-radius:50%;background:${swatch};border:1px solid #ccc;margin-top:2px;"></div>
                             <div>
@@ -9814,7 +9826,7 @@ Generate JSON with these EXACT keys:
             const allSwatches = palette.flatMap(a =>
                 Object.entries(a.surfaces || {})
                     .filter(([, v]) => v?.color)
-                    .map(([surf, v]) => ({ ...v, surf, area: a.area, hex: v.hex || _colorHex(v.color, v.brand) }))
+                    .map(([surf, v]) => ({ ...v, surf, area: a.area, hex: (v.hex || _paintColorLookup(v.brand, v.code, v.color) || _colorHex(v.color, v.brand)) }))
             );
             const uniqueSwatches = [];
             const seen = new Set();
@@ -10043,9 +10055,71 @@ Generate JSON with these EXACT keys:
             ${easterEgg}`;
         }
 
-        // Heuristic color → hex map. We don't have a comprehensive paint
-        // color database, but a small lookup covers the most common ones
-        // and makes the swatches feel real. Falls back to a neutral cream.
+        // ── Authoritative paint color database ──────────────────────────
+        // Loaded lazily from colors.json (5,765 colors: BM 4,039 + SW 1,726).
+        // Schema: [name, code, brandIdx, hex] where brandIdx 0 = BM, 1 = SW.
+        // Source: northernstarpainters.com/compare-colors/ (operator's tool).
+        window._paintDB = null;
+        window._paintIdx = null;
+
+        async function _ensurePaintDB() {
+            if (window._paintDB) return window._paintDB;
+            try {
+                const res = await fetch('./colors.json', { cache: 'force-cache' });
+                if (!res.ok) throw new Error('colors.json fetch ' + res.status);
+                const arr = await res.json();
+                window._paintDB = arr;
+                // Build two indexes: by (brand, normalized code) and by (brand, normalized name)
+                const byCode = {};
+                const byName = {};
+                const norm = s => (s || '').toString().trim().toLowerCase().replace(/\s+/g, '');
+                arr.forEach(([name, code, brandIdx, hex]) => {
+                    const brand = brandIdx === 0 ? 'benjaminmoore' : 'sherwinwilliams';
+                    byCode[`${brand}|${norm(code)}`] = hex;
+                    // Name index: prefer first occurrence (handles rare duplicates)
+                    const nk = `${brand}|${norm(name)}`;
+                    if (!(nk in byName)) byName[nk] = hex;
+                    // Also index on plain code (for inputs without brand)
+                    const ck = norm(code);
+                    if (!(ck in byCode)) byCode['|' + ck] = hex;
+                });
+                window._paintIdx = { byCode, byName, norm };
+                return arr;
+            } catch (e) {
+                console.warn('Paint DB unavailable:', e);
+                window._paintDB = [];
+                window._paintIdx = null;
+                return [];
+            }
+        }
+
+        function _normalizeBrand(brand) {
+            const b = (brand || '').toLowerCase();
+            if (/benjamin\s*moore|^bm\b/.test(b)) return 'benjaminmoore';
+            if (/sherwin/.test(b)) return 'sherwinwilliams';
+            return '';
+        }
+
+        // Synchronous lookup (only works after _ensurePaintDB has resolved).
+        // Tries: (brand, code) → (any-brand, code) → (brand, name).
+        function _paintColorLookup(brand, code, name) {
+            const idx = window._paintIdx;
+            if (!idx) return '';
+            const norm = idx.norm;
+            const b = _normalizeBrand(brand);
+            const c = norm(code);
+            const n = norm(name);
+            if (b && c && idx.byCode[`${b}|${c}`]) return idx.byCode[`${b}|${c}`];
+            if (c && idx.byCode['|' + c]) return idx.byCode['|' + c];
+            if (b && n && idx.byName[`${b}|${n}`]) return idx.byName[`${b}|${n}`];
+            // Cross-brand fallback by name only (e.g. operator typed brand wrong)
+            const bm = idx.byName[`benjaminmoore|${n}`];
+            const sw = idx.byName[`sherwinwilliams|${n}`];
+            return bm || sw || '';
+        }
+
+        // Heuristic color → hex map. Final fallback when authoritative
+        // lookup misses (unknown color, or paint DB hasn't loaded).
         function _colorHex(colorName, brand) {
             if (!colorName) return '#E8E4DA';
             const key = colorName.toLowerCase().trim();
@@ -10137,7 +10211,8 @@ Generate JSON with these EXACT keys:
             return `<textarea data-qe="${name}" rows="${rows || 3}" placeholder="${placeholder || ''}" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;font-size:15px;font-family:inherit;line-height:1.5;resize:vertical;">${v}</textarea>`;
         }
 
-        window.openReportQuickEdit = function(projectId) {
+        window.openReportQuickEdit = async function(projectId) {
+            await _ensurePaintDB();
             // Follow ref if subsidiary
             let project = projects.find(p => p.id === projectId);
             if (!project) { alert('Project not found'); return; }
@@ -10195,7 +10270,7 @@ Generate JSON with these EXACT keys:
                         </div>
                         ${surfaces.length === 0 ? '<div style="color:#9ca3af;font-style:italic;font-size:13px;">No surfaces captured for this area.</div>' : ''}
                         ${surfaces.map(([surfName, v]) => {
-                            const sw = v?.hex || _colorHex(v?.color, v?.brand);
+                            const sw = v?.hex || _paintColorLookup(v?.brand, v?.code, v?.color) || _colorHex(v?.color, v?.brand);
                             return `<div style="border-top:1px solid ${P.line};padding-top:10px;margin-top:10px;">
                                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
                                     <div style="width:28px;height:28px;border-radius:6px;background:${sw};border:1px solid #ccc;flex:0 0 auto;"></div>
