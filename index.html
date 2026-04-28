@@ -66,10 +66,13 @@
             /* Kill the fixed purple gradient that otherwise paints every page */
             body::after, body::before { display: none !important; content: none !important; background: none !important; }
             #appContainer, .container { box-shadow: none !important; border-radius: 0 !important; max-width: 100% !important; background: white !important; }
-            .header, .screen:not(#proposalViewScreen):not(#reportViewScreen), .no-print { display: none !important; }
-            /* Proposal print path */
-            #proposalViewScreen { display: block !important; padding: 0 !important; }
-            #proposalViewScreen .no-print { display: none !important; }
+            .header, .no-print { display: none !important; }
+            /* Only the currently-active screen prints. Any non-active screen
+               stays hidden — prevents the proposal from leaking into a report
+               print and vice-versa. */
+            .screen:not(.active) { display: none !important; }
+            .screen.active { display: block !important; padding: 0 !important; }
+            /* Per-screen content rules (apply only to the active one) */
             #proposalContent { padding: 0 !important; }
             #proposalContent * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             #proposalContent img { page-break-inside: avoid !important; break-inside: avoid !important; }
@@ -78,9 +81,6 @@
             #proposalContent td { page-break-inside: avoid !important; break-inside: avoid !important; }
             #proposalContent .signature-grid { page-break-inside: avoid !important; break-inside: avoid !important; }
             #proposalContent div[style*="page-break-inside"] { page-break-inside: avoid !important; break-inside: avoid !important; }
-            /* Completion-report print path */
-            #reportViewScreen { display: block !important; padding: 0 !important; }
-            #reportViewScreen .no-print { display: none !important; }
             #reportContent { padding: 0 !important; background: white !important; }
             #reportContent * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             #reportContent .report-doc section { page-break-inside: avoid !important; break-inside: avoid !important; }
@@ -10105,19 +10105,13 @@ Generate JSON with these EXACT keys:
 
                 <!-- ─── REVIEW REQUEST (Google) ─── -->
                 ${(() => {
-                    const reviewUrl = (cs.googleReviewUrl || '').trim();
-                    if (!reviewUrl) {
-                        // No URL configured — render a softer prompt without QR (still customer-safe).
-                        return `<section style="page-break-before:always;padding:60px 56px;background:#fff;text-align:center;">
-                            ${sectionHead('Share the Love', `We'd Love Your Feedback`)}
-                            <div style="max-width:480px;margin:0 auto;font-family:'Playfair Display',serif;font-size:14pt;color:${P.charcoal};line-height:1.7;font-style:italic;">Loved your experience? A few sentences on Google helps another homeowner find us.</div>
-                            <div style="background:${P.cream};border-radius:8px;padding:24px;max-width:480px;margin:36px auto 0;">
-                                <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:6px;">Refer a Friend</div>
-                                <div style="font-family:'Playfair Display',serif;font-size:18pt;color:${P.navy};font-weight:600;">$100 off their next project — and yours.</div>
-                                <div style="font-family:'Inter',sans-serif;font-size:11pt;color:${P.text};margin-top:8px;">Share this report. When they book, you both save.</div>
-                            </div>
-                        </section>`;
-                    }
+                    // Use the configured Google profile URL; fall back to a
+                    // Google search for the company name so the QR is never
+                    // missing on a customer-facing report.
+                    const configured = (cs.googleReviewUrl || '').trim();
+                    const companyName = (cs.companyName || 'Northern Star Painters').trim();
+                    const fallback = `https://www.google.com/search?q=${encodeURIComponent(companyName + ' reviews')}`;
+                    const reviewUrl = configured || fallback;
                     const qr = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&color=1A2B4A&bgcolor=FAF7F2&data=${encodeURIComponent(reviewUrl)}`;
                     return `<section style="page-break-before:always;padding:60px 56px;background:#fff;text-align:center;">
                         ${sectionHead('Share the Love', `We'd Love Your Google Review`)}
