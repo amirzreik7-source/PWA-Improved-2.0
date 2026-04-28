@@ -1086,6 +1086,11 @@
                     <div class="form-group"><label>Email</label><input type="email" id="companyEmail" value="info@northernstarpainters.com"></div>
                 </div>
                 <div class="form-group"><label>Website</label><input type="text" id="companyWebsite" value="www.northernstarpainters.com"></div>
+                <div class="form-group">
+                    <label>Google Profile / Review Link</label>
+                    <input type="url" id="googleReviewUrl" placeholder="https://g.page/r/your-id/review">
+                    <div style="font-size:11px;color:#6b7280;margin-top:4px;">Used in Customer Completion Reports. Get yours from your Google Business Profile → "Get more reviews" → "Share review form".</div>
+                </div>
                 <div class="form-group"><label>Company Logo</label><input type="file" id="logoUpload" accept="image/*" onchange="handleLogoUpload(event)">
                 <img id="logoPreview" class="photo-preview hidden"></div>
             </div>
@@ -2117,7 +2122,8 @@
                     document.getElementById('consultantTitle').value = companySettings.consultantTitle || '';
                     document.getElementById('consultantPhone').value = companySettings.consultantPhone || '';
                     document.getElementById('consultantEmail').value = companySettings.consultantEmail || '';
-                    
+                    document.getElementById('googleReviewUrl').value = companySettings.googleReviewUrl || '';
+
                     if (companySettings.logoUrl) {
                         document.getElementById('logoPreview').src = companySettings.logoUrl;
                         document.getElementById('logoPreview').classList.remove('hidden');
@@ -2144,6 +2150,7 @@
                 consultantTitle: document.getElementById('consultantTitle').value,
                 consultantPhone: document.getElementById('consultantPhone').value,
                 consultantEmail: document.getElementById('consultantEmail').value,
+                googleReviewUrl: document.getElementById('googleReviewUrl').value.trim(),
                 logoUrl: companySettings?.logoUrl || '',
                 consultantPhotoUrl: companySettings?.consultantPhotoUrl || ''
             };
@@ -8614,6 +8621,7 @@ Question from contractor: ${question}`;
                     body: JSON.stringify({
                         model: 'claude-sonnet-4-20250514',
                         max_tokens: 400,
+                        temperature: 0.4,
                         system: sys,
                         messages: [{ role: 'user', content: ctx }],
                     }),
@@ -8652,6 +8660,7 @@ Rules:
                 body: JSON.stringify({
                     model: 'claude-sonnet-4-20250514',
                     max_tokens: 250,
+                    temperature: 0,
                     system: sys,
                     messages: [{ role: 'user', content: user }],
                 }),
@@ -9431,13 +9440,21 @@ Rules:
                 console.warn('Polish pass failed, using raw palette:', e);
             }
 
-            // AI narrative — single batched call (fast, cached on the doc)
+            // AI narrative — reuse cached prose if palette content hasn't
+            // changed since last save (consistency across edits). Otherwise
+            // regenerate with low temperature for stable voice.
+            const currentSig = _paletteSignature(f.palette);
+            const prior = f.projectRef.completionReport;
             let aiContent = { introduction: '', colorStory: '', proTips: {}, closingMessage: '' };
-            try {
-                aiContent = await _generateReportNarrative(f.projectRef, proposal, f.palette, stats);
-            } catch (e) {
-                console.warn('AI narrative failed, using fallbacks:', e);
-                aiContent = _fallbackNarrative(f.projectRef, proposal, f.palette);
+            if (prior?.aiContent?.introduction && prior.paletteSignature === currentSig) {
+                aiContent = prior.aiContent;
+            } else {
+                try {
+                    aiContent = await _generateReportNarrative(f.projectRef, proposal, f.palette, stats);
+                } catch (e) {
+                    console.warn('AI narrative failed, using fallbacks:', e);
+                    aiContent = _fallbackNarrative(f.projectRef, proposal, f.palette);
+                }
             }
 
             const reportDoc = {
@@ -9454,6 +9471,7 @@ Rules:
                 scope: f.scope || 'single',
                 scopeProjectIds: scopeIds,
                 primaryProjectId: f.primaryProjectId || f.projectId,
+                paletteSignature: currentSig,
             };
             try {
                 await updateDoc(doc(db, 'projects', f.projectId), { completionReport: reportDoc });
@@ -9478,6 +9496,20 @@ Rules:
             viewCompletionReport(f.projectId);
         }
 
+        // Stable signature for the palette content. Used to skip narrative
+        // regeneration on re-edits — keeps the customer's report consistent
+        // across saves so prose doesn't churn between visits.
+        function _paletteSignature(palette) {
+            return (palette || []).map(a => {
+                const surfaces = Object.entries(a.surfaces || {})
+                    .filter(([, v]) => v?.color)
+                    .map(([k, v]) => `${k}:${v.color}|${v.brand}|${v.code}|${v.finish}`)
+                    .sort()
+                    .join(';');
+                return `${a.area}#${surfaces}#${a.technique || ''}`;
+            }).join('||');
+        }
+
         // Polish-on-finish pass: cleans typos / casing in everything the
         // contractor typed (color names, brands, techniques) WITHOUT changing
         // meaning. Customer-facing artifact reads clean even when input was
@@ -9497,7 +9529,7 @@ Rules:
                 ),
             }));
 
-            const sys = `You normalize a painting contractor's quick-typed notes into clean, customer-facing text. Fix typos, capitalization, and grammar — but DO NOT change meaning, invent details, or add words the contractor didn't imply. Output ONLY a JSON array matching the input shape exactly.`;
+            const sys = `You normalize a painting contractor's quick-typed notes into clean, customer-facing text AND provide accurate color hex codes for the small swatches in the report. Fix typos, capitalization, and grammar — but DO NOT change meaning, invent details, or add words the contractor didn't imply. Output ONLY a JSON array matching the input shape exactly.`;
             const user = `Input array (each item describes one area of a painting job):
 ${JSON.stringify(slim, null, 2)}
 
@@ -9507,8 +9539,9 @@ Rules:
 - Color codes → uppercase, hyphenated when standard ("oc130" → "OC-130").
 - Finish → one of Flat/Matte/Eggshell/Satin/Semi-Gloss/Gloss/Pearl (or empty).
 - Technique → fix typos and grammar, keep contractor's intent. Empty stays empty.
-- Area names → leave as-is (don't translate or change them).
-- Return the SAME JSON shape, same idx values, same keys. No markdown fences. No commentary.`;
+- Area names → leave as-is.
+- ADD a "hex" field to EACH surface object with the accurate 6-digit hex of the actual paint color (e.g. "Hale Navy" + Benjamin Moore → "#3D4F61", "Naval" + Sherwin-Williams → "#2C3E50", "Repose Gray" → "#CCC6BB"). If you genuinely don't recognize the color and can't approximate confidently, return "" for hex.
+- Return the SAME JSON shape, same idx values, same keys (PLUS the new "hex" key on each surface). No markdown fences. No commentary.`;
 
             const res = await fetch('https://damp-moon-203c.amirzreik7.workers.dev', {
                 method: 'POST',
@@ -9516,6 +9549,7 @@ Rules:
                 body: JSON.stringify({
                     model: 'claude-sonnet-4-20250514',
                     max_tokens: 2000,
+                    temperature: 0,
                     system: sys,
                     messages: [{ role: 'user', content: user }],
                 }),
@@ -9536,12 +9570,14 @@ Rules:
                 Object.keys(a.surfaces || {}).forEach(k => {
                     const orig = a.surfaces[k] || {};
                     const fixed = (p.surfaces && p.surfaces[k]) || {};
+                    const hexValue = (fixed.hex && /^#[0-9a-f]{6}$/i.test(fixed.hex)) ? fixed.hex : (orig.hex || '');
                     cleanedSurfaces[k] = {
                         ...orig,
                         color: fixed.color || orig.color || '',
                         brand: fixed.brand || orig.brand || '',
                         code: fixed.code || orig.code || '',
                         finish: fixed.finish || orig.finish || '',
+                        hex: hexValue,
                     };
                 });
                 return {
@@ -9590,6 +9626,7 @@ Generate JSON with these EXACT keys:
                 body: JSON.stringify({
                     model: 'claude-sonnet-4-20250514',
                     max_tokens: 1200,
+                    temperature: 0.3,
                     system: sys,
                     messages: [{ role: 'user', content: user }],
                 }),
@@ -9927,25 +9964,41 @@ Generate JSON with these EXACT keys:
                     </div>
                 </section>
 
-                <!-- ─── REVIEW REQUEST ─── -->
-                <section style="page-break-before:always;padding:60px 56px;background:#fff;text-align:center;">
-                    ${sectionHead('Share the Love', 'We\'d Love Your Feedback')}
-                    <div style="max-width:480px;margin:0 auto;font-family:'Playfair Display',serif;font-size:14pt;color:${P.charcoal};line-height:1.7;font-style:italic;">Loved your experience? A few sentences from you helps another homeowner find us.</div>
-                    <div style="display:flex;justify-content:center;gap:16px;margin:36px 0;flex-wrap:wrap;">
-                        ${['Google Review', 'Yelp', 'Facebook'].map(platform => {
-                            const url = encodeURIComponent('https://northernstarpainters.com');
-                            return `<div style="text-align:center;">
-                                <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&color=1A2B4A&bgcolor=FAF7F2&data=${url}" alt="${platform} QR" style="display:block;border-radius:6px;border:1px solid ${P.line};">
-                                <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.navy};margin-top:8px;font-weight:500;">${platform}</div>
-                            </div>`;
-                        }).join('')}
-                    </div>
-                    <div style="background:${P.cream};border-radius:8px;padding:24px;max-width:480px;margin:24px auto 0;">
-                        <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:6px;">Refer a Friend</div>
-                        <div style="font-family:'Playfair Display',serif;font-size:18pt;color:${P.navy};font-weight:600;">$100 off their next project — and yours.</div>
-                        <div style="font-family:'Inter',sans-serif;font-size:11pt;color:${P.text};margin-top:8px;">Share this report. When they book, you both save.</div>
-                    </div>
-                </section>
+                <!-- ─── REVIEW REQUEST (Google) ─── -->
+                ${(() => {
+                    const reviewUrl = (cs.googleReviewUrl || '').trim();
+                    if (!reviewUrl) {
+                        // No URL configured — render a softer prompt without QR (still customer-safe).
+                        return `<section style="page-break-before:always;padding:60px 56px;background:#fff;text-align:center;">
+                            ${sectionHead('Share the Love', `We'd Love Your Feedback`)}
+                            <div style="max-width:480px;margin:0 auto;font-family:'Playfair Display',serif;font-size:14pt;color:${P.charcoal};line-height:1.7;font-style:italic;">Loved your experience? A few sentences on Google helps another homeowner find us.</div>
+                            <div style="background:${P.cream};border-radius:8px;padding:24px;max-width:480px;margin:36px auto 0;">
+                                <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:6px;">Refer a Friend</div>
+                                <div style="font-family:'Playfair Display',serif;font-size:18pt;color:${P.navy};font-weight:600;">$100 off their next project — and yours.</div>
+                                <div style="font-family:'Inter',sans-serif;font-size:11pt;color:${P.text};margin-top:8px;">Share this report. When they book, you both save.</div>
+                            </div>
+                        </section>`;
+                    }
+                    const qr = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&color=1A2B4A&bgcolor=FAF7F2&data=${encodeURIComponent(reviewUrl)}`;
+                    return `<section style="page-break-before:always;padding:60px 56px;background:#fff;text-align:center;">
+                        ${sectionHead('Share the Love', `We'd Love Your Google Review`)}
+                        <div style="max-width:520px;margin:0 auto;font-family:'Playfair Display',serif;font-size:14pt;color:${P.charcoal};line-height:1.7;font-style:italic;">Loved your experience with us? A few sentences on Google means the world — and helps another homeowner find their painter.</div>
+                        <div style="margin:40px auto 24px;max-width:560px;background:${P.cream};border:1px solid ${P.line};border-radius:12px;padding:32px;display:grid;grid-template-columns:200px 1fr;gap:28px;align-items:center;text-align:left;">
+                            <img src="${qr}" alt="Scan to leave a Google review" style="display:block;width:200px;height:200px;border-radius:8px;background:#fff;padding:8px;border:1px solid ${P.line};">
+                            <div>
+                                <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:8px;">Scan with your phone</div>
+                                <div style="font-family:'Playfair Display',serif;font-size:24pt;color:${P.navy};font-weight:600;line-height:1.1;margin-bottom:12px;">Leave us a Google review</div>
+                                <div style="font-family:'Inter',sans-serif;font-size:11pt;color:${P.text};line-height:1.6;margin-bottom:14px;">Open your camera, point at the code — it'll take you straight to the review form. Two minutes is all it takes, and it means the world to a small business like ours.</div>
+                                <a href="${reviewUrl}" style="display:inline-block;font-family:'Inter',sans-serif;font-size:10pt;color:${P.navy};text-decoration:underline;font-weight:500;">${reviewUrl.replace(/^https?:\/\//, '').slice(0, 40)}</a>
+                            </div>
+                        </div>
+                        <div style="background:${P.cream};border-radius:8px;padding:24px;max-width:480px;margin:24px auto 0;">
+                            <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:6px;">Refer a Friend</div>
+                            <div style="font-family:'Playfair Display',serif;font-size:18pt;color:${P.navy};font-weight:600;">$100 off their next project — and yours.</div>
+                            <div style="font-family:'Inter',sans-serif;font-size:11pt;color:${P.text};margin-top:8px;">Share this report. When they book, you both save.</div>
+                        </div>
+                    </section>`;
+                })()}
 
                 <!-- ─── THANK YOU ─── -->
                 <section style="page-break-before:always;padding:120px 56px 100px;background:linear-gradient(180deg, ${P.cream} 0%, #fff 100%);text-align:center;">
@@ -9969,41 +10022,74 @@ Generate JSON with these EXACT keys:
             if (!colorName) return '#E8E4DA';
             const key = colorName.toLowerCase().trim();
             const map = {
-                'cloud white': '#F5F2EB',
-                'snowfall white': '#F8F8F4',
-                'white dove': '#F1EEE5',
-                'simply white': '#F4F1E8',
-                'chantilly lace': '#F4F4EE',
-                'snowbound': '#EEEAE0',
-                'alabaster': '#EDE7DA',
-                'pure white': '#F4F1E8',
-                'extra white': '#F2EFE6',
-                'agreeable gray': '#D1C7B7',
-                'revere pewter': '#BDB1A0',
-                'edgecomb gray': '#D6CFBE',
-                'classic gray': '#DCD6CC',
-                'gray owl': '#C5BDB0',
-                'sea salt': '#D6D5C9',
-                'silver mist': '#CFD0CB',
-                'naval': '#3B4554',
-                'hale navy': '#3D4F61',
-                'iron mountain': '#4F5050',
-                'urbane bronze': '#544A3F',
-                'tricorn black': '#2A2828',
-                'wrought iron': '#403F3D',
-                'caviar': '#36302C',
-                'black beauty': '#211F1E',
+                // Whites
+                'cloud white': '#F5F2EB', 'snowfall white': '#F8F8F4', 'white dove': '#F1EEE5',
+                'simply white': '#F4F1E8', 'chantilly lace': '#F4F4EE', 'snowbound': '#EEEAE0',
+                'alabaster': '#EDE7DA', 'pure white': '#F4F1E8', 'extra white': '#F2EFE6',
+                'oxford white': '#F1EFE7', 'decorator\'s white': '#EFEDE3', 'swiss coffee': '#EDE6D5',
+                'paper white': '#EFEAE0', 'dover white': '#ECE4D2',
+                // Grays / Greiges
+                'agreeable gray': '#D1C7B7', 'revere pewter': '#BDB1A0', 'edgecomb gray': '#D6CFBE',
+                'classic gray': '#DCD6CC', 'gray owl': '#C5BDB0', 'sea salt': '#D6D5C9',
+                'silver mist': '#CFD0CB', 'repose gray': '#CCC6BB', 'mindful gray': '#BDB4A7',
+                'accessible beige': '#CFC1AB', 'collonade gray': '#C9C2B6', 'worldly gray': '#C0B8A7',
+                'amazing gray': '#B7AC9A', 'pale oak': '#D9D2C5', 'balboa mist': '#D4CFC1',
+                'shoji white': '#DBD2BE', 'natural linen': '#D7CDB9',
+                // Blues / Navies
+                'naval': '#2C3E50', 'hale navy': '#384C5F', 'kendall charcoal': '#5C5B5B',
+                'newburyport blue': '#2E4859', 'gentleman\'s gray': '#36474F',
+                'wrought iron': '#3F4948', 'iron mountain': '#56565A',
+                'sherwin williams naval': '#2C3E50', 'salty dog': '#384B5C',
+                'in the navy': '#27384C', 'rainstorm': '#3D5269',
+                'denim': '#536B7C', 'admiral blue': '#27384C',
+                'hague blue': '#2D3848', 'down pour': '#465F73',
+                'palladian blue': '#B1C7C2', 'beach glass': '#B8CFC9',
+                'wedgewood gray': '#A9B4B7', 'gossamer blue': '#A5BCC1',
+                'sea pines': '#7B9098', 'distance': '#5C6E73',
+                'rainwashed': '#B7C9C9', 'tradewind': '#A9C0BB',
+                'sleepy blue': '#A2B5BB', 'sky high': '#B0C5CD',
+                'breath of fresh air': '#C9D6D2',
+                // Greens / Sages
+                'sage': '#9CAA8E', 'evergreen fog': '#8E948A', 'sea salt sw': '#CDD0C0',
+                'softened green': '#BFC8B5', 'rosemary': '#7C8B6F',
+                'saybrook sage': '#A1AC95', 'tate olive': '#7E7E60',
+                'salamander': '#33403B', 'forest moss': '#5E6649',
+                'caldwell green': '#5B6256', 'vintage vogue': '#3F4940',
+                'high park': '#7C8B73', 'cushing green': '#7E8264',
+                'chrome green': '#3D4D3F',
+                // Reds / Warms
+                'caliente': '#A8413E', 'heritage red': '#9C3A3A',
+                'fire red': '#A93832', 'fired brick': '#7E3F36',
+                'rookwood red': '#7B3D38',
+                // Yellows / Earth
+                'manchester tan': '#CBB89B', 'lenox tan': '#C9B89C',
+                'kilim beige': '#C8B498', 'kestrel white': '#E0D8C5',
+                'shaker beige': '#BFA984',
+                // Blacks / Deep
+                'tricorn black': '#2A2828', 'caviar': '#36302C',
+                'black beauty': '#211F1E', 'soot': '#3A3D40',
+                'urbane bronze': '#544A3F', 'iron ore': '#4D4948',
             };
             if (map[key]) return map[key];
-            // Soft heuristic: white-ish names lean cream, gray-ish lean gray, etc.
-            if (/white|cream|ivory|pearl/.test(key)) return '#F0EDE4';
-            if (/gray|grey|fog|smoke/.test(key)) return '#C7C2B8';
-            if (/black|charcoal|midnight|onyx/.test(key)) return '#2C2C2C';
-            if (/blue|navy|sky/.test(key)) return '#5A7A9A';
-            if (/green|sage|moss/.test(key)) return '#88997A';
-            if (/red|crimson/.test(key)) return '#8B3A3A';
-            if (/brown|taupe|mocha/.test(key)) return '#9B8970';
-            if (/yellow|cream/.test(key)) return '#E8DDB7';
+            // Soft heuristic — only used when both static lookup AND AI-stored hex missed.
+            if (/navy|naval|admiral|denim|cobalt|indigo/.test(key)) return '#2E3F5A';
+            if (/sky|robin|powder\s*blue|baby\s*blue/.test(key)) return '#A5C2D7';
+            if (/blue/.test(key)) return '#5577A0';
+            if (/forest|emerald|hunter|evergreen/.test(key)) return '#3E5A45';
+            if (/sage|olive|moss/.test(key)) return '#8FA08A';
+            if (/green/.test(key)) return '#6E8A6B';
+            if (/charcoal|midnight|onyx|jet/.test(key)) return '#2A2D31';
+            if (/black/.test(key)) return '#2C2C2C';
+            if (/gray|grey|fog|smoke|pewter/.test(key)) return '#C7C2B8';
+            if (/cream|ivory|pearl|alabaster|linen/.test(key)) return '#F0EDE4';
+            if (/white|snow|chantilly|dove|swiss/.test(key)) return '#F2EFE6';
+            if (/red|crimson|wine|brick|burgundy/.test(key)) return '#8B3A3A';
+            if (/rose|blush|coral/.test(key)) return '#D49992';
+            if (/brown|taupe|mocha|chocolate|espresso/.test(key)) return '#7F6E5A';
+            if (/tan|beige|sand|wheat|biscuit/.test(key)) return '#CBB89B';
+            if (/yellow|sunshine|butter|gold/.test(key)) return '#E8DDB7';
+            if (/orange|terracotta|peach/.test(key)) return '#D49568';
+            if (/purple|lavender|violet|plum/.test(key)) return '#8B7AA8';
             return '#E8E4DA';
         }
 
