@@ -695,6 +695,19 @@
                 </div>
             </div>
 
+            <!-- Change Orders Section -->
+            <div class="room-card">
+                <h3>Change Orders (Optional)</h3>
+                <p style="color:#666;margin-bottom:10px;font-size:13px;">Scope additions or modifications. Each change order shows on the proposal as its own line — cleaner than adding a whole new room. Can be positive (added work) or negative (removed/credited).</p>
+                <div id="changeOrdersList"></div>
+                <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+                    <input type="text" id="changeOrderNameInput" placeholder="e.g., Add wallpaper removal" style="flex:2;min-width:160px;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
+                    <input type="number" id="changeOrderAmountInput" placeholder="$0.00" step="0.01" style="flex:1;min-width:80px;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
+                    <button class="btn btn-success btn-small" onclick="addChangeOrder()">+ Add</button>
+                </div>
+                <textarea id="changeOrderDescInput" placeholder="Optional description (shown on proposal)" rows="2" style="width:100%;margin-top:6px;padding:8px;border:2px solid #e0e0e0;border-radius:8px;font-size:13px;"></textarea>
+            </div>
+
             <!-- Credits Section -->
             <div class="room-card">
                 <h3>Credits (Optional)</h3>
@@ -723,6 +736,8 @@
                 <div class="room-stats" style="font-size: 18px;">
                     <p><strong>Base Price:</strong> <span id="reviewBasePrice" onclick="editBasePrice()" style="cursor:pointer;text-decoration:underline dotted #667eea;" title="Tap to edit">$0.00</span> <span style="font-size:11px;color:#999;">tap to edit</span></p>
                     <p id="calculatedPriceRow" style="display:none;font-size:13px;color:#999;"><strong>Calculated:</strong> <span id="reviewCalcPrice">$0.00</span> (overridden)</p>
+                    <div id="reviewChangeOrdersRows"></div>
+                    <p id="changeOrdersTotalRow" style="display:none;"><strong>Change Orders:</strong> <span id="reviewChangeOrdersTotal">$0.00</span></p>
                     <p id="discountRow" style="display: none;"><strong><span id="discountDisplayName">Discount</span>:</strong> <span id="reviewDiscountAmount" style="color: #e74c3c;">-$0.00</span></p>
                     <div id="reviewCreditsRows"></div>
                     <hr style="margin: 10px 0;">
@@ -2490,7 +2505,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                     <div class="form-group" style="margin-bottom:10px;">
                         <label>Status</label>
                         <select id="projectStatusSelect" onchange="updateProjectStatus('${projectId}', this.value)" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
-                            ${['New Lead','Appointment Set','Current Estimate','Landed Job','Scheduled','In Progress','Complete','Dead'].map(s => `<option value="${s}" ${s === project.status ? 'selected' : ''}>${s}</option>`).join('')}
+                            ${['New Lead','Appointment Set','Current Estimate','Estimate Sent','Landed Job','Scheduled','In Progress','Complete','Dead'].map(s => `<option value="${s}" ${s === project.status ? 'selected' : ''}>${s}</option>`).join('')}
                         </select>
                     </div>
                     <div class="form-group" style="margin-bottom:10px;">
@@ -2981,8 +2996,8 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                     const s = j.status || 'New Lead';
                     counts[s] = (counts[s] || 0) + 1;
                 });
-                const statuses = ['New Lead', 'Appointment Set', 'Current Estimate', 'Landed Job', 'In Progress', 'Complete'];
-                const mapped = { 'New Lead': 'New Lead', 'Appointment Set': 'In Progress', 'Current Estimate': 'In Progress', 'Landed Job': 'Landed', 'In Progress': 'In Progress' };
+                const statuses = ['New Lead', 'Appointment Set', 'Current Estimate', 'Estimate Sent', 'Landed Job', 'In Progress', 'Complete'];
+                const mapped = { 'New Lead': 'New Lead', 'Appointment Set': 'In Progress', 'Current Estimate': 'In Progress', 'Estimate Sent': 'In Progress', 'Landed Job': 'Landed', 'In Progress': 'In Progress' };
                 pipeline.innerHTML = statuses.filter(s => counts[s]).map(s =>
                     `<div style="text-align:center;padding:8px 4px;background:#f8f9fa;border-radius:8px;border-left:3px solid ${getStatusColor(s)};cursor:pointer;" onclick="filterJobs('${mapped[s] || s}')">
                         <div style="font-size:20px;font-weight:700;color:${getStatusColor(s)}">${counts[s]}</div>
@@ -3196,8 +3211,8 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
         function getStatusColor(status) {
             const colors = {
                 'New Lead': '#3b82f6', 'Appointment Set': '#8b5cf6', 'Current Estimate': '#f59e0b',
-                'Landed Job': '#10b981', 'Scheduled': '#06b6d4', 'In Progress': '#f97316',
-                'Complete': '#6b7280', 'Dead': '#ef4444'
+                'Estimate Sent': '#eab308', 'Landed Job': '#10b981', 'Scheduled': '#06b6d4',
+                'In Progress': '#f97316', 'Complete': '#6b7280', 'Dead': '#ef4444'
             };
             return colors[status] || '#6b7280';
         }
@@ -4174,16 +4189,25 @@ Based on the journal entries, calculate and return this JSON (no other text):
             // Show projects
             if (customerProjects.length > 0) {
                 html += '<h3 style="margin:10px 0 12px 0;">Projects</h3>';
+                const allStatuses = ['New Lead','Appointment Set','Current Estimate','Estimate Sent','Landed Job','Scheduled','In Progress','Complete','Dead'];
                 customerProjects.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).forEach(project => {
                     const propCount = customerJobs.filter(j => j.projectId === project.id).length;
+                    const sc = getStatusColor(project.status);
+                    // Inline status select — clicking it must NOT navigate into the project.
+                    // Stop propagation on click + change so the card's onclick (viewProjectDetail)
+                    // doesn't fire. Background + border tinted with the current status color so
+                    // operator can scan the list at a glance during cleanup passes.
                     html += `
-                        <div class="room-card" style="cursor:pointer;border-left:4px solid ${getStatusColor(project.status)};" onclick="viewProjectDetail('${project.id}')">
-                            <div style="display:flex;justify-content:space-between;align-items:center;">
-                                <div>
+                        <div class="room-card" style="cursor:pointer;border-left:4px solid ${sc};" onclick="viewProjectDetail('${project.id}')">
+                            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                                <div style="min-width:0;flex:1;">
                                     <p style="margin:0;font-size:12px;color:#667eea;font-weight:700;">${project.jobNumber}</p>
                                     <h3 style="margin:2px 0;font-size:15px;">${project.projectName}</h3>
                                 </div>
-                                <span style="display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;color:white;background:${getStatusColor(project.status)}">${project.status}</span>
+                                <select onclick="event.stopPropagation()" onchange="event.stopPropagation(); updateProjectStatus('${project.id}', this.value);"
+                                        style="background:${sc};color:#fff;font-size:11px;font-weight:600;padding:5px 8px;border:none;border-radius:14px;cursor:pointer;appearance:none;-webkit-appearance:none;padding-right:18px;background-image:linear-gradient(${sc},${sc}),url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2210%22 height=%2210%22 viewBox=%220 0 10 10%22><path fill=%22white%22 d=%22M2 4l3 3 3-3z%22/></svg>');background-repeat:no-repeat;background-position:calc(100% - 4px) center;">
+                                    ${allStatuses.map(s => `<option value="${s}" ${s === project.status ? 'selected' : ''}>${s}</option>`).join('')}
+                                </select>
                             </div>
                             <p style="margin:4px 0;font-size:13px;color:#666;">${propCount} proposal(s) • ${new Date(project.createdAt).toLocaleDateString()}</p>
                         </div>
@@ -4845,6 +4869,8 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 discountName: job.discountName,
                 discountAmount: job.discountAmount || 0,
                 credits: job.credits || [],
+                changeOrders: job.changeOrders || [],
+                changeOrdersTotal: job.changeOrdersTotal || 0,
                 projectSummaryNotes: job.projectSummaryNotes || '',
                 totalLabor: job.totalLabor,
                 totalMaterials: job.totalMaterials,
@@ -4923,6 +4949,8 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 discountName: job.discountName,
                 discountAmount: job.discountAmount || 0,
                 credits: job.credits || [],
+                changeOrders: job.changeOrders || [],
+                changeOrdersTotal: job.changeOrdersTotal || 0,
                 projectSummaryNotes: job.projectSummaryNotes || '',
                 totalLabor: job.totalLabor,
                 totalMaterials: job.totalMaterials,
@@ -6561,8 +6589,9 @@ Only return JSON, no other text.`;
             const nameInput = document.getElementById('proposalNameInput');
             if (nameInput) nameInput.value = currentEstimate.jobName || '';
 
-            // Display credits list
+            // Display credits + change orders lists
             displayCredits();
+            displayChangeOrders();
 
             const content = document.getElementById('estimateReviewContent');
             const showRoomPrices = document.getElementById('showRoomPrices')?.checked === true;
@@ -6782,21 +6811,27 @@ Only return JSON, no other text.`;
                 valueGroup.style.display = 'none';
             }
             
-            // Calculate discount
+            // Base price + change orders form the pre-discount subtotal.
+            // Change orders flow into the proposal between base price and discount —
+            // discount applies to the adjusted price (incl. change orders), so a 10%
+            // discount on a job with a $500 add-on includes that $500 in the discount base.
             const basePrice = currentEstimate.basePrice || 0;
+            const changeOrders = currentEstimate.changeOrders || [];
+            const changeOrdersTotal = changeOrders.reduce((sum, co) => sum + (co.amount || 0), 0);
+            const adjustedBase = basePrice + changeOrdersTotal;
+
             let discountAmount = 0;
-            
             if (discountType === 'percentage') {
-                discountAmount = (basePrice * discountValue) / 100;
+                discountAmount = (adjustedBase * discountValue) / 100;
             } else if (discountType === 'fixed') {
                 discountAmount = discountValue;
             }
-            
+
             // Calculate total credits
             const credits = currentEstimate.credits || [];
             const totalCredits = credits.reduce((sum, c) => sum + c.amount, 0);
 
-            const subtotal = basePrice - discountAmount - totalCredits;
+            const subtotal = adjustedBase - discountAmount - totalCredits;
             const deposit = subtotal * 0.5;
             const balance = subtotal * 0.5;
 
@@ -6841,7 +6876,88 @@ Only return JSON, no other text.`;
                     `<p><strong>${c.name}:</strong> <span style="color:#e74c3c;">-$${c.amount.toFixed(2)}</span></p>`
                 ).join('');
             }
+
+            // Show change order rows + subtotal line in price summary
+            const coRows = document.getElementById('reviewChangeOrdersRows');
+            const coTotalRow = document.getElementById('changeOrdersTotalRow');
+            const coTotalEl = document.getElementById('reviewChangeOrdersTotal');
+            if (coRows && changeOrders.length > 0) {
+                coRows.innerHTML = changeOrders.map(co => {
+                    const sign = co.amount >= 0 ? '+' : '−';
+                    const color = co.amount >= 0 ? '#1e40af' : '#e74c3c';
+                    return `<p style="font-size:14px;"><strong>${co.name}:</strong> <span style="color:${color};">${sign}$${Math.abs(co.amount).toFixed(2)}</span></p>`;
+                }).join('');
+                if (coTotalRow) coTotalRow.style.display = 'block';
+                if (coTotalEl) {
+                    const sign = changeOrdersTotal >= 0 ? '+' : '−';
+                    coTotalEl.innerHTML = `<span style="color:${changeOrdersTotal >= 0 ? '#1e40af' : '#e74c3c'};">${sign}$${Math.abs(changeOrdersTotal).toFixed(2)}</span>`;
+                }
+            } else {
+                if (coRows) coRows.innerHTML = '';
+                if (coTotalRow) coTotalRow.style.display = 'none';
+            }
+
+            // Persist change orders total for downstream consumers (PDF, save, etc.)
+            currentEstimate.changeOrdersTotal = changeOrdersTotal;
         };
+
+        // === CHANGE ORDERS ===
+        // Stored on currentEstimate.changeOrders = [{name, amount, description, date}].
+        // Amount can be negative (e.g., scope removed). They flow into the proposal's
+        // grand total (after base price, before discount) and render as their own
+        // section on the printable proposal so the customer sees what was added/changed.
+        window.addChangeOrder = function() {
+            const name = document.getElementById('changeOrderNameInput').value.trim();
+            const amount = parseFloat(document.getElementById('changeOrderAmountInput').value);
+            const description = document.getElementById('changeOrderDescInput').value.trim();
+            if (!name) { alert('Please enter a change order name'); return; }
+            if (isNaN(amount) || amount === 0) { alert('Please enter a non-zero amount (positive or negative)'); return; }
+            if (!currentEstimate.changeOrders) currentEstimate.changeOrders = [];
+            currentEstimate.changeOrders.push({
+                name,
+                amount,
+                description: description || '',
+                date: new Date().toISOString(),
+            });
+            document.getElementById('changeOrderNameInput').value = '';
+            document.getElementById('changeOrderAmountInput').value = '';
+            document.getElementById('changeOrderDescInput').value = '';
+            displayChangeOrders();
+            updateDiscountPreview();
+            markUnsaved();
+        };
+
+        window.deleteChangeOrder = function(index) {
+            if (!confirm('Remove this change order?')) return;
+            currentEstimate.changeOrders.splice(index, 1);
+            displayChangeOrders();
+            updateDiscountPreview();
+            markUnsaved();
+        };
+
+        function displayChangeOrders() {
+            const container = document.getElementById('changeOrdersList');
+            if (!container) return;
+            const cos = currentEstimate.changeOrders || [];
+            if (cos.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+            container.innerHTML = cos.map((co, i) => {
+                const isCredit = co.amount < 0;
+                const bg = isCredit ? '#fee2e2' : '#dbeafe';
+                const fg = isCredit ? '#991b1b' : '#1e40af';
+                const sign = co.amount >= 0 ? '+' : '−';
+                return `<div style="padding:10px;background:${bg};border-radius:8px;margin-bottom:6px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                        <strong style="color:${fg};flex:1;">${co.name}</strong>
+                        <span style="color:${fg};font-weight:700;white-space:nowrap;">${sign}$${Math.abs(co.amount).toFixed(2)}</span>
+                        <button class="btn btn-danger" onclick="deleteChangeOrder(${i})" style="width:24px;height:24px;padding:0;font-size:14px;line-height:24px;border-radius:4px;flex-shrink:0;">×</button>
+                    </div>
+                    ${co.description ? `<p style="margin:4px 0 0;font-size:12px;color:#555;font-style:italic;">${co.description}</p>` : ''}
+                </div>`;
+            }).join('');
+        }
 
         // === CREDITS ===
         window.addCredit = function() {
@@ -8560,6 +8676,8 @@ Only return JSON, no other text.`;
                 discountName: currentEstimate.discountName,
                 discountAmount: currentEstimate.discountAmount,
                 credits: currentEstimate.credits || [],
+                changeOrders: currentEstimate.changeOrders || [],
+                changeOrdersTotal: currentEstimate.changeOrdersTotal || 0,
                 projectSummaryNotes: projectNotes,
                 totalLabor: currentEstimate.totalLabor,
                 totalMaterials: currentEstimate.totalMaterials,
@@ -8600,6 +8718,8 @@ Only return JSON, no other text.`;
                         discountName: job.discountName,
                         discountAmount: job.discountAmount,
                         credits: job.credits,
+                        changeOrders: job.changeOrders || [],
+                        changeOrdersTotal: job.changeOrdersTotal || 0,
                         projectSummaryNotes: job.projectSummaryNotes,
                         totalLabor: job.totalLabor,
                         totalMaterials: job.totalMaterials,
@@ -8824,7 +8944,10 @@ Only return JSON, no other text.`;
             const basePrice = currentEstimate.basePrice || currentEstimate.grandTotal || 0;
             const discountAmount = currentEstimate.discountAmount || 0;
             const totalCredits = (currentEstimate.credits || []).reduce((sum, c) => sum + c.amount, 0);
-            const subtotal = basePrice - discountAmount - totalCredits;
+            // Change orders fold into subtotal between base price and discount.
+            // Discount applies to (base + change orders), matching updateDiscountPreview.
+            const _changeOrdersTotal = (currentEstimate.changeOrders || []).reduce((s, co) => s + (co.amount || 0), 0);
+            const subtotal = basePrice + _changeOrdersTotal - discountAmount - totalCredits;
             const depositAmount = subtotal * 0.5;
             const balanceAmount = subtotal * 0.5;
             const projectNotes = document.getElementById('projectSummaryNotes')?.value || '';
@@ -8885,6 +9008,53 @@ Only return JSON, no other text.`;
             // Credits rows
             const credits = currentEstimate.credits || [];
             const creditsHTML = credits.map(c => priceRow(c.name, '<span style="color:#e74c3c">-$'+c.amount.toFixed(2)+'</span>')).join('');
+
+            // ─── Change Orders section ──────────────────────────────
+            // Rendered as its own card BEFORE the price summary so the
+            // customer sees clearly what was added/changed beyond the
+            // original scope. Inline styles only (per PDF printing rules
+            // — no CSS classes or pseudo-elements).
+            const changeOrders = currentEstimate.changeOrders || [];
+            const changeOrdersTotal = changeOrders.reduce((s, co) => s + (co.amount || 0), 0);
+            let changeOrdersSectionHTML = '';
+            let changeOrdersPriceRow = '';
+            if (changeOrders.length > 0) {
+                const rowsHTML = changeOrders.map(co => {
+                    const sign = co.amount >= 0 ? '+' : '−';
+                    const amtColor = co.amount >= 0 ? '#1e3a8a' : '#b91c1c';
+                    const descLine = co.description
+                        ? `<div style="font-size:9pt;color:#6b7280;margin-top:2px;font-style:italic;">${co.description}</div>`
+                        : '';
+                    return `<tr style="border-bottom:1px solid #e5e7eb;">
+                        <td style="padding:8px 10px;vertical-align:top;">
+                            <strong style="font-size:10pt;color:#111;">${co.name}</strong>
+                            ${descLine}
+                        </td>
+                        <td style="padding:8px 10px;vertical-align:top;text-align:right;font-size:10pt;color:${amtColor};font-weight:700;white-space:nowrap;">
+                            ${sign}$${Math.abs(co.amount).toFixed(2)}
+                        </td>
+                    </tr>`;
+                }).join('');
+                const subtotalSign = changeOrdersTotal >= 0 ? '+' : '−';
+                const subtotalColor = changeOrdersTotal >= 0 ? '#1e3a8a' : '#b91c1c';
+                changeOrdersSectionHTML = `</div><div style="padding:0 0.3in">${sectionTitle('CHANGE ORDERS')}
+                    <table style="width:100%;border-collapse:collapse;margin:8px 0;border:1px solid #d1d5db;">
+                        ${rowsHTML}
+                        <tr style="background:#f3f4f6;">
+                            <td style="padding:8px 10px;font-weight:700;font-size:10pt;">Change Orders Subtotal</td>
+                            <td style="padding:8px 10px;text-align:right;font-weight:700;font-size:11pt;color:${subtotalColor};white-space:nowrap;">${subtotalSign}$${Math.abs(changeOrdersTotal).toFixed(2)}</td>
+                        </tr>
+                    </table>
+                </div><div class="page-content">`;
+
+                // Price-summary line so the math reconciles cleanly
+                const summarySign = changeOrdersTotal >= 0 ? '+' : '−';
+                const summaryColor = changeOrdersTotal >= 0 ? '#1e3a8a' : '#e74c3c';
+                changeOrdersPriceRow = priceRow(
+                    'Change Orders',
+                    `<span style="color:${summaryColor};">${summarySign}$${Math.abs(changeOrdersTotal).toFixed(2)}</span>`
+                );
+            }
 
             // Crew mode: build schedule and pricing
             let crewScheduleHTML = '';
@@ -8985,11 +9155,13 @@ ${co.consultantPhotoUrl ? '<img src="'+co.consultantPhotoUrl+'" style="width:55p
 ${(co.consultantPhone||co.consultantEmail)?'<div style="text-align:right;font-size:8.5pt;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:6px 10px;'+pca+'">'+(co.consultantPhone?'<p style="margin:2px 0"><span style="color:#2563eb">☎</span> '+co.consultantPhone+'</p>':'')+(co.consultantEmail?'<p style="margin:2px 0"><span style="color:#2563eb">✉</span> '+co.consultantEmail+'</p>':'')+'</div>':''}
 </div>
 ${window._crewMode ? crewScheduleHTML : ''}
+${window._crewMode ? '' : changeOrdersSectionHTML}
 ${window._crewMode ? crewPricingHTML : `${sectionTitle('PRICE SUMMARY')}
 <div style="margin:8px 0">
 ${roomPriceSummary}
 ${roomPriceSummary ? '<div style="border-top:1px solid #ccc;margin:4px 0"></div>' : ''}
 ${priceRow('Base Price','$'+basePrice.toFixed(2))}
+${changeOrdersPriceRow}
 ${discountHTML}
 ${creditsHTML}
 ${priceRow('Subtotal','$'+subtotal.toFixed(2),'border-top:2px solid #1e3a8a;font-weight:bold;margin-top:6px;padding-top:6px')}
