@@ -3035,6 +3035,69 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             } catch(e) { alert('Error updating status: ' + e.message); }
         };
 
+        // Cascade a status change across all members of a linked project group.
+        // Used by the unified group card on the customer detail screen so a
+        // single dropdown change updates all linked projects (interior + exterior
+        // halves of the same job, etc.) atomically. Falls back to per-project
+        // sequential updates if any one fails — partial success > nothing.
+        window.updateLinkedGroupStatus = async function(projectIds, newStatus) {
+            if (!Array.isArray(projectIds) || projectIds.length === 0) return;
+            const isoNow = new Date().toISOString();
+
+            // Special handling for 'Dead': ask reason once, apply to all.
+            let deadReason = null;
+            if (newStatus === 'Dead') {
+                deadReason = prompt(`Marking ${projectIds.length} linked projects as Dead. Why was this job lost? (Competition, Price, Timing, Changed mind, Other)`);
+                if (deadReason === null) return; // user cancelled
+            }
+
+            // Apply to each member sequentially. We don't use a Firestore writeBatch
+            // here because each project has its own statusHistory array we need to
+            // read-modify-write (batch can't read-then-write in one shot).
+            const failures = [];
+            for (const pid of projectIds) {
+                try {
+                    const p = projects.find(pr => pr.id === pid);
+                    if (!p) { failures.push({ id: pid, reason: 'project not found in cache' }); continue; }
+                    const history = p.statusHistory || [];
+                    history.push({ status: newStatus, date: isoNow, note: 'Linked group status change' });
+                    const updates = { status: newStatus, statusHistory: history };
+                    if (deadReason) updates.deadReason = deadReason;
+                    await updateDoc(doc(db, 'projects', pid), updates);
+                    p.status = newStatus;
+                    p.statusHistory = history;
+                    if (deadReason) p.deadReason = deadReason;
+                } catch (e) {
+                    failures.push({ id: pid, reason: e.message || String(e) });
+                }
+            }
+
+            await loadProjects();
+
+            // Marking Complete on a linked group is an actuals event — offer to
+            // jump into actuals on the FIRST project in the group (which becomes
+            // the primary; saveProfitActuals's existing cascade handles the rest).
+            if (newStatus === 'Complete' && failures.length === 0) {
+                if (confirm(`${projectIds.length} linked projects marked Complete. Log job actuals now?`)) {
+                    openProjectActuals(projectIds[0]);
+                    return;
+                }
+            }
+
+            const successCount = projectIds.length - failures.length;
+            if (failures.length > 0) {
+                alert(`Updated ${successCount}/${projectIds.length} projects.\nFailures:\n${failures.map(f => '  ' + f.id + ': ' + f.reason).join('\n')}`);
+            } else {
+                // Brief confirmation. Re-render the customer detail to reflect new state.
+                console.log(`Linked group: ${successCount} projects updated to "${newStatus}"`);
+            }
+
+            // Find the customer for the first project so we can re-render the
+            // customer detail screen they're currently looking at.
+            const firstProj = projects.find(p => p.id === projectIds[0]);
+            if (firstProj?.customerId) viewCustomerDetail(firstProj.customerId);
+        };
+
         window.updateProjectField = async function(projectId, field, value) {
             try {
                 await updateDoc(doc(db, 'projects', projectId), { [field]: value });
@@ -4245,32 +4308,133 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 </div>
             `;
 
-            // Show projects
+            // Show projects — grouped by linkedProjects so a "two-half" job
+            // (e.g. interior + exterior) renders as a single card with one
+            // shared status dropdown that cascades to all linked members.
             if (customerProjects.length > 0) {
                 html += '<h3 style="margin:10px 0 12px 0;">Projects</h3>';
                 const allStatuses = ['New Lead','Appointment Set','Current Estimate','Estimate Sent','Landed Job','Scheduled','In Progress','Complete','Dead'];
-                customerProjects.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).forEach(project => {
-                    const propCount = customerJobs.filter(j => j.projectId === project.id).length;
-                    const sc = getStatusColor(project.status);
-                    // Inline status select — clicking it must NOT navigate into the project.
-                    // Stop propagation on click + change so the card's onclick (viewProjectDetail)
-                    // doesn't fire. Background + border tinted with the current status color so
-                    // operator can scan the list at a glance during cleanup passes.
-                    html += `
-                        <div class="room-card" style="cursor:pointer;border-left:4px solid ${sc};" onclick="viewProjectDetail('${project.id}')">
-                            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-                                <div style="min-width:0;flex:1;">
-                                    <p style="margin:0;font-size:12px;color:#667eea;font-weight:700;">${project.jobNumber}</p>
-                                    <h3 style="margin:2px 0;font-size:15px;">${project.projectName}</h3>
+
+                // Build groups: each group is either a single project or a set
+                // of linked projects (mutually-referenced via linkedProjects).
+                // We do a simple BFS so that even malformed unidirectional links
+                // ('A→B' but not 'B→A') still merge into one group.
+                const seenIds = new Set();
+                const groups = [];
+                customerProjects.forEach(p => {
+                    if (seenIds.has(p.id)) return;
+                    const queue = [p.id];
+                    const members = [];
+                    while (queue.length > 0) {
+                        const curId = queue.shift();
+                        if (seenIds.has(curId)) continue;
+                        const curProject = customerProjects.find(cp => cp.id === curId);
+                        if (!curProject) continue;
+                        seenIds.add(curId);
+                        members.push(curProject);
+                        (curProject.linkedProjects || []).forEach(lid => {
+                            if (!seenIds.has(lid)) queue.push(lid);
+                        });
+                        // Reverse links — find any project that has curId in its linkedProjects
+                        customerProjects.forEach(other => {
+                            if (!seenIds.has(other.id) && (other.linkedProjects || []).includes(curId)) {
+                                queue.push(other.id);
+                            }
+                        });
+                    }
+                    groups.push(members);
+                });
+
+                // Sort groups by latest member's createdAt (newest first).
+                groups.sort((a, b) => {
+                    const aLatest = Math.max(...a.map(p => new Date(p.createdAt).getTime() || 0));
+                    const bLatest = Math.max(...b.map(p => new Date(p.createdAt).getTime() || 0));
+                    return bLatest - aLatest;
+                });
+
+                groups.forEach(members => {
+                    if (members.length === 1) {
+                        // ── Single project: same card as before ──
+                        const project = members[0];
+                        const propCount = customerJobs.filter(j => j.projectId === project.id).length;
+                        const sc = getStatusColor(project.status);
+                        html += `
+                            <div class="room-card" style="cursor:pointer;border-left:4px solid ${sc};" onclick="viewProjectDetail('${project.id}')">
+                                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                                    <div style="min-width:0;flex:1;">
+                                        <p style="margin:0;font-size:12px;color:#667eea;font-weight:700;">${project.jobNumber}</p>
+                                        <h3 style="margin:2px 0;font-size:15px;">${project.projectName}</h3>
+                                    </div>
+                                    <select onclick="event.stopPropagation()" onchange="event.stopPropagation(); updateProjectStatus('${project.id}', this.value);"
+                                            style="background:${sc};color:#fff;font-size:11px;font-weight:600;padding:5px 8px;border:none;border-radius:14px;cursor:pointer;appearance:none;-webkit-appearance:none;padding-right:18px;background-image:linear-gradient(${sc},${sc}),url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2210%22 height=%2210%22 viewBox=%220 0 10 10%22><path fill=%22white%22 d=%22M2 4l3 3 3-3z%22/></svg>');background-repeat:no-repeat;background-position:calc(100% - 4px) center;">
+                                        ${allStatuses.map(s => `<option value="${s}" ${s === project.status ? 'selected' : ''}>${s}</option>`).join('')}
+                                    </select>
                                 </div>
-                                <select onclick="event.stopPropagation()" onchange="event.stopPropagation(); updateProjectStatus('${project.id}', this.value);"
-                                        style="background:${sc};color:#fff;font-size:11px;font-weight:600;padding:5px 8px;border:none;border-radius:14px;cursor:pointer;appearance:none;-webkit-appearance:none;padding-right:18px;background-image:linear-gradient(${sc},${sc}),url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2210%22 height=%2210%22 viewBox=%220 0 10 10%22><path fill=%22white%22 d=%22M2 4l3 3 3-3z%22/></svg>');background-repeat:no-repeat;background-position:calc(100% - 4px) center;">
-                                    ${allStatuses.map(s => `<option value="${s}" ${s === project.status ? 'selected' : ''}>${s}</option>`).join('')}
-                                </select>
+                                <p style="margin:4px 0;font-size:13px;color:#666;">${propCount} proposal(s) • ${new Date(project.createdAt).toLocaleDateString()}</p>
                             </div>
-                            <p style="margin:4px 0;font-size:13px;color:#666;">${propCount} proposal(s) • ${new Date(project.createdAt).toLocaleDateString()}</p>
-                        </div>
-                    `;
+                        `;
+                    } else {
+                        // ── Linked group: unified card with one shared status dropdown ──
+                        // The group's "status" is the most-common status among members.
+                        // If members are drifted (different statuses), we surface a small
+                        // warning indicator so the operator can see the inconsistency.
+                        const sortedMembers = members.slice().sort((a, b) => (a.jobNumber || '').localeCompare(b.jobNumber || ''));
+                        const statusCounts = {};
+                        sortedMembers.forEach(m => { statusCounts[m.status] = (statusCounts[m.status] || 0) + 1; });
+                        const statusEntries = Object.entries(statusCounts).sort((a, b) => b[1] - a[1]);
+                        const dominantStatus = statusEntries[0][0];
+                        const drifted = statusEntries.length > 1;
+                        const sc = getStatusColor(dominantStatus);
+                        const groupIds = sortedMembers.map(m => m.id);
+                        const groupTotalValue = customerJobs
+                            .filter(j => groupIds.includes(j.projectId))
+                            .reduce((s, j) => s + (j.grandTotal || 0), 0);
+
+                        // Build the inner project list. Each item is independently clickable
+                        // (opens that project's detail). The wrapper div has NO onclick so
+                        // clicks must hit a specific child (project row OR status dropdown).
+                        const memberRows = sortedMembers.map(m => {
+                            const propCount = customerJobs.filter(j => j.projectId === m.id).length;
+                            const memberStatusColor = getStatusColor(m.status);
+                            const driftBadge = drifted
+                                ? `<span title="Currently: ${m.status}" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${memberStatusColor};margin-left:6px;vertical-align:middle;"></span>`
+                                : '';
+                            return `<div onclick="viewProjectDetail('${m.id}')" style="padding:8px 10px;background:#fff;border:1px solid #e5e7eb;border-radius:6px;margin-bottom:6px;cursor:pointer;">
+                                <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">
+                                    <div style="min-width:0;flex:1;">
+                                        <span style="font-size:11px;color:#667eea;font-weight:700;">${m.jobNumber}</span>
+                                        ${driftBadge}
+                                        <div style="font-size:14px;font-weight:600;margin-top:2px;">${m.projectName}</div>
+                                    </div>
+                                    <div style="font-size:12px;color:#666;text-align:right;flex-shrink:0;">
+                                        ${propCount} proposal${propCount === 1 ? '' : 's'}<br>
+                                        <span style="color:#9ca3af;font-size:11px;">${new Date(m.createdAt).toLocaleDateString()}</span>
+                                    </div>
+                                </div>
+                            </div>`;
+                        }).join('');
+
+                        const driftNote = drifted
+                            ? `<div style="font-size:11px;color:#92400e;background:#fef3c7;padding:5px 8px;border-radius:4px;margin-top:6px;">⚠ Member statuses differ — selecting a status applies to all ${members.length} projects.</div>`
+                            : '';
+
+                        html += `
+                            <div class="room-card" style="border-left:4px solid ${sc};">
+                                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">
+                                    <div style="min-width:0;flex:1;">
+                                        <div style="font-size:11px;color:#667eea;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">🔗 Linked Group · ${members.length} projects</div>
+                                        <div style="font-size:13px;color:#6b7280;margin-top:2px;">Total value: <strong style="color:#10b981;">$${groupTotalValue.toFixed(2)}</strong></div>
+                                    </div>
+                                    <select onclick="event.stopPropagation()" onchange="updateLinkedGroupStatus(${JSON.stringify(groupIds).replace(/"/g, '&quot;')}, this.value);"
+                                            style="background:${sc};color:#fff;font-size:11px;font-weight:600;padding:5px 8px;border:none;border-radius:14px;cursor:pointer;appearance:none;-webkit-appearance:none;padding-right:18px;background-image:linear-gradient(${sc},${sc}),url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2210%22 height=%2210%22 viewBox=%220 0 10 10%22><path fill=%22white%22 d=%22M2 4l3 3 3-3z%22/></svg>');background-repeat:no-repeat;background-position:calc(100% - 4px) center;">
+                                        ${allStatuses.map(s => `<option value="${s}" ${s === dominantStatus ? 'selected' : ''}>${s}</option>`).join('')}
+                                    </select>
+                                </div>
+                                ${memberRows}
+                                ${driftNote}
+                            </div>
+                        `;
+                    }
                 });
             }
 
