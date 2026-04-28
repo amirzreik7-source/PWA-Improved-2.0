@@ -8773,6 +8773,37 @@ Rules:
             return s;
         }
 
+        // Compute paintable sqft for a room. Tries (in order):
+        //   1. explicit room.sqft if present
+        //   2. derived from dimensions: walls = 2(L+W)*H, plus ceiling if painted
+        //   3. sum of area-type surface quantities (sqft for Walls/Ceiling/Siding/etc.)
+        function _computeRoomSqft(room) {
+            if (!room) return 0;
+            if (room.sqft && room.sqft > 0) return room.sqft;
+            const L = parseFloat(room.length) || 0;
+            const W = parseFloat(room.width) || 0;
+            const H = parseFloat(room.height) || 0;
+            if (L && W && H) {
+                const walls = 2 * (L + W) * H;
+                const hasCeiling = (room.surfaces || []).some(s => s.surfaceType === 'Ceiling');
+                return Math.round(walls + (hasCeiling ? L * W : 0));
+            }
+            const areaTypes = ['Walls', 'Ceiling', 'Siding', 'Soffit', 'Fascia'];
+            let total = 0;
+            (room.surfaces || []).forEach(s => {
+                if (areaTypes.includes(s.surfaceType)) total += parseFloat(s.quantity) || 0;
+            });
+            return Math.round(total);
+        }
+
+        // Estimated gallons fallback when actuals.gallonsUsed isn't logged.
+        // 350 sqft/gallon × 2 coats average → ~175 sqft per gallon used.
+        function _estimateGallons(rooms) {
+            const totalSqft = (rooms || []).reduce((s, r) => s + _computeRoomSqft(r), 0);
+            if (!totalSqft) return 0;
+            return Math.max(1, Math.round(totalSqft / 175));
+        }
+
         // Build initial colorPalette from the proposal's rooms (so the AI
         // already knows which areas to ask about). One entry per room.
         function _seedColorPaletteFromProposal(proposal) {
@@ -8781,7 +8812,7 @@ Rules:
                 area: r.name || 'Area',
                 surfaces: {},     // populated by the conversation
                 technique: '',
-                sqft: r.sqft || 0,
+                sqft: _computeRoomSqft(r),
                 tip: '',          // AI-generated later
                 completed: false, // operator can mark when done
                 _jobType: proposal?.jobType || '',
@@ -8844,7 +8875,7 @@ Rules:
                         area: finalName,
                         surfaces: {},
                         technique: '',
-                        sqft: r.sqft || 0,
+                        sqft: _computeRoomSqft(r),
                         tip: '',
                         completed: false,
                         _jobType: jobType,
@@ -9447,11 +9478,22 @@ Rules:
             const jobTypeStr = (f.scope === 'combined' && jobTypesInScope.length > 1)
                 ? jobTypesInScope.join(' + ')
                 : (proposal.jobType || '');
+            // Gallons: prefer logged actuals, fall back to estimate if not logged
+            let gallons = agg.gallonsUsed || 0;
+            if (!gallons) {
+                // Sum estimated gallons across every proposal in scope
+                const allRooms = scopeIds.flatMap(id => {
+                    const p = projects.find(pr => pr.id === id);
+                    const j = jobs.find(jb => jb.id === p?.landedProposalId);
+                    return (j?.rooms || []).filter(r => !r.deleted);
+                });
+                gallons = _estimateGallons(allRooms);
+            }
             const stats = {
                 totalSqft: totalSqft,
                 totalHours: agg.totalHours,
                 totalManDays: agg.totalManDays,
-                gallonsUsed: agg.gallonsUsed,
+                gallonsUsed: gallons,
                 crewSize: agg.crewSize || (proposal && (proposal.rooms || []).reduce((m, r) => Math.max(m, r.crewSize || 0), 0)) || 0,
                 daysToComplete: agg.days,
                 completedAt: agg.completedAt || new Date().toISOString(),
@@ -9950,7 +9992,7 @@ Generate JSON with these EXACT keys:
                 <!-- ─── WARRANTY ─── -->
                 <section style="page-break-before:always;padding:80px 56px;background:#fff;text-align:center;">
                     ${sectionHead('Our Promise', 'Workmanship Warranty')}
-                    <div style="font-family:'Bebas Neue',sans-serif;font-size:96pt;color:${P.gold};letter-spacing:2px;line-height:1;">5</div>
+                    <div style="font-family:'Bebas Neue',sans-serif;font-size:96pt;color:${P.gold};letter-spacing:2px;line-height:1;">2</div>
                     <div style="font-family:'Inter',sans-serif;font-size:14pt;color:${P.navy};letter-spacing:5px;text-transform:uppercase;font-weight:600;margin-top:-8px;">Year Coverage</div>
                     <div style="max-width:480px;margin:36px auto 0;font-family:'Playfair Display',serif;font-size:14pt;color:${P.charcoal};line-height:1.7;font-style:italic;">We stand behind every brush stroke.</div>
                     <div style="max-width:480px;margin:32px auto 0;text-align:left;background:${P.cream};border-radius:8px;padding:24px 28px;">
@@ -9963,8 +10005,8 @@ Generate JSON with these EXACT keys:
                         </div>
                         <div style="margin-top:18px;padding-top:18px;border-top:1px solid ${P.line};font-family:'Inter',sans-serif;font-size:11pt;color:${P.text};">
                             <strong>Need a touch-up?</strong> Call us first.<br>
-                            ${cs.phone ? `📞 ${cs.phone}<br>` : ''}
-                            ${cs.email ? `✉️ ${cs.email}` : '✉️ amirz@northernstarpainters.com'}
+                            ${(cs.companyPhone || cs.phone) ? `📞 ${cs.companyPhone || cs.phone}<br>` : ''}
+                            ✉️ ${cs.companyEmail || cs.email || 'Info@northernstarpainters.com'}
                         </div>
                     </div>
                 </section>
@@ -10029,7 +10071,8 @@ Generate JSON with these EXACT keys:
                                 <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:8px;">Scan with your phone</div>
                                 <div style="font-family:'Playfair Display',serif;font-size:24pt;color:${P.navy};font-weight:600;line-height:1.1;margin-bottom:12px;">Leave us a Google review</div>
                                 <div style="font-family:'Inter',sans-serif;font-size:11pt;color:${P.text};line-height:1.6;margin-bottom:14px;">Open your camera, point at the code — it'll take you straight to the review form. Two minutes is all it takes, and it means the world to a small business like ours.</div>
-                                <a href="${reviewUrl}" style="display:inline-block;font-family:'Inter',sans-serif;font-size:10pt;color:${P.navy};text-decoration:underline;font-weight:500;">${reviewUrl.replace(/^https?:\/\//, '').slice(0, 40)}</a>
+                                <a href="${reviewUrl}" target="_blank" rel="noopener" style="display:inline-block;font-family:'Inter',sans-serif;font-size:11pt;color:#fff;background:${P.navy};text-decoration:none;font-weight:600;padding:10px 18px;border-radius:6px;letter-spacing:0.5px;">⭐ Leave a review →</a>
+                                <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.muted};margin-top:8px;word-break:break-all;">${reviewUrl.replace(/^https?:\/\//, '')}</div>
                             </div>
                         </div>
                         <div style="background:${P.cream};border-radius:8px;padding:24px;max-width:480px;margin:24px auto 0;">
@@ -10047,8 +10090,8 @@ Generate JSON with these EXACT keys:
                     <div style="max-width:520px;margin:0 auto;font-family:'Playfair Display',serif;font-size:15pt;color:${P.charcoal};line-height:1.7;font-style:italic;">
                         ${ai.closingMessage || `We hope you love your home as much as we loved transforming it. Until next time — call us anytime, for anything.`}
                     </div>
-                    <div style="margin-top:48px;font-family:'Playfair Display',serif;font-size:18pt;color:${P.navy};">— Amir Zreik</div>
-                    <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.muted};letter-spacing:2px;text-transform:uppercase;margin-top:6px;font-weight:500;">Owner, Northern Star Painters</div>
+                    <div style="margin-top:48px;font-family:'Playfair Display',serif;font-size:18pt;color:${P.navy};">— ${cs.consultantName || 'Amir'}</div>
+                    <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.muted};letter-spacing:2px;text-transform:uppercase;margin-top:6px;font-weight:500;">${cs.consultantTitle || 'Project Specialist'}, ${cs.companyName || 'Northern Star Painters'}</div>
                     <div style="margin-top:60px;font-family:'Inter',sans-serif;font-size:9pt;color:${P.muted};letter-spacing:1.5px;">${reportNum}</div>
                 </section>
             </div>
