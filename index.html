@@ -141,7 +141,10 @@
 
         <!-- HOME SCREEN -->
         <div id="homeScreen" class="screen active">
-            <h2 class="screen-title">Dashboard</h2>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+                <h2 class="screen-title" style="margin:0;">Dashboard</h2>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v49</span>
+            </div>
 
             <!-- Global Search -->
             <div style="margin-bottom:15px;">
@@ -461,7 +464,7 @@
                 <div class="form-group" style="margin-top:12px;">
                     <label>Crew Payout (Agreed Lump) ($)</label>
                     <input type="number" id="actualCrewPayout" step="0.01" min="0" placeholder="0.00" oninput="calculateProfit()">
-                    <p style="font-size:11px;color:#666;margin:3px 0 0;">Gross lump you agreed to pay. Non-paint materials and (in Labor + Materials mode) paint are auto-deducted from this — the actual amount the crew receives is shown below.</p>
+                    <p style="font-size:11px;color:#666;margin:3px 0 0;">Gross lump you agreed to pay. Paint (Labor + Materials mode) and non-paint (unless NSP absorbed it) get auto-deducted — the crew's actual take-home shows below.</p>
                     <div id="crewNetTakeDisplay" style="display:none;margin-top:8px;padding:8px 10px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;font-size:13px;line-height:1.5;"></div>
                 </div>
             </div>
@@ -478,7 +481,11 @@
                     <div class="form-group">
                         <label>Non-paint Materials ($)</label>
                         <input type="number" id="actualNonPaintCost" step="0.01" min="0" placeholder="0.00" oninput="calculateProfit()">
-                        <p style="font-size:11px;color:#666;margin:3px 0 0;">Plastic, tape, drop cloths, sandpaper, etc. NSP-charged → deducted from crew payout.</p>
+                        <p style="font-size:11px;color:#666;margin:3px 0 4px;">Plastic, tape, drop cloths, sandpaper, wood, etc.</p>
+                        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#374151;font-weight:400;cursor:pointer;margin:0;">
+                            <input type="checkbox" id="actualNonPaintAbsorbed" onchange="calculateProfit()" style="margin:0;width:auto;">
+                            NSP absorbed — don't deduct from crew
+                        </label>
                     </div>
                 </div>
                 <div class="form-group" style="margin-top:10px;">
@@ -489,22 +496,11 @@
                 <input type="hidden" id="actualMaterialCost" value="">
             </div>
 
-            <div class="room-card" id="profitResultsCard" style="display:none;border-left:4px solid #10b981;">
-                <h3>Profitability</h3>
-                <div style="font-size:15px;">
-                    <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Total Revenue:</span><span id="profitEstimateTotal">$0.00</span></div>
-                    <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Crew Payout:</span><span id="profitCrewCost">$0.00</span></div>
-                    <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Material Cost:</span><span id="profitMatCost">$0.00</span></div>
-                    <div style="display:flex;justify-content:space-between;padding:4px 0;border-top:2px solid #333;margin-top:6px;padding-top:8px;font-weight:700;"><span>Net Profit:</span><span id="profitNetProfit">$0.00</span></div>
-                    <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Hourly Rate/Person:</span><span id="profitHourlyRate">$0.00/hr</span></div>
-                    <div style="display:flex;justify-content:space-between;padding:4px 0;"><span>Profit per Day:</span><span id="profitPerDay">$0.00</span></div>
-                    <p style="font-size:36px;font-weight:700;text-align:center;margin:12px 0;"><span id="profitPercentDisplay">0%</span></p>
-                </div>
-            </div>
-
-            <div class="room-card" id="varianceCard" style="display:none;">
-                <h3>Estimate vs Actual</h3>
-                <div id="varianceContent" style="font-size:14px;"></div>
+            <!-- Consolidated job results: hourly is the headline; margin / profit /
+                 vs-target are KPI tiles; everything else collapses behind a toggle. -->
+            <div class="room-card" id="profitResultsCard" style="display:none;">
+                <h3 style="margin-bottom:10px;">Job Results</h3>
+                <div id="profitResultsBody"></div>
             </div>
 
             <div class="room-card">
@@ -874,13 +870,14 @@
 
         <!-- COMPLETION REPORT — VIEWER / PRINTABLE (the magazine-quality artifact) -->
         <div id="reportViewScreen" class="screen">
-            <div class="no-print" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+            <div class="no-print" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
                 <button class="btn btn-back" onclick="exitReportView()" style="flex:0 0 auto;">← Back</button>
                 <button id="reportPrintBtn" class="btn btn-success" onclick="printReport()" style="flex:1;min-width:140px;">🖨️ Print / Save PDF</button>
                 <button class="btn btn-info btn-small" onclick="reportShareLink()" style="flex:0 0 auto;">🔗 Share</button>
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v49</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -1751,21 +1748,18 @@
             const hintEl = document.getElementById('crewTargetHint');
             if (hintEl) {
                 try {
-                    const completedWithActuals = (projects || []).filter(p => p.status === 'Complete' && p.actuals?.crewPayout > 0);
-                    const laborShare = PRICING.CrewLaborShare ?? 0.45;
-                    const materialShare = PRICING.CrewMaterialShare ?? 0.10;
-                    const variances = completedWithActuals.map(p => {
-                        const a = p.actuals;
-                        const target = (a.estLabor || 0) * laborShare + (a.estMaterial || 0) * materialShare;
-                        return target > 0 ? ((a.crewPayout - target) / target) * 100 : null;
-                    }).filter(v => v !== null);
+                    // Use the deduped dataset so linked groups count once.
+                    const dataset = typeof _buildCompletedDataset === 'function' ? _buildCompletedDataset() : [];
+                    const variances = dataset
+                        .filter(d => d.target > 0 && d.crewNetTake > 0)
+                        .map(d => d.variance);
                     if (variances.length >= 3) {
                         const avg = variances.reduce((s, v) => s + v, 0) / variances.length;
                         const sign = avg >= 0 ? '+' : '';
-                        const tone = Math.abs(avg) <= 5 ? '🟢 on target' : Math.abs(avg) <= 15 ? '🟡 drifting' : '🔴 off target';
-                        hintEl.textContent = `💡 Your last ${variances.length} jobs averaged ${sign}${avg.toFixed(1)}% vs target — ${tone}.`;
+                        const tone = Math.abs(avg) <= 5 ? '🟢 on benchmark' : Math.abs(avg) <= 15 ? '🟡 drifting' : '🔴 off benchmark';
+                        hintEl.textContent = `💡 Your last ${variances.length} jobs averaged ${sign}${avg.toFixed(1)}% vs the 45% benchmark — ${tone}.`;
                     } else {
-                        hintEl.textContent = `💡 After 3+ completed jobs, your rolling-average variance will appear here.`;
+                        hintEl.textContent = `💡 After 3+ completed jobs, your rolling-average vs the 45% × revenue benchmark will appear here.`;
                     }
                 } catch (e) { hintEl.textContent = ''; }
             }
@@ -2643,23 +2637,14 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                     // primary that itself has actualsRef set), it's a circular ref and the
                     // project disappears from the dashboard. Surface this here with a one-tap
                     // fix.
+                    // Vestigial actualsRef tag (legacy primary/subsidiary marker).
+                    // No longer affects the dashboard — the new save flow propagates
+                    // actuals to all linked sides and the dashboard groups by
+                    // linkedProjects on read. Show a quiet info banner so the user
+                    // can clear it on click; next save would clear it anyway.
                     if (project.actualsRef) {
-                        const primary = projects.find(p => p.id === project.actualsRef);
-                        const primaryLabel = primary
-                            ? `${primary.jobNumber || '(no #)'} — ${primary.projectName || '(no name)'}`
-                            : `id=${project.actualsRef} (not found)`;
-                        const reciprocal = primary && primary.actualsRef === projectId;
-                        linkHTML += `<div style="padding:10px;background:${reciprocal ? '#fee2e2' : '#fef3c7'};border:1px solid ${reciprocal ? '#fca5a5' : '#fcd34d'};border-radius:8px;margin-bottom:8px;font-size:13px;">
-                            <div style="font-weight:600;color:${reciprocal ? '#991b1b' : '#92400e'};margin-bottom:4px;">
-                                ${reciprocal ? '🔴 Circular subsidiary reference' : 'ℹ️ Linked subsidiary'}
-                            </div>
-                            <div style="color:#374151;line-height:1.5;">
-                                This project is marked as a subsidiary of <strong>${primaryLabel}</strong>.
-                                ${reciprocal
-                                    ? ` That project also lists THIS one as its primary — circular reference. Both are excluded from the dashboard. Click "Unlink subsidiary" on whichever project you want to be the primary.`
-                                    : ' The primary project owns the actuals; this one is excluded from dashboards. Open the primary to manage actuals.'}
-                            </div>
-                            <button class="btn btn-info btn-small" onclick="unlinkSubsidiary('${projectId}')" style="margin-top:8px;width:100%;">↩ Unlink subsidiary (make this project primary)</button>
+                        linkHTML += `<div style="padding:8px 10px;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;font-size:12px;color:#6b7280;">
+                            ℹ️ Legacy "subsidiary" marker present — no longer affects the dashboard. Saving actuals on any linked side will clear it automatically. <a href="#" onclick="event.preventDefault();unlinkSubsidiary('${projectId}')" style="color:#3b82f6;text-decoration:underline;">Clear now</a>
                         </div>`;
                     }
 
@@ -3002,14 +2987,17 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                         </div>`;
                     })()}`;
 
-                    // Post-job analysis — payment-mode-aware target + paint-only material variance.
+                    // Post-job analysis — revenue-based target (45% × revenue) compared
+                    // against crewNetTake. Paint variance compares actual paint to the
+                    // proposal's paint-only estimate. Same formula across the app.
                     const laborShare = PRICING.CrewLaborShare ?? 0.45;
-                    const materialShareSetting = PRICING.CrewMaterialShare ?? 0.10;
                     const acceptedCp = (project.crewProposals || []).find(cp => cp.accepted);
-                    const projPaymentMode = acceptedCp?.paymentMode || 'labor_only';
-                    const materialShare = projPaymentMode === 'labor_plus_materials' ? materialShareSetting : 0;
-                    const targetPayout = (a.estLabor || 0) * laborShare + (a.estMaterial || 0) * materialShare;
-                    const payoutVar = targetPayout > 0 ? ((a.crewPayout - targetPayout) / targetPayout) * 100 : 0;
+                    const projPaymentMode = a.paymentMode || acceptedCp?.paymentMode || 'labor_only';
+                    const projRevenue = a.revenue || 0;
+                    const projNetTake = a.crewNetTake !== undefined ? a.crewNetTake : (a.crewPayout || 0);
+                    const targetPayout = projRevenue * laborShare;
+                    const payoutVar = targetPayout > 0 && projNetTake > 0
+                        ? ((projNetTake - targetPayout) / targetPayout) * 100 : 0;
                     // Paint variance — use paintCost if available (new records), fall back to
                     // legacy materialCost (which was paint-only in spirit anyway).
                     const actualPaint = (a.paintCost !== undefined ? a.paintCost : a.materialCost) || 0;
@@ -3022,15 +3010,13 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                     const idealPrice = a.totalCosts > 0 ? Math.round(a.totalCosts / (1 - targetMargin/100)) : 0;
                     const idealMargin = idealPrice > 0 ? ((idealPrice - a.totalCosts) / idealPrice * 100) : 0;
 
-                    // Pattern detection — across completed jobs of same type, how often did we blow past target?
-                    const sameType = projects.filter(pp => pp.status === 'Complete' && pp.actuals?.crewPayout > 0 && (projectProposals[0]?.jobType || '') === (jobs.find(j => j.id === pp.landedProposalId)?.jobType || ''));
-                    const sameTypeVariances = sameType.map(pp => {
-                        const ppCp = (pp.crewProposals || []).find(cp => cp.accepted);
-                        const ppMode = ppCp?.paymentMode || 'labor_only';
-                        const ppMatShare = ppMode === 'labor_plus_materials' ? materialShareSetting : 0;
-                        const pt = (pp.actuals.estLabor || 0) * laborShare + (pp.actuals.estMaterial || 0) * ppMatShare;
-                        return pt > 0 ? ((pp.actuals.crewPayout - pt) / pt) * 100 : null;
-                    }).filter(v => v !== null);
+                    // Pattern detection — across same-type completed jobs (deduped by
+                    // linked group), how often did the crew earn over benchmark?
+                    const dataset = typeof _buildCompletedDataset === 'function' ? _buildCompletedDataset() : [];
+                    const thisType = projectProposals[0]?.jobType || '';
+                    const sameTypeVariances = dataset
+                        .filter(d => d.jobType === thisType && d.target > 0 && d.crewNetTake > 0)
+                        .map(d => d.variance);
                     const overCount = sameTypeVariances.filter(v => v > 10).length;
 
                     // Show the analysis card if hourly is concerning OR pricing margin is low OR
@@ -3060,16 +3046,14 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                         // Target variance is shown only if it's big AND hourly didn't already flag the job.
                         // If hourly is healthy and target variance is high, the issue is pricing/structure, not crew pay.
                         if (Math.abs(payoutVar) > 10 && !hourlyLow) {
-                            const direction = payoutVar > 0 ? 'over' : 'under';
-                            const dollarImpact = targetPayout - a.crewPayout;
-                            const dollarFrame = dollarImpact >= 0 ? `NSP kept $${dollarImpact.toFixed(0)} vs target` : `NSP gave up $${Math.abs(dollarImpact).toFixed(0)} vs target`;
-                            const modeNote = projPaymentMode === 'labor_plus_materials'
-                                ? `${(laborShare*100).toFixed(0)}% labor + ${(materialShare*100).toFixed(0)}% materials = $${targetPayout.toFixed(0)} (Labor + Materials)`
-                                : `${(laborShare*100).toFixed(0)}% labor = $${targetPayout.toFixed(0)} (Labor Only — no material share)`;
+                            const direction = payoutVar > 0 ? 'above' : 'below';
+                            const dollarImpact = targetPayout - projNetTake;
+                            const dollarFrame = dollarImpact >= 0 ? `NSP kept $${dollarImpact.toFixed(0)} vs the 45% benchmark` : `NSP gave up $${Math.abs(dollarImpact).toFixed(0)} vs the 45% benchmark`;
+                            const modeNote = `${(laborShare*100).toFixed(0)}% × $${Math.round(projRevenue).toLocaleString()} revenue = $${Math.round(targetPayout).toLocaleString()} (${projPaymentMode === 'labor_plus_materials' ? 'Labor + Materials' : 'Labor Only'})`;
                             analysisHTML += `<div style="background:#eff6ff;padding:10px;border-radius:6px;margin-bottom:8px;font-size:13px;">
-                                <strong>Crew payout was ${Math.abs(payoutVar).toFixed(0)}% ${direction} target</strong> (${modeNote}). ${dollarFrame}.
+                                <strong>Crew net take was ${Math.abs(payoutVar).toFixed(0)}% ${direction} the 45% benchmark</strong> (${modeNote}). ${dollarFrame}.
                                 ${hourlyHealthy ? '<br><span style="color:#6b7280">Hourly is healthy — variance reflects pricing/structure, not crew pay.</span>' : ''}
-                                ${sameTypeVariances.length > 2 ? `<br>Across ${sameTypeVariances.length} similar jobs, ${overCount} ran over target.` : ''}
+                                ${sameTypeVariances.length > 2 ? `<br>Across ${sameTypeVariances.length} similar jobs, ${overCount} ran over benchmark.` : ''}
                             </div>`;
                         }
 
@@ -7550,10 +7534,35 @@ Only return JSON, no other text.`;
         window._actualsEstMaterial = 0;
         window._actualsLinkedProjectIds = [];
 
+        // Legacy fallback: when a project has no actuals of its own but a linked
+        // sibling does (old primary/subsidiary records), open the form on the
+        // sibling so the user sees the existing data instead of an empty form.
+        // After the new symmetric save flow, this is rarely needed — every
+        // linked side will carry the same actuals copy.
+        window._resolveActualsCanonical = function(project) {
+            if (!project) return null;
+            const hasOwn = project.actuals?.completedAt || project.actuals?.crewPayout;
+            if (hasOwn) return project;
+            for (const lid of (project.linkedProjects || [])) {
+                const sibling = projects.find(p => p.id === lid);
+                if (sibling?.actuals?.completedAt || sibling?.actuals?.crewPayout) return sibling;
+            }
+            return project;
+        };
+
         // Open actuals from project level
         window.openProjectActuals = function(projectId) {
             const project = projects.find(p => p.id === projectId);
             if (!project) return;
+
+            // Legacy redirect: only when this side has no actuals and a linked
+            // sibling does — so the user sees the existing data. New saves
+            // propagate to all linked sides, so this branch will rarely fire
+            // for fresh records.
+            const canonical = _resolveActualsCanonical(project);
+            if (canonical && canonical.id !== projectId) {
+                return openProjectActuals(canonical.id);
+            }
 
             window._actualsProjectId = projectId;
             const linkedIds = project.linkedProjects || [];
@@ -7629,6 +7638,8 @@ Only return JSON, no other text.`;
                     document.getElementById('actualPaintCost').value = existingActuals.materialCost || '';
                     document.getElementById('actualNonPaintCost').value = '';
                 }
+                const npAbsorb = document.getElementById('actualNonPaintAbsorbed');
+                if (npAbsorb) npAbsorb.checked = existingActuals.nonPaintAbsorbed === true;
                 document.getElementById('actualMaterialCost').value = existingActuals.materialCost || '';
                 document.getElementById('actualGallons').value = existingActuals.gallonsUsed || '';
                 document.getElementById('actualDifficulty').value = existingActuals.difficulty || 5;
@@ -7657,12 +7668,13 @@ Only return JSON, no other text.`;
                 ['actualCrewPayout','actualMaterialCost','actualPaintCost','actualNonPaintCost','actualDays','actualGallons','actualStartDate','actualEndDate','actualNotesGood','actualNotesBad','actualNotesLearning'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
                 document.getElementById('actualDifficulty').value = 5;
                 document.getElementById('diffLabel').textContent = '5';
+                const npAbsorb = document.getElementById('actualNonPaintAbsorbed');
+                if (npAbsorb) npAbsorb.checked = false;
                 window._actualsDailyLog = [];
                 renderDailyLog();
             }
 
             document.getElementById('profitResultsCard').style.display = 'none';
-            document.getElementById('varianceCard').style.display = 'none';
 
             // Status banner at top reflects where the project sits.
             const titleEl = document.getElementById('actualsScreenTitle');
@@ -7713,7 +7725,6 @@ Only return JSON, no other text.`;
                 window._completionPhotos = { before: [], after: [] };
                 displayCompletionPhotos();
                 document.getElementById('profitResultsCard').style.display = 'none';
-                document.getElementById('varianceCard').style.display = 'none';
                 calculateProfit();
                 showScreen('profitTrackingScreen');
             }
@@ -7721,9 +7732,11 @@ Only return JSON, no other text.`;
 
         window.calculateProfit = function() {
             // crewPayoutLump = the gross amount NSP agreed to pay the crew. Materials get
-            // auto-deducted from this depending on payment mode:
-            //   Labor Only: non-paint deducted (NSP keeps paint as expense)
-            //   Labor + Materials: paint AND non-paint deducted (everything is crew's)
+            // auto-deducted from this depending on payment mode + non-paint ownership:
+            //   Labor Only:           non-paint deducted unless NSP absorbed
+            //                         (paint is always NSP's own expense)
+            //   Labor + Materials:    paint AND non-paint deducted; non-paint absorb
+            //                         flag overrides the non-paint deduction
             // The "actual paid to crew" (net take-home) is computed below.
             const crewPayoutLump = parseFloat(document.getElementById('actualCrewPayout').value) || 0;
 
@@ -7732,6 +7745,7 @@ Only return JSON, no other text.`;
             const paintCost = paintCostEl ? (parseFloat(paintCostEl.value) || 0) : 0;
             const nonPaintCost = nonPaintCostEl ? (parseFloat(nonPaintCostEl.value) || 0) : 0;
             const materialCost = paintCost + nonPaintCost;
+            const nonPaintAbsorbed = document.getElementById('actualNonPaintAbsorbed')?.checked === true;
             // Keep hidden legacy field in sync for any downstream code still reading it.
             const legacyMatEl = document.getElementById('actualMaterialCost');
             if (legacyMatEl) legacyMatEl.value = materialCost || '';
@@ -7745,7 +7759,7 @@ Only return JSON, no other text.`;
 
             // Apply deductions per the operator's actual workflow.
             const paintDeducted = paymentMode === 'labor_plus_materials' ? paintCost : 0;
-            const nonPaintDeducted = nonPaintCost;
+            const nonPaintDeducted = nonPaintAbsorbed ? 0 : nonPaintCost;
             const crewNetTake = Math.max(0, crewPayoutLump - paintDeducted - nonPaintDeducted);
 
             // Live "Net to crew" panel — operator sees the math as they type.
@@ -7798,17 +7812,16 @@ Only return JSON, no other text.`;
 
             if (crewPayout <= 0 && materialCost <= 0) {
                 document.getElementById('profitResultsCard').style.display = 'none';
-                document.getElementById('varianceCard').style.display = 'none';
                 return;
             }
 
-            // NSP cash out:
-            //   Labor Only: lump (committed labor) + paint (NSP's responsibility).
-            //     Non-paint is a wash — NSP fronts at BM, recovers via crew deduction.
-            //   Labor + Materials: lump only. NSP fronts all materials, recovers via deduction.
-            const totalCosts = paymentMode === 'labor_plus_materials'
-                ? crewPayout
-                : crewPayout + paintCost;
+            // NSP cash out (true expense the operator is bearing):
+            //   Lump always (the gross commitment to the crew).
+            //   + paint, only in Labor Only mode (in L+M, paint passes through via deduction).
+            //   + non-paint, only when NSP absorbed it (otherwise it's a wash via deduction).
+            const totalCosts = crewPayout
+                + (paymentMode === 'labor_only' ? paintCost : 0)
+                + (nonPaintAbsorbed ? nonPaintCost : 0);
             const revenue = window._actualsRevenue || 0;
             const netProfit = revenue - totalCosts;
             const profitPct = revenue > 0 ? (netProfit / revenue) * 100 : 0;
@@ -7829,201 +7842,157 @@ Only return JSON, no other text.`;
             //   < $22/hr → 🔴 Retention risk
             const hourlyColor = hourlyRate >= 27 ? '#10b981' : hourlyRate >= 22 ? '#f59e0b' : '#ef4444';
             const hourlyLabel = hourlyRate >= 27 ? '🟢 Healthy' : hourlyRate >= 22 ? '🟡 Tight' : '🔴 Retention risk';
-            const hourlyEl = document.getElementById('profitHourlyRate');
-            hourlyEl.innerHTML = `<span style="color:${hourlyColor};font-weight:700;">$${hourlyRate.toFixed(2)}/hr</span> <span style="font-size:11px;color:${hourlyColor};">${hourlyRate > 0 ? hourlyLabel : ''}</span>`;
-            document.getElementById('profitPerDay').textContent = '$' + profitPerDay.toFixed(2);
-            document.getElementById('profitCrewCost').textContent = '$' + crewPayout.toFixed(2);
-            document.getElementById('profitMatCost').textContent = '$' + materialCost.toFixed(2);
-            document.getElementById('profitEstimateTotal').textContent = '$' + revenue.toFixed(2);
-            document.getElementById('profitNetProfit').textContent = '$' + netProfit.toFixed(2);
-            document.getElementById('profitNetProfit').style.color = profitColor;
-            document.getElementById('profitPercentDisplay').textContent = profitPct.toFixed(1) + '%';
-            document.getElementById('profitPercentDisplay').style.color = profitColor;
-            document.getElementById('profitResultsCard').style.display = 'block';
+            const hourlyContext = hourlyRate >= 27 ? 'above the $27 healthy floor'
+                                : hourlyRate >= 22 ? 'in the $22–27 watch zone'
+                                : hourlyRate > 0 ? 'below the $22 retention floor'
+                                : 'pending — fill the daily log';
 
-            // === CREW PAY vs TARGET (subcontractor-model variance) ===
-            // Two important rules baked in here:
-            //
-            // 1. The 10% material share only applies if crew is contractually buying
-            //    materials (Labor + Materials mode on the accepted crew proposal). In
-            //    Labor Only mode, NSP buys paint directly — crew isn't handling the
-            //    purchase, so they shouldn't get the 10% material share. Including it
-            //    inflates the target and creates a false "underpaid" signal.
-            //
-            // 2. Hourly rate is the PRIMARY signal for crew satisfaction. Target is a
-            //    pricing/structure signal. If hourly is healthy ($27+), small variance
-            //    vs target is informational. If hourly is low, variance just adds context
-            //    to a problem that hourly already flagged.
-            const estLabor = window._actualsEstLabor || 0;
-            const estMaterial = window._actualsEstMaterial || 0;
+            // === CREW PAY vs TARGET — simplified model ===
+            // Target = laborShare × revenue (always; e.g. 45% × customer total).
+            // Compare to crewNetTake (post-deductions) so the lump-vs-net distinction
+            // doesn't muddy the read. Same comparison works in both payment modes.
+            // Hourly remains the headline; target/variance is a sanity check on pricing.
             const laborShare = PRICING.CrewLaborShare ?? 0.45;
-            const materialShareSetting = PRICING.CrewMaterialShare ?? 0.10;
+            const targetCrewPayout = revenue * laborShare;
+            const variance = (targetCrewPayout > 0 && crewNetTake > 0)
+                ? ((crewNetTake - targetCrewPayout) / targetCrewPayout) * 100 : 0;
+            const dollarImpact = targetCrewPayout - crewNetTake; // +ve = NSP kept; -ve = NSP gave up
+            const varColor = Math.abs(variance) <= 5 ? '#10b981'
+                           : Math.abs(variance) <= 15 ? '#f59e0b' : '#ef4444';
+            const varSign = variance >= 0 ? '+' : '';
 
-            // paymentMode was already resolved at the top of calculateProfit (drives deductions).
-            // Reuse it here for target computation.
-            const materialShare = paymentMode === 'labor_plus_materials' ? materialShareSetting : 0;
-            const targetCrewPayout = (estLabor * laborShare) + (estMaterial * materialShare);
-
-            if (targetCrewPayout > 0 && crewPayout > 0) {
-                const variance = ((crewPayout - targetCrewPayout) / targetCrewPayout) * 100;
-                const dollarImpact = targetCrewPayout - crewPayout; // +ve = NSP saved vs target; -ve = NSP paid more
-
-                // Variance bands (for the % chip color only — interpretation is hourly-driven)
-                let varColor;
-                if (Math.abs(variance) <= 5) varColor = '#10b981';
-                else if (Math.abs(variance) <= 15) varColor = '#f59e0b';
-                else varColor = '#ef4444';
-
-                // ── Hourly-first interpretation ─────────────────────────────────
-                // Two-part sentence:
-                //   Primary: how is the crew's hourly looking?
-                //   Secondary: what does the target variance tell us in dollar terms?
-                let primary;
-                if (hourlyRate >= 27) {
-                    primary = `Crew earning $${hourlyRate.toFixed(2)}/hr — comfortably above the $27 healthy floor.`;
-                } else if (hourlyRate >= 22) {
-                    primary = `Crew at $${hourlyRate.toFixed(2)}/hr — borderline. If jobs in this category routinely produce $22-27/hr, retention drifts.`;
-                } else if (hourlyRate > 0) {
-                    primary = `Crew at $${hourlyRate.toFixed(2)}/hr — below the $22 retention floor. Hourly is the binding signal here.`;
-                } else {
-                    primary = `Hourly rate not computed yet — daily log needs entries.`;
-                }
-
-                let secondary;
-                if (Math.abs(variance) <= 5) {
-                    secondary = `Right on target ($${crewPayout.toFixed(0)} actual vs $${targetCrewPayout.toFixed(0)} target).`;
-                } else if (variance > 15) {
-                    secondary = `Significantly over target — NSP gave up $${Math.abs(dollarImpact).toFixed(0)}. Investigate execution (job ran long?) or pricing (estimate too low?).`;
-                } else if (variance > 5) {
-                    secondary = `Over target by ${variance.toFixed(0)}% — NSP gave up $${Math.abs(dollarImpact).toFixed(0)}.`;
-                } else if (variance < -15) {
-                    secondary = `Significantly under target — NSP kept $${dollarImpact.toFixed(0)}. Pricing may be conservative on this job type.`;
-                } else {
-                    secondary = `Under target by ${Math.abs(variance).toFixed(0)}% — NSP kept $${dollarImpact.toFixed(0)}.`;
-                }
-                const interpretation = `${primary} ${secondary}`;
-
-                // Pull prior jobs' variances for trend context. We use the SAME paymentMode
-                // logic as the current job for each prior — so historical pre-paymentMode
-                // records get treated as labor_only by default, which matches their state.
-                const thisProjectId = window._actualsProjectId;
-                const priorVariances = (projects || [])
-                    .filter(p => p.status === 'Complete' && p.id !== thisProjectId && p.actuals?.crewPayout > 0 && p.actuals?.completedAt)
-                    .sort((a, b) => new Date(b.actuals.completedAt) - new Date(a.actuals.completedAt))
-                    .slice(0, 3)
-                    .map(p => {
-                        const pAcceptedCp = p.crewProposals?.find(cp => cp.accepted);
-                        const pMode = pAcceptedCp?.paymentMode || 'labor_only';
-                        const pMatShare = pMode === 'labor_plus_materials' ? materialShareSetting : 0;
-                        const pt = ((p.actuals.estLabor || 0) * laborShare) + ((p.actuals.estMaterial || 0) * pMatShare);
-                        return pt > 0 ? ((p.actuals.crewPayout - pt) / pt) * 100 : null;
-                    })
-                    .filter(v => v !== null);
-
-                let trendHTML = '';
-                if (priorVariances.length > 0) {
-                    const avg = priorVariances.reduce((s, v) => s + v, 0) / priorVariances.length;
-                    const trendPills = priorVariances.map(v => {
-                        const c = Math.abs(v) <= 5 ? '#10b981' : Math.abs(v) <= 15 ? '#f59e0b' : '#ef4444';
-                        const sign = v >= 0 ? '+' : '';
-                        return `<span style="padding:2px 6px;background:${c};color:#fff;border-radius:4px;font-size:11px;font-weight:600;">${sign}${v.toFixed(0)}%</span>`;
-                    }).join(' ');
-                    const sign = avg >= 0 ? '+' : '';
-                    trendHTML = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #e5e7eb;font-size:12px;color:#666;">
-                        Prior ${priorVariances.length} job${priorVariances.length === 1 ? '' : 's'}: ${trendPills} • avg <strong>${sign}${avg.toFixed(1)}%</strong>
-                    </div>`;
-                }
-
-                // Material variance now compares estimated material against PAINT cost only.
-                // The proposal's `totalMaterials` is paint-only (the estimator only models paint),
-                // so comparing it against blended paint+non-paint was producing false overrun signals.
-                // Non-paint cost is informational and shown as a footnote; it's recovered from crew.
-                const matVar = estMaterial > 0 ? ((paintCost - estMaterial) / estMaterial * 100) : 0;
-                const matColor = Math.abs(matVar) > 20 ? '#ef4444' : Math.abs(matVar) > 10 ? '#f59e0b' : '#10b981';
-                const matLabel = matVar > 10 ? '⬆ OVER' : matVar < -10 ? '⬇ UNDER' : '✓ OK';
-                const matNote = paymentMode === 'labor_plus_materials'
-                    ? `Crew bought paint on NSP's account; receipt deducted from payout. Variance is informational here.`
-                    : `Labor Only mode — paint is NSP's expense. An overrun here is a real margin hit.`;
-                const nonPaintFootnote = nonPaintCost > 0
-                    ? `<div style="color:#9ca3af;font-size:11px;margin-top:6px;border-top:1px dashed #e5e7eb;padding-top:4px;">Non-paint materials: $${nonPaintCost.toFixed(0)} — deducted from crew payout (not part of paint variance).</div>`
-                    : '';
-                const matHTML = estMaterial > 0 ? `<div style="margin-top:10px;padding:8px 10px;background:#f9fafb;border-radius:6px;font-size:12px;">
-                    <strong>Paint:</strong> Est. $${estMaterial.toFixed(0)} → Actual $${paintCost.toFixed(0)}
-                    <span style="color:${matColor};font-weight:700;margin-left:6px;">${matVar.toFixed(0)}% ${matLabel}</span>
-                    <div style="color:#666;font-size:11px;margin-top:2px;">${matNote}</div>
-                    ${nonPaintFootnote}
-                </div>` : '';
-
-                // Outer card border = HOURLY color. Hourly is the primary signal; variance
-                // gets its own colored chip but doesn't dominate the card framing.
-                document.getElementById('varianceContent').innerHTML = `
-                    <div style="padding:12px;background:${hourlyColor}15;border:2px solid ${hourlyColor};border-radius:10px;">
-                        <!-- Headline: hourly rate as the primary signal -->
-                        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:6px;">
-                            <div>
-                                <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:0.5px;">Crew Effective Hourly</div>
-                                <strong style="font-size:22px;color:${hourlyColor};">$${hourlyRate.toFixed(2)}/hr</strong>
-                            </div>
-                            <span style="color:${hourlyColor};font-weight:700;font-size:13px;">${hourlyLabel}</span>
-                        </div>
-
-                        <!-- Target detail (secondary) -->
-                        <div style="margin-top:14px;padding-top:10px;border-top:1px solid #e5e7eb;">
-                            <div style="display:flex;justify-content:space-between;align-items:baseline;">
-                                <strong style="font-size:13px;">Crew Pay vs Target</strong>
-                                <span style="font-size:11px;color:#666;">${paymentMode === 'labor_plus_materials' ? 'Labor + Materials' : 'Labor Only'}</span>
-                            </div>
-                            <div style="font-size:12px;color:#666;margin-top:4px;line-height:1.5;">
-                                Target = <strong>${(laborShare*100).toFixed(0)}%</strong> × $${estLabor.toFixed(0)} labor
-                                ${materialShare > 0
-                                    ? `+ <strong>${(materialShare*100).toFixed(0)}%</strong> × $${estMaterial.toFixed(0)} materials`
-                                    : '<span style="color:#9ca3af;">(no material share — Labor Only mode)</span>'}
-                                = <strong style="color:#1e3a8a;">$${targetCrewPayout.toFixed(0)}</strong>
-                            </div>
-                            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px;font-size:13px;">
-                                <div><div style="color:#666;font-size:11px;">Target</div><strong>$${targetCrewPayout.toFixed(0)}</strong></div>
-                                <div><div style="color:#666;font-size:11px;">Actual</div><strong>$${crewPayout.toFixed(0)}</strong></div>
-                                <div><div style="color:#666;font-size:11px;">Variance</div><strong style="color:${varColor};">${variance >= 0 ? '+' : ''}${variance.toFixed(1)}%</strong></div>
-                            </div>
-                        </div>
-
-                        <!-- Interpretation (hourly-first prose) -->
-                        <div style="margin-top:10px;padding:8px;background:#fff;border-radius:6px;font-size:12px;line-height:1.5;color:#374151;">
-                            ${interpretation}
-                        </div>
-
-                        ${trendHTML}
-                    </div>
-                    ${matHTML}
-                `;
-                document.getElementById('varianceCard').style.display = 'block';
-            } else {
-                document.getElementById('varianceCard').style.display = 'none';
+            // ── Interpretation: hourly first, target second ──
+            let primary;
+            if (hourlyRate >= 27) primary = `Crew earning $${hourlyRate.toFixed(2)}/hr — comfortably above the $27 healthy floor.`;
+            else if (hourlyRate >= 22) primary = `Crew at $${hourlyRate.toFixed(2)}/hr — borderline. Watch retention if this is the new normal.`;
+            else if (hourlyRate > 0) primary = `Crew at $${hourlyRate.toFixed(2)}/hr — below the $22 retention floor.`;
+            else primary = `Hourly pending — daily log needs entries.`;
+            let secondary = '';
+            if (targetCrewPayout > 0 && crewNetTake > 0) {
+                if (Math.abs(variance) <= 5) secondary = `On the 45% benchmark.`;
+                else if (variance > 15) secondary = `Crew earned ${variance.toFixed(0)}% over the 45% benchmark — NSP gave up $${Math.abs(dollarImpact).toFixed(0)}.`;
+                else if (variance > 5) secondary = `Crew earned ${variance.toFixed(0)}% over the 45% benchmark.`;
+                else if (variance < -15) secondary = `Crew earned ${Math.abs(variance).toFixed(0)}% under benchmark — NSP kept $${dollarImpact.toFixed(0)}.`;
+                else secondary = `Crew earned ${Math.abs(variance).toFixed(0)}% under the 45% benchmark.`;
             }
+            const interpretation = `${primary}${secondary ? ' ' + secondary : ''}`;
+
+            // ── Prior 3 jobs trend ──
+            // Uses the deduped dataset so linked groups count once. Excludes the
+            // current project's whole linked group so we don't compare a job to
+            // its own sibling.
+            const thisProjectId = window._actualsProjectId;
+            const thisProj = thisProjectId ? (projects || []).find(p => p.id === thisProjectId) : null;
+            const thisGroupIds = new Set([thisProjectId, ...(thisProj?.linkedProjects || [])]);
+            const priorVariances = (typeof _buildCompletedDataset === 'function' ? _buildCompletedDataset() : [])
+                .filter(d => !thisGroupIds.has(d.project.id) && d.target > 0 && d.crewNetTake > 0)
+                .slice(0, 3)
+                .map(d => d.variance);
+            let trendHTML = '';
+            if (priorVariances.length > 0) {
+                const avg = priorVariances.reduce((s, v) => s + v, 0) / priorVariances.length;
+                const pills = priorVariances.map(v => {
+                    const c = Math.abs(v) <= 5 ? '#10b981' : Math.abs(v) <= 15 ? '#f59e0b' : '#ef4444';
+                    return `<span style="padding:2px 6px;background:${c};color:#fff;border-radius:4px;font-size:11px;font-weight:600;">${v >= 0 ? '+' : ''}${v.toFixed(0)}%</span>`;
+                }).join(' ');
+                trendHTML = `<div style="margin-top:8px;font-size:11px;color:#9ca3af;">
+                    Prior ${priorVariances.length}: ${pills} · avg <strong>${avg >= 0 ? '+' : ''}${avg.toFixed(0)}%</strong>
+                </div>`;
+            }
+
+            // ── Paint variance — soft, $-saved framing ──
+            // estMaterial from the proposal IS paint-only (Σ surface.materialCost),
+            // so the comparison is apples-to-apples with paintCost. Phrasing leans
+            // positive when under estimate (a win) and only escalates to red when
+            // significantly over.
+            let paintHTML = '';
+            if (estMaterial > 0 && paintCost > 0) {
+                const matVar = ((paintCost - estMaterial) / estMaterial) * 100;
+                const saved = estMaterial - paintCost;
+                let phrase, paintTone;
+                if (saved >= 0) { phrase = `$${Math.round(saved).toLocaleString()} under estimate ✓`; paintTone = '#10b981'; }
+                else if (matVar < 15) { phrase = `$${Math.round(-saved).toLocaleString()} over (within 15%)`; paintTone = '#6b7280'; }
+                else if (matVar < 30) { phrase = `$${Math.round(-saved).toLocaleString()} over estimate`; paintTone = '#f59e0b'; }
+                else { phrase = `$${Math.round(-saved).toLocaleString()} over — review gallon prices/spread rates`; paintTone = '#ef4444'; }
+                const pctOfRevenue = revenue > 0 ? (paintCost / revenue * 100).toFixed(0) : '?';
+                paintHTML = `<div style="margin-top:10px;padding:10px 12px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;color:#6b7280;line-height:1.5;">
+                    <strong style="color:#374151;font-size:13px;">Paint</strong> — estimated $${Math.round(estMaterial).toLocaleString()} · actual $${Math.round(paintCost).toLocaleString()} · <span style="color:${paintTone};font-weight:700;">${phrase}</span><br>
+                    <span style="font-size:11px;color:#9ca3af;">Paint = ${pctOfRevenue}% of revenue (rule of thumb: ~10%)</span>
+                </div>`;
+            }
+
+            // ── Breakdown body (hidden by default) ──
+            const deductionLines = [];
+            if (nonPaintDeducted > 0) deductionLines.push(`<div style="display:flex;justify-content:space-between;color:#92400e;font-size:12px;"><span>− Non-paint deduction</span><span>−$${nonPaintDeducted.toFixed(0)}</span></div>`);
+            if (paintDeducted > 0) deductionLines.push(`<div style="display:flex;justify-content:space-between;color:#92400e;font-size:12px;"><span>− Paint (Labor + Materials)</span><span>−$${paintDeducted.toFixed(0)}</span></div>`);
+            const flowLines = `<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:#6b7280;">Revenue</span><strong>$${Math.round(revenue).toLocaleString()}</strong></div>
+                <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:#6b7280;">Crew payout (gross)</span><strong>$${Math.round(crewPayout).toLocaleString()}</strong></div>
+                ${deductionLines.join('')}
+                ${(paintDeducted > 0 || nonPaintDeducted > 0) ? `<div style="display:flex;justify-content:space-between;font-size:13px;border-top:1px dashed #e5e7eb;padding-top:4px;margin-top:2px;"><span style="color:#6b7280;">Crew net take</span><strong>$${Math.round(crewNetTake).toLocaleString()}</strong></div>` : ''}
+                <div style="display:flex;justify-content:space-between;font-size:13px;margin-top:4px;"><span style="color:#6b7280;">Paint cost (NSP${paymentMode === 'labor_plus_materials' ? ' pass-through' : ''})</span><strong>$${Math.round(paintCost).toLocaleString()}</strong></div>
+                ${nonPaintCost > 0 ? `<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:#6b7280;">Non-paint ${nonPaintAbsorbed ? '(NSP absorbed)' : '(deducted)'}</span><strong>$${Math.round(nonPaintCost).toLocaleString()}</strong></div>` : ''}
+                <div style="display:flex;justify-content:space-between;font-size:14px;border-top:2px solid #111827;padding-top:6px;margin-top:6px;font-weight:700;"><span>Net Profit</span><span style="color:${profitColor};">$${Math.round(netProfit).toLocaleString()}</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:12px;color:#6b7280;"><span>Profit / day</span><strong>$${Math.round(profitPerDay).toLocaleString()}</strong></div>`;
+            const targetMath = `<div style="margin-top:10px;padding:10px 12px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;color:#6b7280;line-height:1.6;">
+                <strong style="color:#374151;font-size:13px;">Crew vs Target</strong> · ${paymentMode === 'labor_plus_materials' ? 'Labor + Materials' : 'Labor Only'} mode<br>
+                Target = <strong>${(laborShare*100).toFixed(0)}%</strong> × $${Math.round(revenue).toLocaleString()} revenue = <strong style="color:#1e3a8a;">$${Math.round(targetCrewPayout).toLocaleString()}</strong><br>
+                Crew net take <strong>$${Math.round(crewNetTake).toLocaleString()}</strong> → <strong style="color:${varColor};">${varSign}${variance.toFixed(0)}%</strong> ${variance >= 0 ? 'above' : 'below'} benchmark
+            </div>`;
+            const breakdownHTML = `<div style="padding:10px 12px;background:#f9fafb;border-radius:8px;display:grid;gap:4px;">${flowLines}</div>${targetMath}${paintHTML}${trendHTML}`;
+
+            // ── Final consolidated render ──
+            // Hourly headline (big) → 3 KPI tiles → interpretation → "Show breakdown".
+            // Card border + headline tone follow hourly color (the binding signal).
+            const showVsTarget = targetCrewPayout > 0 && crewNetTake > 0;
+            const body = document.getElementById('profitResultsBody');
+            body.innerHTML = `
+                <!-- HEADLINE: hourly is the primary signal -->
+                <div style="text-align:center;padding:16px 12px;background:${hourlyColor}12;border:2px solid ${hourlyColor};border-radius:10px;">
+                    <div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:1.5px;font-weight:600;">Crew Effective Hourly</div>
+                    <div style="font-size:38px;font-weight:700;color:${hourlyColor};line-height:1.1;margin-top:2px;">${hourlyRate > 0 ? '$' + hourlyRate.toFixed(2) + '/hr' : '—'}</div>
+                    <div style="color:${hourlyColor};font-weight:600;font-size:12px;margin-top:4px;">${hourlyRate > 0 ? hourlyLabel + ' · ' + hourlyContext : hourlyContext}</div>
+                </div>
+
+                <!-- KPI TILES -->
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px;">
+                    <div style="text-align:center;padding:10px 4px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;">
+                        <div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Margin</div>
+                        <strong style="font-size:20px;color:${profitColor};display:block;margin-top:2px;">${profitPct.toFixed(1)}%</strong>
+                    </div>
+                    <div style="text-align:center;padding:10px 4px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;">
+                        <div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Net Profit</div>
+                        <strong style="font-size:20px;color:${profitColor};display:block;margin-top:2px;">$${Math.round(netProfit).toLocaleString()}</strong>
+                    </div>
+                    <div style="text-align:center;padding:10px 4px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;">
+                        <div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;font-weight:600;">vs 45% Target</div>
+                        <strong style="font-size:20px;color:${showVsTarget ? varColor : '#9ca3af'};display:block;margin-top:2px;">${showVsTarget ? varSign + variance.toFixed(0) + '%' : '—'}</strong>
+                    </div>
+                </div>
+
+                <!-- INTERPRETATION -->
+                <div style="margin-top:10px;padding:10px 12px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;line-height:1.55;color:#374151;">
+                    ${interpretation}
+                </div>
+
+                <!-- BREAKDOWN TOGGLE -->
+                <button type="button" onclick="toggleProfitBreakdown()" id="profitBreakdownBtn" style="width:100%;margin-top:10px;padding:8px;background:transparent;border:1px dashed #d1d5db;border-radius:6px;color:#6b7280;font-size:12px;font-weight:600;cursor:pointer;">Show breakdown ▾</button>
+                <div id="profitBreakdown" style="display:none;margin-top:8px;">${breakdownHTML}</div>
+            `;
+            document.getElementById('profitResultsCard').style.display = 'block';
+        };
+
+        // Toggles the collapsible breakdown under the consolidated results card.
+        window.toggleProfitBreakdown = function() {
+            const div = document.getElementById('profitBreakdown');
+            const btn = document.getElementById('profitBreakdownBtn');
+            if (!div || !btn) return;
+            const open = div.style.display !== 'none';
+            div.style.display = open ? 'none' : 'block';
+            btn.textContent = open ? 'Show breakdown ▾' : 'Hide breakdown ▴';
         };
 
         window.saveProfitActuals = async function(opts) {
             const markComplete = opts && opts.markComplete === true;
-
-            // Prevent circular subsidiary references: if this project is itself a
-            // linked subsidiary (actualsRef is set), Save & Complete would stamp
-            // the primary as a subsidiary of THIS one, creating a loop. Redirect
-            // the operator to the primary instead. (Draft saves are still fine —
-            // they don't touch actualsRef on linked projects.)
-            const currentProjectId = window._actualsProjectId;
-            const currentProject = currentProjectId
-                ? (projects || []).find(p => p.id === currentProjectId) : null;
-            if (markComplete && currentProject?.actualsRef) {
-                const primary = (projects || []).find(p => p.id === currentProject.actualsRef);
-                const primaryLabel = primary ? `${primary.jobNumber} — ${primary.projectName}` : 'the primary';
-                alert(
-                    `This project is a linked subsidiary of ${primaryLabel}.\n\n` +
-                    `Save & Complete should be run from the primary, not the subsidiary — ` +
-                    `otherwise the relationship becomes circular and both projects disappear from the dashboard.\n\n` +
-                    `Open the primary project and run Save & Complete there.`
-                );
-                return;
-            }
             const hrsPerDay = parseFloat(document.getElementById('actualHoursPerDay').value) || 8;
             // crewPayout is now the GROSS lump. crewNetTake (computed) is what crew
             // actually receives after deductions.
@@ -8037,8 +8006,9 @@ Only return JSON, no other text.`;
                 ? (projects || []).find(p => p.id === window._actualsProjectId) : null;
             const acceptedCp = projectForMode?.crewProposals?.find(cp => cp.accepted);
             const paymentMode = acceptedCp?.paymentMode || 'labor_only';
+            const nonPaintAbsorbed = document.getElementById('actualNonPaintAbsorbed')?.checked === true;
             const paintDeducted = paymentMode === 'labor_plus_materials' ? paintCost : 0;
-            const nonPaintDeducted = nonPaintCost;
+            const nonPaintDeducted = nonPaintAbsorbed ? 0 : nonPaintCost;
             const crewNetTake = Math.max(0, crewPayout - paintDeducted - nonPaintDeducted);
 
             const revenue = window._actualsRevenue || 0;
@@ -8052,11 +8022,12 @@ Only return JSON, no other text.`;
             const dailyLog = (window._actualsDailyLog || []).slice();
 
             // True NSP cash-out (used for net profit / margin):
-            //   Labor + Materials: lump only (paint pass-through via deduction)
-            //   Labor Only: lump + paint (NSP's paint expense; non-paint is a wash)
-            const totalCosts = paymentMode === 'labor_plus_materials'
-                ? crewPayout
-                : crewPayout + paintCost;
+            //   Lump always (NSP's commitment to crew).
+            //   + paint, only in Labor Only (in L+M paint passes through via deduction).
+            //   + non-paint, only when NSP absorbed (otherwise it's recovered via deduction).
+            const totalCosts = crewPayout
+                + (paymentMode === 'labor_only' ? paintCost : 0)
+                + (nonPaintAbsorbed ? nonPaintCost : 0);
 
             const actuals = {
                 crewLeader: document.getElementById('actualCrewLeader').value.trim(),
@@ -8071,7 +8042,8 @@ Only return JSON, no other text.`;
                 crewNetTake,            // Lump minus deductions (what crew actually receives)
                 paymentMode,            // Snapshot of mode used for this record's math
                 paintCost,              // NSP's paint expense (drives material variance)
-                nonPaintCost,           // Charged to NSP at paint store, deducted from crew
+                nonPaintCost,           // Total non-paint spend (sandpaper, wood, drop cloths, etc.)
+                nonPaintAbsorbed,       // true → NSP ate this cost; false → deducted from crew payout
                 materialCost,           // = paintCost + nonPaintCost (legacy compatibility)
                 gallonsUsed: parseFloat(document.getElementById('actualGallons').value) || 0,
                 difficulty: parseInt(document.getElementById('actualDifficulty').value) || 5,
@@ -8105,35 +8077,43 @@ Only return JSON, no other text.`;
                         actuals.completedAt = proj.actuals.completedAt;
                     }
 
-                    // Save actuals; only flip status if markComplete is true.
-                    const projectUpdate = markComplete ? { actuals, status: 'Complete' } : { actuals };
-                    await updateDoc(doc(db, 'projects', projectId), projectUpdate);
-                    const p = projects.find(pr => pr.id === projectId);
-                    if (p) { p.actuals = actuals; if (markComplete) p.status = 'Complete'; }
+                    // Symmetric linked save: write the SAME actuals copy to every
+                    // linked side (including this one). Clear any legacy actualsRef
+                    // pointers so dashboards can't re-hide a side. No more primary/
+                    // subsidiary asymmetry — every linked project carries its own
+                    // copy of the truth, and the dashboard groups them on read.
+                    const allIds = [projectId, ...(window._actualsLinkedProjectIds || []).filter(id => id !== projectId)];
+                    for (const pid of allIds) {
+                        const update = { actuals, actualsRef: deleteField() };
+                        if (markComplete) update.status = 'Complete';
+                        try {
+                            await updateDoc(doc(db, 'projects', pid), update);
+                        } catch (e) {
+                            console.error('Failed to update linked project', pid, e);
+                        }
+                        const lp = projects.find(pr => pr.id === pid);
+                        if (lp) {
+                            lp.actuals = actuals;
+                            delete lp.actualsRef;
+                            if (markComplete) lp.status = 'Complete';
+                        }
+                    }
 
-                    if (markComplete) {
-                        // Mark all linked projects as Complete too
-                        const linkedIds = (window._actualsLinkedProjectIds || []).filter(id => id !== projectId);
-                        for (const lid of linkedIds) {
-                            await updateDoc(doc(db, 'projects', lid), { status: 'Complete', actualsRef: projectId });
-                            const lp = projects.find(pr => pr.id === lid);
-                            if (lp) { lp.status = 'Complete'; lp.actualsRef = projectId; }
-                        }
-                        // Also update the landed proposal's status
-                        if (proj?.landedProposalId) {
-                            await updateDoc(doc(db, 'jobs', proj.landedProposalId), { actuals, status: 'Complete' });
+                    // Mirror to landed proposal of the project the user is on (for
+                    // standalone-job code paths that still read off the proposal).
+                    if (proj?.landedProposalId) {
+                        const propUpdate = markComplete ? { actuals, status: 'Complete' } : { actuals };
+                        try {
+                            await updateDoc(doc(db, 'jobs', proj.landedProposalId), propUpdate);
                             const job = jobs.find(j => j.id === proj.landedProposalId);
-                            if (job) { job.actuals = actuals; job.status = 'Complete'; }
-                        }
-                    } else if (proj?.landedProposalId) {
-                        // Draft save: mirror actuals onto the landed proposal without changing its status.
-                        await updateDoc(doc(db, 'jobs', proj.landedProposalId), { actuals });
-                        const job = jobs.find(j => j.id === proj.landedProposalId);
-                        if (job) { job.actuals = actuals; }
+                            if (job) { job.actuals = actuals; if (markComplete) job.status = 'Complete'; }
+                        } catch (e) { console.error(e); }
                     }
 
                     await loadProjects();
-                    alert(markComplete ? 'Job completed! Actuals saved.' : 'Actuals saved. Status unchanged.');
+                    const linkedCount = allIds.length - 1;
+                    const linkedNote = linkedCount > 0 ? ` (synced to ${linkedCount} linked side${linkedCount === 1 ? '' : 's'})` : '';
+                    alert(markComplete ? `Job completed! Actuals saved${linkedNote}.` : `Actuals saved${linkedNote}. Status unchanged.`);
                     viewProjectDetail(projectId);
                 } else {
                     // Standalone job (legacy)
@@ -9851,10 +9831,10 @@ Generate JSON with these EXACT keys:
 
             // Common heading style helper
             const sectionHead = (kicker, title) => `
-                <div style="text-align:center;margin-bottom:24px;">
-                    <div style="font-family:'Inter',sans-serif;font-size:11pt;color:${P.gold};letter-spacing:3px;text-transform:uppercase;font-weight:500;margin-bottom:6px;">${kicker}</div>
-                    <h2 style="font-family:'Playfair Display',serif;font-size:28pt;color:${P.navy};margin:0;font-weight:600;letter-spacing:-0.5px;line-height:1.1;">${title}</h2>
-                    <div style="width:60px;height:2px;background:${P.gold};margin:14px auto 0;"></div>
+                <div style="text-align:center;margin-bottom:18px;">
+                    <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.gold};letter-spacing:3px;text-transform:uppercase;font-weight:500;margin-bottom:4px;">${kicker}</div>
+                    <h2 style="font-family:'Playfair Display',serif;font-size:24pt;color:${P.navy};margin:0;font-weight:600;letter-spacing:-0.5px;line-height:1.1;">${title}</h2>
+                    <div style="width:50px;height:2px;background:${P.gold};margin:10px auto 0;"></div>
                 </div>`;
 
             // Per-area renderer (one printable page each)
@@ -9879,16 +9859,16 @@ Generate JSON with these EXACT keys:
                 const tip = ai.proTips?.[area.area] || area.tip || '';
 
                 const photosBlock = (before || after) ? `
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:24px;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px;">
                         <div>
                             <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.muted};text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;font-weight:600;">Before</div>
-                            ${before ? `<img src="${before}" style="width:100%;height:280px;object-fit:cover;border-radius:6px;display:block;">`
-                                     : `<div style="width:100%;height:280px;background:#F3F4F6;border-radius:6px;display:flex;align-items:center;justify-content:center;color:${P.muted};font-size:10pt;">no photo</div>`}
+                            ${before ? `<img src="${before}" style="width:100%;height:220px;object-fit:cover;border-radius:6px;display:block;">`
+                                     : `<div style="width:100%;height:220px;background:#F3F4F6;border-radius:6px;display:flex;align-items:center;justify-content:center;color:${P.muted};font-size:10pt;">no photo</div>`}
                         </div>
                         <div>
                             <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;font-weight:600;">After</div>
-                            ${after ? `<img src="${after}" style="width:100%;height:280px;object-fit:cover;border-radius:6px;display:block;">`
-                                    : `<div style="width:100%;height:280px;background:#F3F4F6;border-radius:6px;display:flex;align-items:center;justify-content:center;color:${P.muted};font-size:10pt;">no photo</div>`}
+                            ${after ? `<img src="${after}" style="width:100%;height:220px;object-fit:cover;border-radius:6px;display:block;">`
+                                    : `<div style="width:100%;height:220px;background:#F3F4F6;border-radius:6px;display:flex;align-items:center;justify-content:center;color:${P.muted};font-size:10pt;">no photo</div>`}
                         </div>
                     </div>` : '';
 
@@ -9899,23 +9879,23 @@ Generate JSON with these EXACT keys:
                 const prevType = idx > 0 ? palette[idx - 1]._jobType : null;
                 const showDivider = isCombined && area._jobType && area._jobType !== prevType;
                 const dividerSection = showDivider ? `
-                    <section style="page-break-before:always;padding:120px 64px;background:linear-gradient(135deg, ${P.navyDeep} 0%, ${P.navy} 100%);color:#fff;text-align:center;min-height:600px;display:flex;flex-direction:column;justify-content:center;">
-                        <div style="font-family:'Inter',sans-serif;font-size:11pt;color:${P.gold};letter-spacing:5px;text-transform:uppercase;font-weight:600;margin-bottom:24px;">${area._jobType === 'Exterior' ? 'Part Two' : 'Part One'}</div>
-                        <h2 style="font-family:'Playfair Display',serif;font-size:64pt;color:#fff;font-weight:600;margin:0;letter-spacing:-1px;line-height:1;">${area._jobType}</h2>
-                        <div style="width:80px;height:2px;background:${P.gold};margin:24px auto 0;"></div>
-                        <div style="font-family:'Playfair Display',serif;font-style:italic;font-size:16pt;color:${P.gold};margin-top:24px;font-weight:300;">${area._jobType === 'Exterior' ? '— The Outside —' : '— The Inside —'}</div>
+                    <section style="page-break-before:always;break-before:page;padding:80px 56px;background:${P.navyDeep};-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#fff;text-align:center;min-height:360px;display:flex;flex-direction:column;justify-content:center;">
+                        <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.gold};letter-spacing:5px;text-transform:uppercase;font-weight:600;margin-bottom:18px;">${area._jobType === 'Exterior' ? 'Part Two' : 'Part One'}</div>
+                        <h2 style="font-family:'Playfair Display',serif;font-size:48pt;color:#fff;font-weight:600;margin:0;letter-spacing:-1px;line-height:1;">${area._jobType}</h2>
+                        <div style="width:60px;height:2px;background:${P.gold};margin:18px auto 0;"></div>
+                        <div style="font-family:'Playfair Display',serif;font-style:italic;font-size:14pt;color:${P.gold};margin-top:18px;font-weight:300;">${area._jobType === 'Exterior' ? '— The Outside —' : '— The Inside —'}</div>
                     </section>` : '';
 
-                return `${dividerSection}<section style="page-break-before:always;padding:48px 56px 64px;background:${P.cream};color:${P.text};">
+                return `${dividerSection}<section style="page-break-before:always;break-before:page;padding:32px 48px 36px;background:${P.cream};color:${P.text};">
                     ${sectionHead('Area ' + (idx + 1) + ' of ' + palette.length, area.area)}
                     ${photosBlock}
-                    <div style="background:#fff;border:1px solid ${P.line};border-radius:8px;padding:20px 24px;margin-bottom:18px;">
-                        <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};text-transform:uppercase;letter-spacing:1.5px;font-weight:600;margin-bottom:8px;">Colors Used</div>
+                    <div style="background:#fff;border:1px solid ${P.line};border-radius:8px;padding:14px 20px;margin-bottom:12px;">
+                        <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};text-transform:uppercase;letter-spacing:1.5px;font-weight:600;margin-bottom:6px;">Colors Used</div>
                         ${surfaceList || `<div style=\"color:${P.muted};font-style:italic;\">No surface colors recorded.</div>`}
-                        ${area.technique ? `<div style="margin-top:14px;padding-top:14px;border-top:1px solid ${P.line};"><span style="font-family:Inter;font-size:9pt;color:${P.muted};text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">Technique:</span> <span style="font-family:Inter;font-size:11pt;color:${P.navy};">${area.technique}</span></div>` : ''}
+                        ${area.technique ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid ${P.line};"><span style="font-family:Inter;font-size:9pt;color:${P.muted};text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">Technique:</span> <span style="font-family:Inter;font-size:11pt;color:${P.navy};">${area.technique}</span></div>` : ''}
                     </div>
-                    ${tip ? `<div style="background:${P.navy};color:#fff;padding:18px 22px;border-radius:8px;font-family:'Playfair Display',serif;font-size:13pt;font-style:italic;line-height:1.5;text-align:center;">
-                        <span style="color:${P.gold};font-style:normal;font-size:10pt;letter-spacing:2px;text-transform:uppercase;font-family:Inter;font-weight:600;display:block;margin-bottom:6px;">Pro Tip</span>
+                    ${tip ? `<div style="background:${P.navy};-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#fff;padding:14px 20px;border-radius:8px;font-family:'Playfair Display',serif;font-size:12pt;font-style:italic;line-height:1.5;text-align:center;">
+                        <span style="color:${P.gold};font-style:normal;font-size:9pt;letter-spacing:2px;text-transform:uppercase;font-family:Inter;font-weight:600;display:block;margin-bottom:4px;">Pro Tip</span>
                         "${tip}"
                     </div>` : ''}
                 </section>`;
@@ -9950,51 +9930,77 @@ Generate JSON with these EXACT keys:
 
             return `
             <style>
+                /* ── Print contract ─────────────────────────────────────────
+                   Fixed @page margins → predictable usable area: 7.5 × 10 in
+                   = 720 × 960 px at 96 dpi. Every section is sized to fit
+                   inside that envelope and never split across pages.
+                   ───────────────────────────────────────────────────────── */
+                @page { size: letter; margin: 0.5in; }
                 .report-doc, .report-doc * { box-sizing: border-box; }
                 .report-doc { font-family: 'Inter', -apple-system, sans-serif; color: ${P.text}; line-height: 1.5; }
                 .report-doc h1, .report-doc h2, .report-doc h3 { margin: 0; }
                 .report-doc img { max-width: 100%; }
+                /* Both legacy + modern break properties — Safari and Chrome
+                   honor different ones depending on container/flex context. */
+                .report-doc section {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
                 @media print {
-                    .report-doc section { page-break-inside: avoid; }
+                    .report-doc section {
+                        page-break-inside: avoid;
+                        break-inside: avoid;
+                    }
                 }
             </style>
             <div class="report-doc">
 
                 <!-- ─── COVER ─── -->
-                <section style="page-break-after:always;height:1100px;position:relative;background:${heroPhotoUrl ? `url('${heroPhotoUrl}') center/cover` : `linear-gradient(135deg, ${P.navyDeep} 0%, ${P.navy} 100%)`};color:#fff;display:flex;flex-direction:column;justify-content:space-between;padding:60px;">
-                    <div style="position:absolute;inset:0;background:linear-gradient(180deg, rgba(15,27,51,0.55) 0%, rgba(15,27,51,0.35) 40%, rgba(15,27,51,0.85) 100%);"></div>
-                    <div style="position:relative;text-align:center;">
+                <!-- 700px = 7.29in — fits with 2.7in of headroom on Letter @ 0.5in
+                     margins and even tighter print setups. Single in-flow content
+                     wrapper (no flex / transform / absolute-positioned text) so
+                     print engines can't pull blocks onto another page. -->
+                <section style="page-break-after:always;break-after:page;page-break-inside:avoid;break-inside:avoid;height:700px;position:relative;overflow:hidden;background-color:${P.navyDeep};-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#fff;">
+                    ${heroPhotoUrl ? `<img src="${heroPhotoUrl}" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;display:block;z-index:0;">` : ''}
+                    <div style="position:absolute;top:0;left:0;right:0;bottom:0;background-color:rgba(15,27,51,0.6);-webkit-print-color-adjust:exact;print-color-adjust:exact;z-index:1;"></div>
+                    <div style="position:absolute;top:0;left:0;right:0;height:240px;background-color:rgba(15,27,51,0.25);-webkit-print-color-adjust:exact;print-color-adjust:exact;z-index:1;"></div>
+                    <div style="position:absolute;bottom:0;left:0;right:0;height:280px;background-color:rgba(15,27,51,0.45);-webkit-print-color-adjust:exact;print-color-adjust:exact;z-index:1;"></div>
+                    <!-- Content wrapper. Spacer divs (no flex) keep the print engine happy. -->
+                    <div style="position:relative;z-index:2;width:100%;height:100%;padding:40px 52px;text-align:center;">
+                        <!-- Top brand tagline -->
                         <div style="font-family:'Inter',sans-serif;font-size:11pt;color:${P.gold};letter-spacing:5px;text-transform:uppercase;font-weight:600;">Northern Star Painters</div>
-                        <div style="width:80px;height:1.5px;background:${P.gold};margin:14px auto 0;"></div>
-                    </div>
-                    <div style="position:relative;text-align:center;">
-                        <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.gold};letter-spacing:4px;text-transform:uppercase;font-weight:500;margin-bottom:18px;">A Project Completion Report for</div>
-                        <h1 style="font-family:'Playfair Display',serif;font-size:56pt;color:#fff;font-weight:600;margin:0;letter-spacing:-1px;line-height:1;">${customerName}</h1>
-                        ${customerAddress ? `<div style="font-family:'Playfair Display',serif;font-size:14pt;color:#fff;font-style:italic;margin-top:14px;font-weight:300;opacity:0.9;">${customerAddress}</div>` : ''}
-                        <div style="font-family:'Inter',sans-serif;font-size:11pt;color:${P.gold};margin-top:32px;letter-spacing:2px;text-transform:uppercase;font-weight:500;">${completedAtStr}</div>
-                    </div>
-                    <div style="position:relative;text-align:center;">
-                        <div style="font-family:'Playfair Display',serif;font-style:italic;font-size:14pt;color:${P.gold};">"Excellence in Color"</div>
-                        <div style="font-family:'Inter',sans-serif;font-size:9pt;color:rgba(255,255,255,0.6);margin-top:14px;letter-spacing:1px;">Report ${reportNum}${projectNum ? ' · Project ' + projectNum : ''}</div>
+                        <div style="width:80px;height:1.5px;background:${P.gold};margin:12px auto 0;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+                        <!-- Spacer (tightened from 140 → 110) -->
+                        <div style="height:110px;"></div>
+                        <!-- Customer name block -->
+                        <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.gold};letter-spacing:4px;text-transform:uppercase;font-weight:500;margin-bottom:14px;">A Project Completion Report for</div>
+                        <h1 style="font-family:'Playfair Display',serif;font-size:52pt;color:#fff;font-weight:600;margin:0;letter-spacing:-1px;line-height:1;">${customerName}</h1>
+                        ${customerAddress ? `<div style="font-family:'Playfair Display',serif;font-size:13pt;color:#fff;font-style:italic;margin-top:12px;font-weight:300;opacity:0.9;">${customerAddress}</div>` : ''}
+                        <div style="font-family:'Inter',sans-serif;font-size:11pt;color:${P.gold};margin-top:24px;letter-spacing:2px;text-transform:uppercase;font-weight:500;">${completedAtStr}</div>
+                        <!-- Spacer (tightened from 120 → 90) -->
+                        <div style="height:90px;"></div>
+                        <!-- Brand close -->
+                        <div style="font-family:'Playfair Display',serif;font-style:italic;font-size:13pt;color:${P.gold};">"Excellence in Color"</div>
+                        <div style="font-family:'Inter',sans-serif;font-size:9pt;color:rgba(255,255,255,0.6);margin-top:12px;letter-spacing:1px;">Report ${reportNum}${projectNum ? ' · Project ' + projectNum : ''}</div>
                     </div>
                 </section>
 
                 <!-- ─── INTRODUCTION ─── -->
-                <section style="page-break-after:always;padding:80px 64px;background:${P.cream};">
+                <section style="page-break-inside:avoid;padding:40px 56px 28px;background:${P.cream};">
                     ${sectionHead('A Note From Us', 'Welcome Home')}
-                    <div style="max-width:560px;margin:0 auto;font-family:'Playfair Display',serif;font-size:14pt;color:${P.charcoal};line-height:1.7;font-weight:400;">
+                    <div style="max-width:560px;margin:0 auto;font-family:'Playfair Display',serif;font-size:13pt;color:${P.charcoal};line-height:1.65;font-weight:400;">
                         ${ai.introduction || `Dear ${customerName}, thank you for trusting Northern Star Painters with your home. We've documented every color and detail of your project — yours to keep, share, and reference for years to come.`}
                     </div>
-                    <div style="text-align:center;margin-top:48px;">
-                        <div style="font-family:'Playfair Display',serif;font-style:italic;font-size:18pt;color:${P.navy};">— Amir & the NSP Team</div>
+                    <div style="text-align:center;margin-top:24px;">
+                        <div style="font-family:'Playfair Display',serif;font-style:italic;font-size:16pt;color:${P.navy};">— Amir & the NSP Team</div>
                     </div>
                 </section>
 
                 <!-- ─── PROJECT OVERVIEW ─── -->
-                <section style="page-break-after:always;padding:60px 56px;background:#fff;">
+                <section style="page-break-inside:avoid;padding:32px 56px 40px;background:#fff;">
                     ${sectionHead('At a Glance', 'Project Overview')}
-                    <div style="max-width:680px;margin:0 auto;background:${P.cream};border-radius:12px;padding:40px;">
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px 32px;font-family:'Inter',sans-serif;">
+                    <div style="max-width:680px;margin:0 auto;background:${P.cream};border-radius:12px;padding:24px 32px;">
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 28px;font-family:'Inter',sans-serif;">
                             <div><div style="font-size:9pt;color:${P.muted};text-transform:uppercase;letter-spacing:1.5px;font-weight:600;">Type</div><div style="font-size:13pt;color:${P.navy};font-weight:500;margin-top:3px;">${jobTypeStr}</div></div>
                             <div><div style="font-size:9pt;color:${P.muted};text-transform:uppercase;letter-spacing:1.5px;font-weight:600;">Areas</div><div style="font-size:13pt;color:${P.navy};font-weight:500;margin-top:3px;">${stats.areaCount || palette.length}</div></div>
                             ${stats.totalSqft ? `<div><div style="font-size:9pt;color:${P.muted};text-transform:uppercase;letter-spacing:1.5px;font-weight:600;">Square Footage</div><div style="font-size:13pt;color:${P.navy};font-weight:500;margin-top:3px;">${fmtNum(stats.totalSqft)} sq ft</div></div>` : ''}
@@ -10005,100 +10011,105 @@ Generate JSON with these EXACT keys:
                             ${totalCoats ? `<div><div style="font-size:9pt;color:${P.muted};text-transform:uppercase;letter-spacing:1.5px;font-weight:600;">Coats</div><div style="font-size:13pt;color:${P.navy};font-weight:500;margin-top:3px;">${totalCoats} hand-applied</div></div>` : ''}
                         </div>
                     </div>
-                    ${ai.colorStory ? `<div style="max-width:600px;margin:40px auto 0;text-align:center;font-family:'Playfair Display',serif;font-style:italic;font-size:14pt;color:${P.charcoal};line-height:1.6;">"${ai.colorStory}"</div>` : ''}
+                    ${ai.colorStory ? `<div style="max-width:600px;margin:24px auto 0;text-align:center;font-family:'Playfair Display',serif;font-style:italic;font-size:13pt;color:${P.charcoal};line-height:1.55;">"${ai.colorStory}"</div>` : ''}
                 </section>
 
                 <!-- ─── ROOM-BY-ROOM ─── -->
                 ${areaPages}
 
                 <!-- ─── COLOR PALETTE OVERVIEW ─── -->
-                <section style="page-break-before:always;padding:60px 56px;background:#fff;">
+                <section style="page-break-before:always;break-before:page;padding:36px 56px 28px;background:#fff;">
                     ${sectionHead('Your Story', 'The Palette')}
                     <div style="max-width:720px;margin:0 auto;">
-                        <div style="display:grid;grid-template-columns:repeat(${Math.min(uniqueSwatches.length || 1, 4)}, 1fr);gap:18px;margin-bottom:32px;">
+                        <div style="display:grid;grid-template-columns:repeat(${Math.min(uniqueSwatches.length || 1, 4)}, 1fr);gap:14px;margin-bottom:20px;">
                             ${uniqueSwatches.map(s => `<div style="text-align:center;">
-                                <div style="width:100%;aspect-ratio:1;background:${s.hex};border-radius:50%;border:1px solid ${P.line};margin-bottom:10px;"></div>
-                                <div style="font-family:'Playfair Display',serif;font-size:12pt;color:${P.navy};font-weight:500;">${s.color}</div>
+                                <div style="width:100%;aspect-ratio:1;background:${s.hex};border-radius:50%;border:1px solid ${P.line};margin-bottom:8px;"></div>
+                                <div style="font-family:'Playfair Display',serif;font-size:11pt;color:${P.navy};font-weight:500;">${s.color}</div>
                                 ${s.code ? `<div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.muted};margin-top:2px;">${s.code}</div>` : ''}
                                 ${s.brand ? `<div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.muted};">${s.brand}</div>` : ''}
                             </div>`).join('')}
                         </div>
-                        ${ai.colorStory ? `<div style="background:${P.cream};border-left:3px solid ${P.gold};padding:24px 28px;border-radius:4px;font-family:'Playfair Display',serif;font-size:13pt;color:${P.charcoal};line-height:1.7;font-style:italic;">${ai.colorStory}</div>` : ''}
+                        ${ai.colorStory ? `<div style="background:${P.cream};border-left:3px solid ${P.gold};padding:16px 22px;border-radius:4px;font-family:'Playfair Display',serif;font-size:12pt;color:${P.charcoal};line-height:1.6;font-style:italic;">${ai.colorStory}</div>` : ''}
                     </div>
                 </section>
 
-                <!-- ─── PRODUCT QUALITY ─── -->
-                <section style="page-break-before:always;padding:60px 56px;background:${P.cream};">
-                    ${sectionHead('Built to Last', 'Premium Materials')}
-                    <div style="max-width:600px;margin:0 auto;background:#fff;border:1px solid ${P.line};border-radius:12px;padding:40px;">
-                        <div style="text-align:center;margin-bottom:28px;">
-                            <div style="font-family:'Playfair Display',serif;font-size:22pt;color:${P.navy};font-weight:600;">Professional-Grade Paint</div>
-                            <div style="font-family:'Inter',sans-serif;font-size:11pt;color:${P.muted};margin-top:6px;">The same products used in luxury homes</div>
+                <!-- ─── WARRANTY + MATERIALS (merged) ─── -->
+                <!-- Premium Materials and Warranty share a "we stand behind it"
+                     theme. Merged into a single page-cohesive section so neither
+                     gets stranded on a half-empty page. -->
+                <section style="padding:32px 56px 28px;background:#fff;text-align:center;">
+                    ${sectionHead('Our Promise', 'Built to Last')}
+                    <div style="font-family:'Bebas Neue',sans-serif;font-size:64pt;color:${P.gold};letter-spacing:2px;line-height:1;-webkit-print-color-adjust:exact;print-color-adjust:exact;">2</div>
+                    <div style="font-family:'Inter',sans-serif;font-size:12pt;color:${P.navy};letter-spacing:5px;text-transform:uppercase;font-weight:600;margin-top:-4px;">Year Workmanship Warranty</div>
+                    <div style="max-width:480px;margin:14px auto 0;font-family:'Playfair Display',serif;font-size:13pt;color:${P.charcoal};line-height:1.55;font-style:italic;">We stand behind every brush stroke.</div>
+
+                    <!-- Two-column layout: warranty card + materials card on the same page -->
+                    <div style="max-width:680px;margin:18px auto 0;display:grid;grid-template-columns:1fr 1fr;gap:14px;text-align:left;">
+                        <!-- Warranty card -->
+                        <div style="background:${P.cream};border-radius:8px;padding:14px 18px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                            <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:8px;">Warranty Includes</div>
+                            <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.text};line-height:1.7;">
+                                ✓ Paint adhesion<br>
+                                ✓ Peeling, bubbling, flaking<br>
+                                ✓ Workmanship issues<br>
+                                ✓ Color uniformity
+                            </div>
                         </div>
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 20px;font-family:'Inter',sans-serif;font-size:11pt;color:${P.text};">
-                            <div>✓ Lasting beauty for decades</div>
-                            <div>✓ Easy to clean (washable)</div>
-                            <div>✓ Resistant to fading</div>
-                            <div>✓ Mold and mildew resistant</div>
-                            <div>✓ Low VOC — safe for family</div>
-                            <div>✓ Smooth, even finish</div>
+                        <!-- Materials card (was its own page; now folded in) -->
+                        <div style="background:${P.cream};border-radius:8px;padding:14px 18px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                            <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:8px;">Premium Materials</div>
+                            <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.text};line-height:1.7;">
+                                ✓ Decades of lasting beauty<br>
+                                ✓ Washable, fade-resistant<br>
+                                ✓ Mold &amp; mildew resistant<br>
+                                ✓ Low VOC, family-safe
+                            </div>
                         </div>
                     </div>
-                </section>
 
-                <!-- ─── WARRANTY ─── -->
-                <section style="page-break-before:always;padding:80px 56px;background:#fff;text-align:center;">
-                    ${sectionHead('Our Promise', 'Workmanship Warranty')}
-                    <div style="font-family:'Bebas Neue',sans-serif;font-size:96pt;color:${P.gold};letter-spacing:2px;line-height:1;">2</div>
-                    <div style="font-family:'Inter',sans-serif;font-size:14pt;color:${P.navy};letter-spacing:5px;text-transform:uppercase;font-weight:600;margin-top:-8px;">Year Coverage</div>
-                    <div style="max-width:480px;margin:36px auto 0;font-family:'Playfair Display',serif;font-size:14pt;color:${P.charcoal};line-height:1.7;font-style:italic;">We stand behind every brush stroke.</div>
-                    <div style="max-width:480px;margin:32px auto 0;text-align:left;background:${P.cream};border-radius:8px;padding:24px 28px;">
-                        <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:12px;">Your Warranty Includes</div>
-                        <div style="font-family:'Inter',sans-serif;font-size:11pt;color:${P.text};line-height:2;">
-                            ✓ Paint adhesion<br>
-                            ✓ Peeling, bubbling, or flaking<br>
-                            ✓ Workmanship issues<br>
-                            ✓ Color uniformity<br>
-                        </div>
-                        <div style="margin-top:18px;padding-top:18px;border-top:1px solid ${P.line};font-family:'Inter',sans-serif;font-size:11pt;color:${P.text};">
-                            <strong>Need a touch-up?</strong> Call us first.<br>
-                            ${(cs.companyPhone || cs.phone) ? `📞 ${cs.companyPhone || cs.phone}<br>` : ''}
-                            ✉️ ${cs.companyEmail || cs.email || 'Info@northernstarpainters.com'}
-                        </div>
+                    <!-- Touch-up contact strip (full width below the cards) -->
+                    <div style="max-width:680px;margin:14px auto 0;font-family:'Inter',sans-serif;font-size:10.5pt;color:${P.text};padding:10px 16px;background:${P.cream};border-radius:8px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                        <strong>Need a touch-up?</strong> Call us first.${(cs.companyPhone || cs.phone) ? ` &nbsp; 📞 ${cs.companyPhone || cs.phone}` : ''} &nbsp; ✉️ ${cs.companyEmail || cs.email || 'Info@northernstarpainters.com'}
                     </div>
                 </section>
 
                 <!-- ─── MAINTENANCE GUIDE ─── -->
-                <section style="page-break-before:always;padding:60px 56px;background:${P.cream};">
+                <section style="page-break-inside:avoid;padding:24px 56px 36px;background:${P.cream};">
                     ${sectionHead('Care & Keeping', 'Maintenance Guide')}
-                    <div style="max-width:640px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:18px;">
+                    <div style="max-width:640px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:14px;">
                         ${[
                             ['🧽', 'Cleaning', 'Wipe with soft, damp cloth and mild soap. Avoid abrasive cleaners that can dull the finish.'],
                             ['🚫', 'Avoid', 'Harsh chemicals, ammonia-based cleaners, and rough scrubbing on flat or matte finishes.'],
                             ['💧', 'Spot Wash', 'Test in inconspicuous area first. Pat dry — don\'t scrub. Eggshell and satin are most washable.'],
                             ['🔧', 'Touch-Ups', 'Save the leftover paint can. Light hand stir, brush small area, feather edges. We\'re here if you need us.'],
-                        ].map(([i, t, d]) => `<div style="background:#fff;border:1px solid ${P.line};border-radius:8px;padding:20px;">
-                            <div style="font-size:24pt;margin-bottom:6px;">${i}</div>
-                            <div style="font-family:'Playfair Display',serif;font-size:14pt;color:${P.navy};font-weight:600;margin-bottom:6px;">${t}</div>
-                            <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.text};line-height:1.6;">${d}</div>
+                        ].map(([i, t, d]) => `<div style="background:#fff;border:1px solid ${P.line};border-radius:8px;padding:14px 18px;">
+                            <div style="font-size:18pt;margin-bottom:4px;">${i}</div>
+                            <div style="font-family:'Playfair Display',serif;font-size:13pt;color:${P.navy};font-weight:600;margin-bottom:4px;">${t}</div>
+                            <div style="font-family:'Inter',sans-serif;font-size:9.5pt;color:${P.text};line-height:1.5;">${d}</div>
                         </div>`).join('')}
                     </div>
                 </section>
 
                 <!-- ─── BY THE NUMBERS ─── -->
-                <section style="page-break-before:always;padding:80px 56px;background:${P.navy};color:#fff;">
+                <!-- Smart stat filter: only show stats that actually exist in
+                     the data. "Areas transformed: 1" is dropped (tautological
+                     for single-area jobs). The hard-coded "1 Beautiful home"
+                     stat is gone — it carried no information. -->
+                <section style="padding:36px 56px;background:${P.navy};-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#fff;">
                     ${sectionHead('By the Numbers', 'A Project in Detail').replace(P.navy, '#fff').replace(P.gold, P.gold)}
-                    <div style="max-width:720px;margin:0 auto;display:grid;grid-template-columns:repeat(2, 1fr);gap:24px;">
+                    <div style="max-width:720px;margin:0 auto;display:grid;grid-template-columns:repeat(${(() => {
+                        const numStats = [stats.totalHours, stats.gallonsUsed, stats.totalSqft, totalCoats, ((stats.areaCount || palette.length) > 1 ? (stats.areaCount || palette.length) : null)].filter(v => v).length;
+                        return numStats >= 4 ? 3 : Math.max(numStats, 1);
+                    })()}, 1fr);gap:14px;">
                         ${[
-                            [stats.totalHours ? fmtNum(stats.totalHours) : '—', 'Hours of skilled craftsmanship'],
-                            [stats.gallonsUsed ? stats.gallonsUsed : '—', 'Gallons of premium paint'],
-                            [stats.totalSqft ? fmtNum(stats.totalSqft) : '—', 'Square feet of pristine surfaces'],
-                            [totalCoats || '—', 'Coats hand-applied with care'],
-                            [stats.areaCount || palette.length, 'Areas transformed'],
-                            ['1', 'Beautiful home, transformed for you'],
-                        ].map(([v, l]) => `<div style="text-align:center;padding:24px;background:rgba(255,255,255,0.04);border-radius:10px;">
-                            <div style="font-family:'Bebas Neue',sans-serif;font-size:54pt;color:${P.gold};letter-spacing:1px;line-height:1;">${v}</div>
-                            <div style="font-family:'Inter',sans-serif;font-size:10pt;color:rgba(255,255,255,0.85);text-transform:uppercase;letter-spacing:2px;margin-top:8px;font-weight:500;">${l}</div>
+                            [stats.totalHours ? fmtNum(stats.totalHours) : null, 'Hours of craftsmanship'],
+                            [stats.gallonsUsed || null, 'Gallons of premium paint'],
+                            [stats.totalSqft ? fmtNum(stats.totalSqft) : null, 'Square feet refreshed'],
+                            [totalCoats || null, 'Coats hand-applied'],
+                            [(stats.areaCount || palette.length) > 1 ? (stats.areaCount || palette.length) : null, 'Areas transformed'],
+                        ].filter(([v]) => v).map(([v, l]) => `<div style="text-align:center;padding:16px 12px;background:rgba(255,255,255,0.06);-webkit-print-color-adjust:exact;print-color-adjust:exact;border-radius:10px;">
+                            <div style="font-family:'Bebas Neue',sans-serif;font-size:38pt;color:${P.gold};letter-spacing:1px;line-height:1;">${v}</div>
+                            <div style="font-family:'Inter',sans-serif;font-size:9pt;color:rgba(255,255,255,0.9);text-transform:uppercase;letter-spacing:1.5px;margin-top:6px;font-weight:500;line-height:1.3;">${l}</div>
                         </div>`).join('')}
                     </div>
                 </section>
@@ -10113,37 +10124,36 @@ Generate JSON with these EXACT keys:
                     const fallback = `https://www.google.com/search?q=${encodeURIComponent(companyName + ' reviews')}`;
                     const reviewUrl = configured || fallback;
                     const qr = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&color=1A2B4A&bgcolor=FAF7F2&data=${encodeURIComponent(reviewUrl)}`;
-                    return `<section style="page-break-before:always;padding:60px 56px;background:#fff;text-align:center;">
+                    return `<section style="padding:32px 56px 24px;background:#fff;text-align:center;">
                         ${sectionHead('Share the Love', `We'd Love Your Google Review`)}
-                        <div style="max-width:520px;margin:0 auto;font-family:'Playfair Display',serif;font-size:14pt;color:${P.charcoal};line-height:1.7;font-style:italic;">Loved your experience with us? A few sentences on Google means the world — and helps another homeowner find their painter.</div>
-                        <div style="margin:40px auto 24px;max-width:560px;background:${P.cream};border:1px solid ${P.line};border-radius:12px;padding:32px;display:grid;grid-template-columns:200px 1fr;gap:28px;align-items:center;text-align:left;">
-                            <img src="${qr}" alt="Scan to leave a Google review" style="display:block;width:200px;height:200px;border-radius:8px;background:#fff;padding:8px;border:1px solid ${P.line};">
+                        <div style="max-width:520px;margin:0 auto;font-family:'Playfair Display',serif;font-size:13pt;color:${P.charcoal};line-height:1.55;font-style:italic;">Loved your experience with us? A few sentences on Google means the world — and helps another homeowner find their painter.</div>
+                        <div style="margin:22px auto 16px;max-width:560px;background:${P.cream};border:1px solid ${P.line};border-radius:12px;padding:22px 24px;display:grid;grid-template-columns:160px 1fr;gap:22px;align-items:center;text-align:left;">
+                            <img src="${qr}" alt="Scan to leave a Google review" style="display:block;width:160px;height:160px;border-radius:8px;background:#fff;padding:6px;border:1px solid ${P.line};">
                             <div>
-                                <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:8px;">Scan with your phone</div>
-                                <div style="font-family:'Playfair Display',serif;font-size:24pt;color:${P.navy};font-weight:600;line-height:1.1;margin-bottom:12px;">Leave us a Google review</div>
-                                <div style="font-family:'Inter',sans-serif;font-size:11pt;color:${P.text};line-height:1.6;margin-bottom:14px;">Open your camera, point at the code — it'll take you straight to the review form. Two minutes is all it takes, and it means the world to a small business like ours.</div>
-                                <a href="${reviewUrl}" target="_blank" rel="noopener" style="display:inline-block;font-family:'Inter',sans-serif;font-size:11pt;color:#fff;background:${P.navy};text-decoration:none;font-weight:600;padding:10px 18px;border-radius:6px;letter-spacing:0.5px;">⭐ Leave a review →</a>
-                                <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.muted};margin-top:8px;word-break:break-all;">${reviewUrl.replace(/^https?:\/\//, '')}</div>
+                                <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:6px;">Scan with your phone</div>
+                                <div style="font-family:'Playfair Display',serif;font-size:20pt;color:${P.navy};font-weight:600;line-height:1.1;margin-bottom:8px;">Leave us a Google review</div>
+                                <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.text};line-height:1.5;margin-bottom:10px;">Open your camera, point at the code — two minutes is all it takes.</div>
+                                <a href="${reviewUrl}" target="_blank" rel="noopener" style="display:inline-block;font-family:'Inter',sans-serif;font-size:10pt;color:#fff;background:${P.navy};-webkit-print-color-adjust:exact;print-color-adjust:exact;text-decoration:none;font-weight:600;padding:8px 14px;border-radius:6px;letter-spacing:0.5px;">⭐ Leave a review →</a>
                             </div>
                         </div>
-                        <div style="background:${P.cream};border-radius:8px;padding:24px;max-width:480px;margin:24px auto 0;">
-                            <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:6px;">Refer a Friend</div>
-                            <div style="font-family:'Playfair Display',serif;font-size:18pt;color:${P.navy};font-weight:600;">$100 off their next project — and yours.</div>
-                            <div style="font-family:'Inter',sans-serif;font-size:11pt;color:${P.text};margin-top:8px;">Share this report. When they book, you both save.</div>
+                        <div style="background:${P.cream};border-radius:8px;padding:14px 20px;max-width:480px;margin:14px auto 0;">
+                            <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:4px;">Refer a Friend</div>
+                            <div style="font-family:'Playfair Display',serif;font-size:16pt;color:${P.navy};font-weight:600;">$100 off their next project — and yours.</div>
+                            <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.text};margin-top:4px;">Share this report. When they book, you both save.</div>
                         </div>
                     </section>`;
                 })()}
 
                 <!-- ─── THANK YOU ─── -->
-                <section style="page-break-before:always;padding:120px 56px 100px;background:linear-gradient(180deg, ${P.cream} 0%, #fff 100%);text-align:center;">
-                    <div style="font-family:'Playfair Display',serif;font-size:64pt;color:${P.navy};font-weight:600;letter-spacing:-1.5px;line-height:1;">Thank You</div>
-                    <div style="width:80px;height:2px;background:${P.gold};margin:24px auto;"></div>
-                    <div style="max-width:520px;margin:0 auto;font-family:'Playfair Display',serif;font-size:15pt;color:${P.charcoal};line-height:1.7;font-style:italic;">
+                <section style="page-break-before:always;break-before:page;padding:64px 56px 56px;background:${P.cream};-webkit-print-color-adjust:exact;print-color-adjust:exact;text-align:center;">
+                    <div style="font-family:'Playfair Display',serif;font-size:48pt;color:${P.navy};font-weight:600;letter-spacing:-1px;line-height:1;">Thank You</div>
+                    <div style="width:60px;height:2px;background:${P.gold};margin:18px auto;"></div>
+                    <div style="max-width:520px;margin:0 auto;font-family:'Playfair Display',serif;font-size:13pt;color:${P.charcoal};line-height:1.6;font-style:italic;">
                         ${ai.closingMessage || `We hope you love your home as much as we loved transforming it. Until next time — call us anytime, for anything.`}
                     </div>
-                    <div style="margin-top:48px;font-family:'Playfair Display',serif;font-size:18pt;color:${P.navy};">— ${cs.consultantName || 'Amir'}</div>
-                    <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.muted};letter-spacing:2px;text-transform:uppercase;margin-top:6px;font-weight:500;">${cs.consultantTitle || 'Project Specialist'}, ${cs.companyName || 'Northern Star Painters'}</div>
-                    <div style="margin-top:60px;font-family:'Inter',sans-serif;font-size:9pt;color:${P.muted};letter-spacing:1.5px;">${reportNum}</div>
+                    <div style="margin-top:28px;font-family:'Playfair Display',serif;font-size:16pt;color:${P.navy};">— ${cs.consultantName || 'Amir'}</div>
+                    <div style="font-family:'Inter',sans-serif;font-size:9.5pt;color:${P.muted};letter-spacing:2px;text-transform:uppercase;margin-top:4px;font-weight:500;">${cs.consultantTitle || 'Project Specialist'}, ${cs.companyName || 'Northern Star Painters'}</div>
+                    <div style="margin-top:32px;font-family:'Inter',sans-serif;font-size:9pt;color:${P.muted};letter-spacing:1.5px;">${reportNum}</div>
                 </section>
             </div>
             ${easterEgg}`;
@@ -10513,7 +10523,7 @@ Generate JSON with these EXACT keys:
 
             Promise.all(loaded).then(() => {
                 const origTitle = document.title;
-                document.title = `Completion Report - ${project?.customerName || 'NSP'}`;
+                document.title = _buildReportFilename(project);
                 requestAnimationFrame(() => requestAnimationFrame(() => {
                     try {
                         window.print();
@@ -10525,6 +10535,30 @@ Generate JSON with these EXACT keys:
                 }));
             }).catch(() => restore());
         };
+
+        // Build a customer-facing PDF filename — one they'd actually open.
+        // Examples: "Smith Family — Interior Color Story (NSP-2026-014)"
+        //           "Garcia Home — Exterior Color Story"
+        //           "Lee Home — Interior & Exterior Color Story"
+        function _buildReportFilename(project) {
+            const customer = (project?.customerName || '').trim() || 'Northern Star';
+            const report = project?.completionReport || {};
+            const palette = report.colorPalette || [];
+            const types = Array.from(new Set(palette.map(a => a._jobType).filter(Boolean)));
+            let typeLabel = '';
+            if (types.length >= 2) typeLabel = 'Interior & Exterior';
+            else if (types.length === 1) typeLabel = types[0];
+            else {
+                const prop = (typeof getEffectiveProposal === 'function')
+                    ? getEffectiveProposal(project) : null;
+                typeLabel = prop?.jobType || '';
+            }
+            const num = report.reportId || project?.jobNumber || '';
+            const middle = typeLabel ? `${typeLabel} Color Story` : 'Color Story';
+            // Strip filesystem-unsafe characters; browsers will handle the rest
+            const raw = `${customer} — ${middle}${num ? ' (' + num + ')' : ''}`;
+            return raw.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim();
+        }
 
         // ─── Sharing ────────────────────────────────────────────────────
         window.reportShareLink = function() {
@@ -10723,60 +10757,101 @@ Generate JSON with these EXACT keys:
             return Math.sqrt(arr.reduce((s, v) => s + (v - mean) ** 2, 0) / arr.length);
         }
 
-        // Build the canonical list of REALLY-completed project records with all
-        // derived metrics ready to query. This is the "clean" dataset the rest
-        // of the dashboard reads from.
+        // Group projects by their bidirectional linkedProjects relation.
+        // Used by the dashboard, trend pulls, and anywhere else that needs to
+        // treat a linked group as a single unit. Returns an array of arrays.
+        function _groupLinkedProjects() {
+            const live = (projects || []).filter(p => !p.deleted);
+            const idMap = new Map(live.map(p => [p.id, p]));
+            const visited = new Set();
+            const groups = [];
+            live.forEach(seed => {
+                if (visited.has(seed.id)) return;
+                const group = [];
+                const queue = [seed.id];
+                while (queue.length) {
+                    const id = queue.shift();
+                    if (visited.has(id) || !idMap.has(id)) continue;
+                    visited.add(id);
+                    const p = idMap.get(id);
+                    group.push(p);
+                    (p.linkedProjects || []).forEach(lid => {
+                        if (!visited.has(lid)) queue.push(lid);
+                    });
+                }
+                groups.push(group);
+            });
+            return groups;
+        }
+
+        // Build the canonical list of completed-job records for the dashboard.
+        // Linked projects collapse into ONE row per group (lowest-numbered side
+        // is the canonical for click-through and labels). Reads the actuals
+        // copy from whichever side in the group has them — eliminates the
+        // primary/subsidiary asymmetry that caused vanishing-pair bugs.
         function _buildCompletedDataset() {
             const laborShare = PRICING.CrewLaborShare ?? 0.45;
-            const materialShareSetting = PRICING.CrewMaterialShare ?? 0.10;
+            const groups = _groupLinkedProjects();
 
-            return (projects || [])
-                .filter(p =>
-                    p.status === 'Complete' &&
-                    p.actuals?.completedAt &&
-                    !p.deleted &&
-                    !p.actualsRef          // exclude linked subsidiaries
-                )
-                .map(p => {
-                    const proposal = jobs.find(j => j.id === p.landedProposalId);
-                    // paymentMode: prefer the snapshot saved on the actuals (newest records),
-                    // else read from accepted crew proposal, else default labor_only.
-                    const acceptedCp = (p.crewProposals || []).find(cp => cp.accepted);
-                    const paymentMode = p.actuals.paymentMode || acceptedCp?.paymentMode || 'labor_only';
-                    const matShare = paymentMode === 'labor_plus_materials' ? materialShareSetting : 0;
-                    const target = (p.actuals.estLabor || 0) * laborShare + (p.actuals.estMaterial || 0) * matShare;
-                    const variance = target > 0 ? ((p.actuals.crewPayout - target) / target * 100) : 0;
-                    // paintCost: prefer new field; fall back to legacy materialCost (which was paint-only conceptually)
-                    const paintCost = p.actuals.paintCost !== undefined ? p.actuals.paintCost : (p.actuals.materialCost || 0);
-                    const paintVariance = (p.actuals.estMaterial || 0) > 0
-                        ? ((paintCost - p.actuals.estMaterial) / p.actuals.estMaterial * 100)
-                        : 0;
-                    const hourlyRate = p.actuals.hourlyRate || 0;
-                    const margin = p.actuals.profitMargin || 0;
+            return groups
+                .map(group => {
+                    // A group surfaces if at least one side is Complete with actuals.
+                    // (After the new save flow, all sides will share the actuals copy;
+                    // for legacy records, only one side may have them — works either way.)
+                    const completedSide = group.find(p =>
+                        p.status === 'Complete' && p.actuals?.completedAt);
+                    if (!completedSide) return null;
+
+                    // Canonical for display = lowest-numbered side in the group.
+                    const sorted = [...group].sort((a, b) => {
+                        const an = parseInt((a.jobNumber || '').replace(/\D/g, ''), 10) || Infinity;
+                        const bn = parseInt((b.jobNumber || '').replace(/\D/g, ''), 10) || Infinity;
+                        return an - bn;
+                    });
+                    const p = sorted[0];
+                    const actuals = completedSide.actuals;
+                    // Pick a proposal: canonical's first, else the side that has actuals.
+                    const proposal = jobs.find(j => j.id === p.landedProposalId)
+                        || jobs.find(j => j.id === completedSide.landedProposalId);
+                    const acceptedCp = (p.crewProposals || completedSide.crewProposals || []).find(cp => cp.accepted);
+                    const paymentMode = actuals.paymentMode || acceptedCp?.paymentMode || 'labor_only';
+                    const revenue = actuals.revenue || 0;
+                    const crewNetTake = actuals.crewNetTake !== undefined ? actuals.crewNetTake : (actuals.crewPayout || 0);
+                    const target = revenue * laborShare;
+                    const variance = target > 0 && crewNetTake > 0
+                        ? ((crewNetTake - target) / target * 100) : 0;
+                    const paintCost = actuals.paintCost !== undefined ? actuals.paintCost : (actuals.materialCost || 0);
+                    const paintVariance = (actuals.estMaterial || 0) > 0
+                        ? ((paintCost - actuals.estMaterial) / actuals.estMaterial * 100) : 0;
+                    const hourlyRate = actuals.hourlyRate || 0;
+                    const margin = actuals.profitMargin || 0;
                     return {
-                        project: p,
+                        project: p,                       // canonical project (click-through target)
                         proposal,
-                        actuals: p.actuals,
+                        actuals,
                         jobType: proposal?.jobType || 'Other',
                         jobNumber: p.jobNumber,
                         customerName: p.customerName,
-                        crewLeader: p.actuals.crewLeader || '',
+                        crewLeader: actuals.crewLeader || '',
                         paymentMode,
                         target,
                         variance,
                         paintCost,
                         paintVariance,
-                        completedAt: new Date(p.actuals.completedAt),
+                        completedAt: new Date(actuals.completedAt),
                         hourlyRate,
                         margin,
-                        profit: p.actuals.netProfit || 0,
-                        revenue: p.actuals.revenue || 0,
-                        crewPayout: p.actuals.crewPayout || 0,
-                        crewNetTake: p.actuals.crewNetTake !== undefined ? p.actuals.crewNetTake : (p.actuals.crewPayout || 0),
+                        profit: actuals.netProfit || 0,
+                        revenue,
+                        crewPayout: actuals.crewPayout || 0,
+                        crewNetTake,
+                        nonPaintAbsorbed: actuals.nonPaintAbsorbed === true,
+                        groupSize: group.length,          // >1 means combined linked job
                         qualityScore: _jobQualityScore(hourlyRate, margin, variance),
                     };
                 })
-                .sort((a, b) => b.completedAt - a.completedAt);  // newest first
+                .filter(Boolean)
+                .sort((a, b) => b.completedAt - a.completedAt);
         }
 
         // Rules-based insight engine — looks at the dataset and surfaces
