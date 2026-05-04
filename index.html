@@ -143,7 +143,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v52</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v53</span>
             </div>
 
             <!-- Global Search -->
@@ -881,7 +881,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v52</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v53</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -2763,7 +2763,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                             <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
                                 <button class="btn btn-primary btn-small" onclick="regenerateProposal('${prop.id}')">👁️ View</button>
                                 <button class="btn btn-warning btn-small" onclick="viewJob('${prop.id}')">✏️ Edit</button>
-                                ${isLanded ? `<button class="btn btn-success btn-small" onclick="quickAddChangeOrder('${prop.id}')" style="background:linear-gradient(135deg,#10b981,#059669);">+ Change Order</button>` : ''}
+                                ${isLanded ? `<button class="btn btn-success btn-small" onclick="quickAddChangeOrder('${prop.id}')" style="background:linear-gradient(135deg,#10b981,#059669);">${(prop.changeOrders || []).length > 0 ? '✏️ Change Orders (' + (prop.changeOrders || []).length + ')' : '+ Change Order'}</button>` : ''}
                                 ${!isLanded
                                     ? `<button class="btn btn-success btn-small" onclick="markProposalLanded('${projectId}','${prop.id}')">Mark Landed</button>`
                                     : `<button class="btn btn-info btn-small" onclick="unlandProposal('${projectId}')">↩ Unland</button>`}
@@ -5170,13 +5170,20 @@ Based on the journal entries, calculate and return this JSON (no other text):
 
         window.viewJob = function(jobId) {
             const job = jobs.find(j => j.id === jobId);
-            if (!job) return;
+            if (!job) { alert('Proposal not found'); return; }
 
             // Set view mode for existing proposal
             window.isEditMode = true;
             window.editingJobId = jobId;
             window.hasChanges = false;
             window.currentJobIdForProfit = jobId;
+
+            // Defensive: backfill `surfaces` on any legacy room that lost it,
+            // so display helpers don't throw on older Firestore docs.
+            const safeRooms = (job.rooms || []).map(r => ({
+                ...r,
+                surfaces: Array.isArray(r?.surfaces) ? r.surfaces : [],
+            }));
 
             // Load job data into currentEstimate
             currentEstimate = {
@@ -5187,7 +5194,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 profileId: job.profileId,
                 projectId: job.projectId || null,
                 proposalLabel: job.proposalLabel || '',
-                rooms: job.rooms || [],
+                rooms: safeRooms,
                 basePrice: job.basePrice || job.grandTotal,
                 priceOverride: job.priceOverride || false,
                 discountType: job.discountType,
@@ -5205,57 +5212,67 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 customerSignature: job.customerSignature || null
             };
 
-            // Populate discount fields
-            if (job.discountType) {
-                document.getElementById('discountType').value = job.discountType;
-                document.getElementById('discountName').value = job.discountName || '';
-                document.getElementById('discountValue').value = job.discountValue || 0;
-            }
-            
-            // Populate project notes
-            if (job.projectSummaryNotes) {
-                document.getElementById('projectSummaryNotes').value = job.projectSummaryNotes;
-            }
-
-            // Populate status
-            const statusEl = document.getElementById('estimateStatus');
-            if (statusEl) statusEl.value = job.status || 'New Lead';
-
-            // Restore signatures
-            if (job.companySignature) {
-                document.getElementById('companySignatureImg').src = job.companySignature;
-                document.getElementById('companySignaturePreview').style.display = 'block';
-                document.getElementById('companySignBtn').textContent = '✍️ Re-sign';
-            } else {
-                document.getElementById('companySignaturePreview').style.display = 'none';
-                document.getElementById('companySignBtn').textContent = '✍️ Sign';
-            }
-            if (job.customerSignature) {
-                document.getElementById('customerSignatureImg').src = job.customerSignature;
-                document.getElementById('customerSignaturePreview').style.display = 'block';
-                document.getElementById('customerSignBtn').textContent = '✍️ Re-sign';
-            } else {
-                document.getElementById('customerSignaturePreview').style.display = 'none';
-                document.getElementById('customerSignBtn').textContent = '✍️ Sign';
-            }
-
-            // Show profit display if actuals exist
-            if (job.actuals) {
-                showProfitDisplay(job.actuals);
-            } else {
-                document.getElementById('profitDisplayCard')?.classList.add('hidden');
-            }
-
             // Take snapshot BEFORE displaying (for change detection)
             window._originalEstimateSnapshot = JSON.stringify(currentEstimate.rooms);
 
-            // Edit means edit: drop straight into the room/surface editor.
-            // From step 4 the user can tap any room to change surfaces, then
-            // "Review Estimate →" lands on step 6 (discount, COs, save).
-            // Pre-render step 6 too so the review is ready when they get there.
-            displayEstimateReview();
-            displaySidesRoomsCards();
+            // Navigate FIRST so an exception in any populate helper can't
+            // silently swallow the click — the user always lands on step 4.
+            // Step 6's populate runs lazily when they tap "Review Estimate →".
             showScreen('estimateStep4Screen');
+
+            // Now do the populate work, each guarded so one failure doesn't
+            // block the others.
+            try { displaySidesRoomsCards(); } catch (e) { console.warn('displaySidesRoomsCards failed:', e); }
+
+            try {
+                if (job.discountType) {
+                    const dt = document.getElementById('discountType');
+                    const dn = document.getElementById('discountName');
+                    const dv = document.getElementById('discountValue');
+                    if (dt) dt.value = job.discountType;
+                    if (dn) dn.value = job.discountName || '';
+                    if (dv) dv.value = job.discountValue || 0;
+                }
+                if (job.projectSummaryNotes) {
+                    const psn = document.getElementById('projectSummaryNotes');
+                    if (psn) psn.value = job.projectSummaryNotes;
+                }
+                const statusEl = document.getElementById('estimateStatus');
+                if (statusEl) statusEl.value = job.status || 'New Lead';
+
+                if (job.companySignature) {
+                    const img = document.getElementById('companySignatureImg');
+                    const pv  = document.getElementById('companySignaturePreview');
+                    const btn = document.getElementById('companySignBtn');
+                    if (img) img.src = job.companySignature;
+                    if (pv)  pv.style.display = 'block';
+                    if (btn) btn.textContent = '✍️ Re-sign';
+                } else {
+                    const pv  = document.getElementById('companySignaturePreview');
+                    const btn = document.getElementById('companySignBtn');
+                    if (pv)  pv.style.display = 'none';
+                    if (btn) btn.textContent = '✍️ Sign';
+                }
+                if (job.customerSignature) {
+                    const img = document.getElementById('customerSignatureImg');
+                    const pv  = document.getElementById('customerSignaturePreview');
+                    const btn = document.getElementById('customerSignBtn');
+                    if (img) img.src = job.customerSignature;
+                    if (pv)  pv.style.display = 'block';
+                    if (btn) btn.textContent = '✍️ Re-sign';
+                } else {
+                    const pv  = document.getElementById('customerSignaturePreview');
+                    const btn = document.getElementById('customerSignBtn');
+                    if (pv)  pv.style.display = 'none';
+                    if (btn) btn.textContent = '✍️ Sign';
+                }
+
+                if (job.actuals) {
+                    showProfitDisplay(job.actuals);
+                } else {
+                    document.getElementById('profitDisplayCard')?.classList.add('hidden');
+                }
+            } catch (e) { console.warn('viewJob populate failed:', e); }
         };
 
         window.regenerateProposal = function(jobId) {
@@ -7375,25 +7392,49 @@ Only return JSON, no other text.`;
             markUnsaved();
         };
 
-        // Quick "+ Change Order" modal — invoked from a landed proposal card on
-        // the project detail screen so the operator can add a CO without
-        // re-entering the full proposal editor. Writes directly to the job's
-        // changeOrders array, recomputes grandTotal honoring skipDiscount,
-        // and refreshes the project detail view.
+        // Change Order management modal — invoked from a landed proposal
+        // card on the project detail screen. Shows existing COs (with delete
+        // buttons), an add form, and writes directly to Firestore. Recomputes
+        // discount + grandTotal honoring skipDiscount and refreshes the
+        // project detail view. Only path the operator needs to manage COs
+        // outside the full editor.
         window.quickAddChangeOrder = function(jobId) {
             const job = jobs.find(j => j.id === jobId);
             if (!job) { alert('Proposal not found'); return; }
             const existing = job.changeOrders || [];
             const existingTotal = existing.reduce((s, co) => s + (co.amount || 0), 0);
 
+            const existingListHTML = existing.length > 0 ? `
+                <div style="margin-bottom:14px;">
+                    <div style="font-weight:600;font-size:13px;color:#374151;margin-bottom:6px;">Existing change orders <span style="color:#6b7280;font-weight:400;">(${existing.length} · running total ${existingTotal >= 0 ? '+' : '−'}$${Math.abs(existingTotal).toFixed(2)})</span></div>
+                    ${existing.map((co, i) => {
+                        const sign = co.amount >= 0 ? '+' : '−';
+                        const fg = co.amount >= 0 ? '#1e40af' : '#991b1b';
+                        const bg = co.amount >= 0 ? '#dbeafe' : '#fee2e2';
+                        const skip = co.skipDiscount ? `<span style="display:inline-block;margin-left:6px;padding:1px 7px;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:10px;font-size:10px;font-weight:600;">after discount</span>` : '';
+                        return `<div style="background:${bg};border-radius:8px;padding:10px 12px;margin-bottom:6px;">
+                            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                                <div style="flex:1;min-width:0;">
+                                    <div style="color:${fg};font-weight:700;font-size:14px;">${co.name}${skip}</div>
+                                    ${co.description ? `<div style="color:#374151;font-size:12px;margin-top:3px;line-height:1.4;">${co.description}</div>` : ''}
+                                </div>
+                                <div style="color:${fg};font-weight:700;white-space:nowrap;">${sign}$${Math.abs(co.amount).toFixed(2)}</div>
+                                <button onclick="quickRemoveChangeOrder('${jobId}', ${i})" style="background:#fff;color:#991b1b;border:1px solid #fecaca;border-radius:6px;width:28px;height:28px;font-size:16px;cursor:pointer;line-height:1;flex-shrink:0;" title="Remove">×</button>
+                            </div>
+                        </div>`;
+                    }).join('')}
+                </div>
+                <hr style="border:none;border-top:1px solid #e5e7eb;margin:14px 0;">` : '';
+
             const overlay = document.createElement('div');
             overlay.id = 'quickCOOverlay';
             overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
             overlay.innerHTML = `
-                <div style="background:#fff;border-radius:12px;padding:22px;max-width:440px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto;">
-                    <h3 style="color:#1e3c72;margin:0 0 4px;">+ Change Order</h3>
-                    <p style="color:#666;font-size:13px;margin:0 0 14px;">Adding to <strong>${job.jobName || 'this proposal'}</strong>${job.discountType ? ` · current discount: ${job.discountType === 'percentage' ? job.discountValue + '%' : '$' + (job.discountValue || 0)}` : ''}</p>
-                    ${existing.length > 0 ? `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#065f46;">${existing.length} existing change order${existing.length === 1 ? '' : 's'} · running total ${existingTotal >= 0 ? '+' : '−'}$${Math.abs(existingTotal).toFixed(2)}</div>` : ''}
+                <div style="background:#fff;border-radius:12px;padding:22px;max-width:480px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto;">
+                    <h3 style="color:#1e3c72;margin:0 0 4px;">Change Orders</h3>
+                    <p style="color:#666;font-size:13px;margin:0 0 14px;"><strong>${job.jobName || 'this proposal'}</strong>${job.discountType ? ` · discount on file: ${job.discountType === 'percentage' ? job.discountValue + '%' : '$' + (job.discountValue || 0)}` : ''}</p>
+                    ${existingListHTML}
+                    <div style="font-weight:600;font-size:13px;color:#374151;margin-bottom:8px;">Add a new change order</div>
                     <div style="margin-bottom:10px;">
                         <label style="font-weight:600;font-size:13px;display:block;margin-bottom:4px;">Name</label>
                         <input type="text" id="qcoName" placeholder="e.g., Add wallpaper removal in master" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:15px;">
@@ -7411,14 +7452,53 @@ Only return JSON, no other text.`;
                         <span><strong>Apply without discount</strong> — recommended for scope added after sign-off. The original ${job.discountType === 'percentage' ? job.discountValue + '%' : '$' + (job.discountValue || 0)} discount stays on the original scope only.</span>
                     </label>` : `<input type="checkbox" id="qcoSkip" style="display:none;">`}
                     <div style="display:flex;gap:10px;">
-                        <button onclick="document.getElementById('quickCOOverlay').remove();" style="flex:1;padding:12px;border:1px solid #ddd;border-radius:8px;background:#f5f5f5;font-size:15px;cursor:pointer;">Cancel</button>
-                        <button onclick="confirmQuickAddChangeOrder('${jobId}')" style="flex:2;padding:12px;border:none;border-radius:8px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;font-size:15px;font-weight:600;cursor:pointer;">Add to Proposal</button>
+                        <button onclick="document.getElementById('quickCOOverlay').remove();" style="flex:1;padding:12px;border:1px solid #ddd;border-radius:8px;background:#f5f5f5;font-size:15px;cursor:pointer;">Done</button>
+                        <button onclick="confirmQuickAddChangeOrder('${jobId}')" style="flex:2;padding:12px;border:none;border-radius:8px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;font-size:15px;font-weight:600;cursor:pointer;">+ Add</button>
                     </div>
                 </div>
             `;
             document.getElementById('appContainer').appendChild(overlay);
             setTimeout(() => document.getElementById('qcoName')?.focus(), 50);
         };
+
+        // Shared math helper — recomputes discount + grandTotal from a job's
+        // CO array. Honors skipDiscount and existing job.discountType/Value.
+        function _recomputeJobTotals(job, cos) {
+            const changeOrdersTotal = cos.reduce((s, co) => s + (co.amount || 0), 0);
+            const discountedCOTotal = cos.reduce((s, co) => s + (co.skipDiscount ? 0 : (co.amount || 0)), 0);
+            const skipDiscountCOTotal = cos.reduce((s, co) => s + (co.skipDiscount ? (co.amount || 0) : 0), 0);
+            const basePrice = job.basePrice || job.grandTotal || 0;
+            let discountAmount = 0;
+            const discountBase = basePrice + discountedCOTotal;
+            if (job.discountType === 'percentage') discountAmount = (discountBase * (job.discountValue || 0)) / 100;
+            else if (job.discountType === 'fixed') discountAmount = job.discountValue || 0;
+            const totalCredits = (job.credits || []).reduce((s, c) => s + (c.amount || 0), 0);
+            const grandTotal = discountBase - discountAmount + skipDiscountCOTotal - totalCredits;
+            return { changeOrdersTotal, discountAmount, grandTotal };
+        }
+
+        async function _saveJobCOChanges(jobId, cos, job, opts) {
+            const totals = _recomputeJobTotals(job, cos);
+            await updateDoc(doc(db, 'jobs', jobId), {
+                changeOrders: cos,
+                changeOrdersTotal: totals.changeOrdersTotal,
+                discountAmount: totals.discountAmount,
+                grandTotal: totals.grandTotal,
+                updatedAt: new Date().toISOString(),
+            });
+            job.changeOrders = cos;
+            job.changeOrdersTotal = totals.changeOrdersTotal;
+            job.discountAmount = totals.discountAmount;
+            job.grandTotal = totals.grandTotal;
+            // Reopen the modal with the fresh state, OR close + refresh detail
+            const overlay = document.getElementById('quickCOOverlay');
+            if (overlay) overlay.remove();
+            if (opts && opts.reopen) {
+                quickAddChangeOrder(jobId);
+            } else if (job.projectId) {
+                if (typeof viewProjectDetail === 'function') viewProjectDetail(job.projectId);
+            }
+        }
 
         window.confirmQuickAddChangeOrder = async function(jobId) {
             const job = jobs.find(j => j.id === jobId);
@@ -7432,40 +7512,28 @@ Only return JSON, no other text.`;
 
             const cos = (job.changeOrders || []).slice();
             cos.push({ name, amount, description, skipDiscount, date: new Date().toISOString() });
-            const changeOrdersTotal = cos.reduce((s, co) => s + (co.amount || 0), 0);
-            const discountedCOTotal = cos.reduce((s, co) => s + (co.skipDiscount ? 0 : (co.amount || 0)), 0);
-            const skipDiscountCOTotal = cos.reduce((s, co) => s + (co.skipDiscount ? (co.amount || 0) : 0), 0);
-            const basePrice = job.basePrice || job.grandTotal || 0;
-
-            // Recompute discount + grandTotal off the new CO mix
-            let discountAmount = 0;
-            const discountBase = basePrice + discountedCOTotal;
-            if (job.discountType === 'percentage') discountAmount = (discountBase * (job.discountValue || 0)) / 100;
-            else if (job.discountType === 'fixed') discountAmount = job.discountValue || 0;
-            const totalCredits = (job.credits || []).reduce((s, c) => s + (c.amount || 0), 0);
-            const grandTotal = discountBase - discountAmount + skipDiscountCOTotal - totalCredits;
 
             try {
-                await updateDoc(doc(db, 'jobs', jobId), {
-                    changeOrders: cos,
-                    changeOrdersTotal,
-                    discountAmount,
-                    grandTotal,
-                    updatedAt: new Date().toISOString(),
-                });
-                // Mutate in-place so the UI refresh sees fresh values
-                job.changeOrders = cos;
-                job.changeOrdersTotal = changeOrdersTotal;
-                job.discountAmount = discountAmount;
-                job.grandTotal = grandTotal;
-                document.getElementById('quickCOOverlay')?.remove();
-                // Refresh the project detail card so the new CO + total show
-                if (job.projectId) {
-                    const project = projects.find(p => p.id === job.projectId);
-                    if (project && typeof viewProjectDetail === 'function') viewProjectDetail(job.projectId);
-                }
+                // Reopen so the just-added CO is visible and the operator can
+                // remove or add more without re-navigating.
+                await _saveJobCOChanges(jobId, cos, job, { reopen: true });
             } catch (e) {
                 alert('Save failed: ' + e.message);
+            }
+        };
+
+        window.quickRemoveChangeOrder = async function(jobId, index) {
+            const job = jobs.find(j => j.id === jobId);
+            if (!job) return;
+            const co = (job.changeOrders || [])[index];
+            if (!co) return;
+            if (!confirm(`Remove change order "${co.name}" (${co.amount >= 0 ? '+' : '−'}$${Math.abs(co.amount).toFixed(2)})?`)) return;
+            const cos = (job.changeOrders || []).slice();
+            cos.splice(index, 1);
+            try {
+                await _saveJobCOChanges(jobId, cos, job, { reopen: true });
+            } catch (e) {
+                alert('Remove failed: ' + e.message);
             }
         };
 
