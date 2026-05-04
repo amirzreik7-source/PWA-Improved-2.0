@@ -143,7 +143,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v51</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v52</span>
             </div>
 
             <!-- Global Search -->
@@ -227,7 +227,7 @@
             <div class="step-indicator">Step 4 of 6</div>
             <div class="progress-bar"><div class="progress-fill" style="width: 66.6%"></div></div>
             <button class="btn btn-primary" onclick="navigateHome()" style="margin-right:10px;">🏠 Home</button>
-            <button class="btn btn-back" onclick="goToEstimateStep(3)">← Back</button>
+            <button class="btn btn-back" onclick="step4BackButton()">← Back</button>
             <h2 class="screen-title" id="step4Title">Select Sides/Rooms</h2>
             <p class="screen-subtitle" id="step4Subtitle">Click each side/room to add surfaces</p>
             
@@ -881,7 +881,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v51</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v52</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -5249,9 +5249,13 @@ Based on the journal entries, calculate and return this JSON (no other text):
             // Take snapshot BEFORE displaying (for change detection)
             window._originalEstimateSnapshot = JSON.stringify(currentEstimate.rooms);
 
-            // Display review
+            // Edit means edit: drop straight into the room/surface editor.
+            // From step 4 the user can tap any room to change surfaces, then
+            // "Review Estimate →" lands on step 6 (discount, COs, save).
+            // Pre-render step 6 too so the review is ready when they get there.
             displayEstimateReview();
-            showScreen('estimateStep6Screen');
+            displaySidesRoomsCards();
+            showScreen('estimateStep4Screen');
         };
 
         window.regenerateProposal = function(jobId) {
@@ -5383,6 +5387,17 @@ Based on the journal entries, calculate and return this JSON (no other text):
         };
 
         // Step 3: Profile Selection
+        // Smart back button for step 4 — go to project detail when editing
+        // an existing proposal that's tied to a project; otherwise fall back
+        // to step 3 (profile selection) for the new-estimate flow.
+        window.step4BackButton = function() {
+            if (window.isEditMode && currentEstimate.projectId) {
+                viewProjectDetail(currentEstimate.projectId);
+            } else {
+                goToEstimateStep(3);
+            }
+        };
+
         window.goToEstimateStep = function(step) {
             if (step === 1) {
                 displayCustomerSelection();
@@ -11903,24 +11918,21 @@ Generate JSON with these EXACT keys:
             // — no CSS classes or pseudo-elements).
             const changeOrders = currentEstimate.changeOrders || [];
             const changeOrdersTotal = changeOrders.reduce((s, co) => s + (co.amount || 0), 0);
-            const _discountedCOTotal = changeOrders.reduce((s, co) => s + (co.skipDiscount ? 0 : (co.amount || 0)), 0);
-            const _skipDiscountCOTotal = changeOrders.reduce((s, co) => s + (co.skipDiscount ? (co.amount || 0) : 0), 0);
-            const _hasSkipDiscount = changeOrders.some(co => co.skipDiscount);
             let changeOrdersSectionHTML = '';
             let changeOrdersPriceRow = '';
             if (changeOrders.length > 0) {
+                // Customer-facing — no skipDiscount badges, no internal pricing
+                // notes. The math reconciles in the price summary; customer
+                // just sees clean line items + their amounts.
                 const rowsHTML = changeOrders.map(co => {
                     const sign = co.amount >= 0 ? '+' : '−';
                     const amtColor = co.amount >= 0 ? '#1e3a8a' : '#b91c1c';
                     const descLine = co.description
                         ? `<div style="font-size:9pt;color:#374151;margin-top:3px;line-height:1.45;">${co.description}</div>`
                         : '';
-                    const skipBadge = co.skipDiscount
-                        ? `<span style="display:inline-block;margin-left:6px;padding:1px 7px;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:10px;font-size:8.5pt;font-weight:600;letter-spacing:0.3px;">After discount</span>`
-                        : '';
                     return `<tr style="border-bottom:1px solid #e5e7eb;">
                         <td style="padding:8px 10px;vertical-align:top;">
-                            <strong style="font-size:10pt;color:#111;">${co.name}</strong>${skipBadge}
+                            <strong style="font-size:10pt;color:#111;">${co.name}</strong>
                             ${descLine}
                         </td>
                         <td style="padding:8px 10px;vertical-align:top;text-align:right;font-size:10pt;color:${amtColor};font-weight:700;white-space:nowrap;">
@@ -11930,9 +11942,6 @@ Generate JSON with these EXACT keys:
                 }).join('');
                 const subtotalSign = changeOrdersTotal >= 0 ? '+' : '−';
                 const subtotalColor = changeOrdersTotal >= 0 ? '#1e3a8a' : '#b91c1c';
-                const skipNote = _hasSkipDiscount
-                    ? `<tr><td colspan="2" style="padding:6px 10px;font-size:8.5pt;color:#6b7280;font-style:italic;background:#fffbeb;border-top:1px solid #fcd34d;">Items marked “After discount” are added at full value — the proposal discount applies to original scope only.</td></tr>`
-                    : '';
                 changeOrdersSectionHTML = `</div><div style="padding:0 0.3in">${sectionTitle('CHANGE ORDERS')}
                     <table style="width:100%;border-collapse:collapse;margin:8px 0;border:1px solid #d1d5db;">
                         ${rowsHTML}
@@ -11940,26 +11949,16 @@ Generate JSON with these EXACT keys:
                             <td style="padding:8px 10px;font-weight:700;font-size:10pt;">Change Orders Subtotal</td>
                             <td style="padding:8px 10px;text-align:right;font-weight:700;font-size:11pt;color:${subtotalColor};white-space:nowrap;">${subtotalSign}$${Math.abs(changeOrdersTotal).toFixed(2)}</td>
                         </tr>
-                        ${skipNote}
                     </table>
                 </div><div class="page-content">`;
 
-                // Price-summary lines — split when some COs skip the discount
-                // so the math is transparent: discounted-COs roll into the
-                // discount base, after-discount COs sit on a separate line.
-                const fmt = (n) => `${n >= 0 ? '+' : '−'}$${Math.abs(n).toFixed(2)}`;
-                const colorFor = (n) => n >= 0 ? '#1e3a8a' : '#e74c3c';
-                if (_hasSkipDiscount && _discountedCOTotal !== 0 && _skipDiscountCOTotal !== 0) {
-                    changeOrdersPriceRow =
-                        priceRow('Change Orders (in discount)', `<span style="color:${colorFor(_discountedCOTotal)};">${fmt(_discountedCOTotal)}</span>`) +
-                        priceRow('Change Orders (after discount)', `<span style="color:${colorFor(_skipDiscountCOTotal)};">${fmt(_skipDiscountCOTotal)}</span>`);
-                } else {
-                    const label = _hasSkipDiscount ? 'Change Orders (after discount)' : 'Change Orders';
-                    changeOrdersPriceRow = priceRow(
-                        label,
-                        `<span style="color:${colorFor(changeOrdersTotal)};">${fmt(changeOrdersTotal)}</span>`
-                    );
-                }
+                // Single clean line in the price summary — no internal split.
+                const summarySign = changeOrdersTotal >= 0 ? '+' : '−';
+                const summaryColor = changeOrdersTotal >= 0 ? '#1e3a8a' : '#e74c3c';
+                changeOrdersPriceRow = priceRow(
+                    'Change Orders',
+                    `<span style="color:${summaryColor};">${summarySign}$${Math.abs(changeOrdersTotal).toFixed(2)}</span>`
+                );
             }
 
             // Crew mode: build schedule and pricing
