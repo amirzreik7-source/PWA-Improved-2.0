@@ -147,7 +147,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v55</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v56</span>
             </div>
 
             <!-- Global Search -->
@@ -885,7 +885,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v55</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v56</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -10069,12 +10069,15 @@ Generate JSON with these EXACT keys:
                 || (Object.values(photos.rooms || {}).map(r => r.after?.url).filter(Boolean)[0])
                 || '';
 
-            // Common heading style helper
+            // Common heading style helper.
+            // page-break-after:avoid keeps the heading glued to whatever
+            // content follows — prevents the "title alone at the bottom of
+            // a page, content on the next page" orphan bug.
             const sectionHead = (kicker, title) => `
-                <div style="text-align:center;margin-bottom:18px;">
+                <div style="text-align:center;margin-bottom:18px;page-break-after:avoid;break-after:avoid;">
                     <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.gold};letter-spacing:3px;text-transform:uppercase;font-weight:500;margin-bottom:4px;">${kicker}</div>
-                    <h2 style="font-family:'Playfair Display',serif;font-size:24pt;color:${P.navy};margin:0;font-weight:600;letter-spacing:-0.5px;line-height:1.1;">${title}</h2>
-                    <div style="width:50px;height:2px;background:${P.gold};margin:10px auto 0;"></div>
+                    <h2 style="font-family:'Playfair Display',serif;font-size:24pt;color:${P.navy};margin:0;font-weight:600;letter-spacing:-0.5px;line-height:1.1;page-break-after:avoid;break-after:avoid;">${title}</h2>
+                    <div style="width:50px;height:2px;background:${P.gold};margin:10px auto 0;page-break-after:avoid;break-after:avoid;"></div>
                 </div>`;
 
             // Per-area renderer (one printable page each)
@@ -10126,7 +10129,14 @@ Generate JSON with these EXACT keys:
                         <div style="font-family:'Playfair Display',serif;font-style:italic;font-size:14pt;color:${P.gold};margin-top:18px;font-weight:300;">${area._jobType === 'Exterior' ? '— The Outside —' : '— The Inside —'}</div>
                     </section>` : '';
 
-                return `${dividerSection}<section style="page-break-before:always;break-before:page;padding:32px 48px 36px;background:${P.cream};color:${P.text};">
+                // Area sections used to force a new page each, which left
+                // huge empty bottoms when an area had no photos / few colors.
+                // Now they flow naturally — sparse areas pack together, full
+                // areas (with photos) take a page. The first area gets the
+                // chapter break (so it never starts mid-page just below the
+                // Color Personality reading or Overview).
+                const areaBreak = idx === 0 ? 'page-break-before:always;break-before:page;' : '';
+                return `${dividerSection}<section style="${areaBreak}padding:28px 48px 28px;background:${P.cream};color:${P.text};">
                     ${sectionHead('Area ' + (idx + 1) + ' of ' + palette.length, area.area)}
                     ${photosBlock}
                     <div class="report-keep" style="background:#fff;border:1px solid ${P.line};border-radius:8px;padding:14px 20px;margin-bottom:12px;">
@@ -10393,8 +10403,8 @@ Generate JSON with these EXACT keys:
                      Museum-certificate styled keepsake. Elevates the report
                      from "doc" to "artifact." Decorative gold border, sealed
                      stamp, hand-signed feel. -->
-                <section style="page-break-before:always;break-before:page;padding:36px 36px;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
-                    <div class="report-keep" style="position:relative;border:2px solid ${P.navy};padding:36px 32px 32px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                <section style="padding:24px 36px;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                    <div class="report-keep" style="position:relative;border:2px solid ${P.navy};padding:30px 28px 28px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
                         <!-- Decorative inner gold rule -->
                         <div style="position:absolute;top:6px;left:6px;right:6px;bottom:6px;border:1px solid ${P.gold};pointer-events:none;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
 
