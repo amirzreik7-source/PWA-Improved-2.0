@@ -147,7 +147,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v58</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v59</span>
             </div>
 
             <!-- Global Search -->
@@ -885,7 +885,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v58</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v59</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -10129,14 +10129,12 @@ Generate JSON with these EXACT keys:
                         <div style="font-family:'Playfair Display',serif;font-style:italic;font-size:14pt;color:${P.gold};margin-top:18px;font-weight:300;">${area._jobType === 'Exterior' ? '— The Outside —' : '— The Inside —'}</div>
                     </section>` : '';
 
-                // Area sections used to force a new page each, which left
-                // huge empty bottoms when an area had no photos / few colors.
-                // Now they flow naturally — sparse areas pack together, full
-                // areas (with photos) take a page. The first area gets the
-                // chapter break (so it never starts mid-page just below the
-                // Color Personality reading or Overview).
-                const areaBreak = idx === 0 ? 'page-break-before:always;break-before:page;' : '';
-                return `${dividerSection}<section style="${areaBreak}padding:28px 48px 28px;background:${P.cream};color:${P.text};">
+                // No forced page breaks on areas anymore — the user's #1
+                // complaint was empty pages, and forced breaks are how those
+                // get created. Areas flow naturally; the only thing that
+                // still forces a fresh page is the combined-scope chapter
+                // divider ("Part One / Part Two") above.
+                return `${dividerSection}<section style="padding:24px 48px 24px;background:${P.cream};color:${P.text};">
                     ${sectionHead('Area ' + (idx + 1) + ' of ' + palette.length, area.area)}
                     ${photosBlock}
                     <div class="report-keep" style="background:#fff;border:1px solid ${P.line};border-radius:8px;padding:14px 20px;margin-bottom:12px;">
@@ -10303,19 +10301,20 @@ Generate JSON with these EXACT keys:
                 ${areaPages}
 
                 <!-- ─── COLOR PALETTE OVERVIEW ───
-                     Swatches are now fixed-size (90px) and flow-wrap so 4
-                     fit per row but never blow up to 170px+ each. The whole
-                     section (head + grid + color story) is one report-keep
-                     unit so the title can never strand from the swatches. -->
+                     Swatches at 130px — visible and substantial but never
+                     dominating a page (a row of 4 at 130px = ~580px wide,
+                     two rows = ~340px tall, easy fit). Whole section is one
+                     report-keep unit so head + grid + color story ship
+                     together — title can never strand. -->
                 <section class="report-keep" style="padding:28px 56px 24px;background:#fff;">
                     ${sectionHead('Your Story', 'The Palette')}
                     <div style="max-width:720px;margin:0 auto;">
-                        <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:18px 22px;margin-bottom:18px;">
-                            ${uniqueSwatches.map(s => `<div style="width:96px;text-align:center;">
-                                <div style="width:90px;height:90px;background:${s.hex};border-radius:50%;border:1px solid ${P.line};margin:0 auto 8px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
-                                <div style="font-family:'Playfair Display',serif;font-size:11pt;color:${P.navy};font-weight:500;line-height:1.2;">${s.color}</div>
-                                ${s.code ? `<div style="font-family:'Inter',sans-serif;font-size:8.5pt;color:${P.muted};margin-top:2px;">${s.code}</div>` : ''}
-                                ${s.brand ? `<div style="font-family:'Inter',sans-serif;font-size:8.5pt;color:${P.muted};">${s.brand}</div>` : ''}
+                        <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:22px 28px;margin-bottom:20px;">
+                            ${uniqueSwatches.map(s => `<div style="width:140px;text-align:center;">
+                                <div style="width:130px;height:130px;background:${s.hex};border-radius:50%;border:1px solid ${P.line};margin:0 auto 10px;-webkit-print-color-adjust:exact;print-color-adjust:exact;box-shadow:0 1px 3px rgba(0,0,0,0.06);"></div>
+                                <div style="font-family:'Playfair Display',serif;font-size:12pt;color:${P.navy};font-weight:500;line-height:1.2;">${s.color}</div>
+                                ${s.code ? `<div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.muted};margin-top:2px;">${s.code}</div>` : ''}
+                                ${s.brand ? `<div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.muted};">${s.brand}</div>` : ''}
                             </div>`).join('')}
                         </div>
                         ${ai.colorStory ? `<div style="background:${P.cream};border-left:3px solid ${P.gold};padding:14px 20px;border-radius:4px;font-family:'Playfair Display',serif;font-size:12pt;color:${P.charcoal};line-height:1.55;font-style:italic;">${ai.colorStory}</div>` : ''}
