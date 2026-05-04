@@ -83,7 +83,11 @@
             #proposalContent div[style*="page-break-inside"] { page-break-inside: avoid !important; break-inside: avoid !important; }
             #reportContent { padding: 0 !important; background: white !important; }
             #reportContent * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-            #reportContent .report-doc section { page-break-inside: avoid !important; break-inside: avoid !important; }
+            /* Selective unbreakable units — only elements that MUST stay
+               whole (cover, area photo+colors block, certificate frame,
+               stat tiles, swatches grid). Text-heavy sections are allowed
+               to split so they don't leave huge empty bottoms behind. */
+            #reportContent .report-doc .report-keep { page-break-inside: avoid !important; break-inside: avoid !important; }
             #reportContent img { page-break-inside: avoid !important; break-inside: avoid !important; max-width: 100% !important; }
         }
         @media (max-width: 768px) {
@@ -143,7 +147,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v53</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v54</span>
             </div>
 
             <!-- Global Search -->
@@ -881,7 +885,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v53</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v54</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -10115,7 +10119,7 @@ Generate JSON with these EXACT keys:
                 const prevType = idx > 0 ? palette[idx - 1]._jobType : null;
                 const showDivider = isCombined && area._jobType && area._jobType !== prevType;
                 const dividerSection = showDivider ? `
-                    <section style="page-break-before:always;break-before:page;padding:80px 56px;background:${P.navyDeep};-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#fff;text-align:center;min-height:360px;display:flex;flex-direction:column;justify-content:center;">
+                    <section class="report-keep" style="page-break-before:always;break-before:page;padding:80px 56px;background:${P.navyDeep};-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#fff;text-align:center;min-height:360px;display:flex;flex-direction:column;justify-content:center;">
                         <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.gold};letter-spacing:5px;text-transform:uppercase;font-weight:600;margin-bottom:18px;">${area._jobType === 'Exterior' ? 'Part Two' : 'Part One'}</div>
                         <h2 style="font-family:'Playfair Display',serif;font-size:48pt;color:#fff;font-weight:600;margin:0;letter-spacing:-1px;line-height:1;">${area._jobType}</h2>
                         <div style="width:60px;height:2px;background:${P.gold};margin:18px auto 0;"></div>
@@ -10125,12 +10129,12 @@ Generate JSON with these EXACT keys:
                 return `${dividerSection}<section style="page-break-before:always;break-before:page;padding:32px 48px 36px;background:${P.cream};color:${P.text};">
                     ${sectionHead('Area ' + (idx + 1) + ' of ' + palette.length, area.area)}
                     ${photosBlock}
-                    <div style="background:#fff;border:1px solid ${P.line};border-radius:8px;padding:14px 20px;margin-bottom:12px;">
+                    <div class="report-keep" style="background:#fff;border:1px solid ${P.line};border-radius:8px;padding:14px 20px;margin-bottom:12px;">
                         <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};text-transform:uppercase;letter-spacing:1.5px;font-weight:600;margin-bottom:6px;">Colors Used</div>
                         ${surfaceList || `<div style=\"color:${P.muted};font-style:italic;\">No surface colors recorded.</div>`}
                         ${area.technique ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid ${P.line};"><span style="font-family:Inter;font-size:9pt;color:${P.muted};text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">Technique:</span> <span style="font-family:Inter;font-size:11pt;color:${P.navy};">${area.technique}</span></div>` : ''}
                     </div>
-                    ${tip ? `<div style="background:${P.navy};-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#fff;padding:14px 20px;border-radius:8px;font-family:'Playfair Display',serif;font-size:12pt;font-style:italic;line-height:1.5;text-align:center;">
+                    ${tip ? `<div class="report-keep" style="background:${P.navy};-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#fff;padding:14px 20px;border-radius:8px;font-family:'Playfair Display',serif;font-size:12pt;font-style:italic;line-height:1.5;text-align:center;">
                         <span style="color:${P.gold};font-style:normal;font-size:9pt;letter-spacing:2px;text-transform:uppercase;font-family:Inter;font-weight:600;display:block;margin-bottom:4px;">Pro Tip</span>
                         "${tip}"
                     </div>` : ''}
@@ -10168,25 +10172,20 @@ Generate JSON with these EXACT keys:
             <style>
                 /* ── Print contract ─────────────────────────────────────────
                    Fixed @page margins → predictable usable area: 7.5 × 10 in
-                   = 720 × 960 px at 96 dpi. Every section is sized to fit
-                   inside that envelope and never split across pages.
+                   = 720 × 960 px at 96 dpi. Strategy: only the things that
+                   MUST stay whole (.report-keep, e.g. cover, swatch grids,
+                   certificate frame, stat tiles) are unbreakable; text-heavy
+                   sections flow freely so they don't leave dead space at the
+                   bottom of pages.
                    ───────────────────────────────────────────────────────── */
                 @page { size: letter; margin: 0.5in; }
                 .report-doc, .report-doc * { box-sizing: border-box; }
                 .report-doc { font-family: 'Inter', -apple-system, sans-serif; color: ${P.text}; line-height: 1.5; }
                 .report-doc h1, .report-doc h2, .report-doc h3 { margin: 0; }
                 .report-doc img { max-width: 100%; }
-                /* Both legacy + modern break properties — Safari and Chrome
-                   honor different ones depending on container/flex context. */
-                .report-doc section {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
+                .report-doc .report-keep { page-break-inside: avoid; break-inside: avoid; }
                 @media print {
-                    .report-doc section {
-                        page-break-inside: avoid;
-                        break-inside: avoid;
-                    }
+                    .report-doc .report-keep { page-break-inside: avoid; break-inside: avoid; }
                 }
             </style>
             <div class="report-doc">
@@ -10196,7 +10195,7 @@ Generate JSON with these EXACT keys:
                      margins and even tighter print setups. Single in-flow content
                      wrapper (no flex / transform / absolute-positioned text) so
                      print engines can't pull blocks onto another page. -->
-                <section style="page-break-after:always;break-after:page;page-break-inside:avoid;break-inside:avoid;height:700px;position:relative;overflow:hidden;background-color:${P.navyDeep};-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#fff;">
+                <section class="report-keep" style="page-break-after:always;break-after:page;height:700px;position:relative;overflow:hidden;background-color:${P.navyDeep};-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#fff;">
                     ${heroPhotoUrl ? `<img src="${heroPhotoUrl}" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;display:block;z-index:0;">` : ''}
                     <div style="position:absolute;top:0;left:0;right:0;bottom:0;background-color:rgba(15,27,51,0.6);-webkit-print-color-adjust:exact;print-color-adjust:exact;z-index:1;"></div>
                     <div style="position:absolute;top:0;left:0;right:0;height:240px;background-color:rgba(15,27,51,0.25);-webkit-print-color-adjust:exact;print-color-adjust:exact;z-index:1;"></div>
@@ -10222,7 +10221,7 @@ Generate JSON with these EXACT keys:
                 </section>
 
                 <!-- ─── INTRODUCTION ─── -->
-                <section style="page-break-inside:avoid;padding:40px 56px 28px;background:${P.cream};">
+                <section style="padding:40px 56px 28px;background:${P.cream};">
                     ${sectionHead('A Note From Us', 'Welcome Home')}
                     <div style="max-width:560px;margin:0 auto;font-family:'Playfair Display',serif;font-size:13pt;color:${P.charcoal};line-height:1.65;font-weight:400;">
                         ${ai.introduction || `Dear ${customerName}, thank you for trusting Northern Star Painters with your home. We've documented every color and detail of your project — yours to keep, share, and reference for years to come.`}
@@ -10233,7 +10232,7 @@ Generate JSON with these EXACT keys:
                 </section>
 
                 <!-- ─── PROJECT OVERVIEW ─── -->
-                <section style="page-break-inside:avoid;padding:32px 56px 40px;background:#fff;">
+                <section style="padding:32px 56px 40px;background:#fff;">
                     ${sectionHead('At a Glance', 'Project Overview')}
                     <div style="max-width:680px;margin:0 auto;background:${P.cream};border-radius:12px;padding:24px 32px;">
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 28px;font-family:'Inter',sans-serif;">
@@ -10252,41 +10251,40 @@ Generate JSON with these EXACT keys:
 
                 <!-- ─── YOUR COLOR PERSONALITY (the wow page) ───
                      Magazine-style reveal: archetype name + horoscope-meets-
-                     design-magazine reading, anchored to a mini strip of the
-                     customer's actual swatches so the page feels personal,
-                     not generic. Page-break-inside:avoid keeps it whole. -->
+                     design-magazine reading. NO forced break — flows after
+                     Overview to fill the page. The header (kicker + swatch
+                     strip + archetype) stays glued together as a unit; the
+                     reading and below are free to break naturally if needed,
+                     so we never strand a half-empty page. -->
                 ${ai.colorArchetype || ai.personalityReading ? `
-                <section style="page-break-before:always;break-before:page;page-break-inside:avoid;break-inside:avoid;padding:48px 56px 44px;background:${P.cream};-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                <section style="padding:32px 56px 28px;background:${P.cream};-webkit-print-color-adjust:exact;print-color-adjust:exact;">
                     <div style="max-width:640px;margin:0 auto;text-align:center;">
-                        <!-- Top kicker -->
-                        <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.gold};letter-spacing:4px;text-transform:uppercase;font-weight:600;margin-bottom:6px;">Your Color Personality</div>
-                        <div style="font-family:'Playfair Display',serif;font-style:italic;font-size:11pt;color:${P.muted};margin-bottom:18px;">A reading for ${customerName}</div>
+                        <!-- Header unit: kicker + name + swatches + archetype name -->
+                        <div class="report-keep">
+                            <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.gold};letter-spacing:4px;text-transform:uppercase;font-weight:600;margin-bottom:6px;">Your Color Personality</div>
+                            <div style="font-family:'Playfair Display',serif;font-style:italic;font-size:11pt;color:${P.muted};margin-bottom:14px;">A reading for ${customerName}</div>
+                            ${uniqueSwatches.length ? `<div style="display:flex;justify-content:center;gap:10px;margin-bottom:18px;">
+                                ${uniqueSwatches.slice(0, 6).map(s => `<div style="width:24px;height:24px;border-radius:50%;background:${s.hex};border:1px solid rgba(0,0,0,0.08);-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>`).join('')}
+                            </div>` : ''}
+                            ${ai.colorArchetype ? `<h2 style="font-family:'Playfair Display',serif;font-size:34pt;color:${P.navy};font-weight:600;letter-spacing:-0.5px;line-height:1.05;margin:0;">${ai.colorArchetype}</h2>` : ''}
+                            <div style="width:60px;height:2px;background:${P.gold};margin:12px auto 16px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+                        </div>
 
-                        <!-- Mini swatch strip — anchors the page to THEIR colors -->
-                        ${uniqueSwatches.length ? `<div style="display:flex;justify-content:center;gap:10px;margin-bottom:22px;">
-                            ${uniqueSwatches.slice(0, 6).map(s => `<div style="width:28px;height:28px;border-radius:50%;background:${s.hex};border:1px solid rgba(0,0,0,0.08);-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>`).join('')}
+                        <!-- The reading — allowed to flow naturally -->
+                        ${ai.personalityReading ? `<div style="font-family:'Playfair Display',serif;font-size:12.5pt;color:${P.charcoal};line-height:1.65;font-weight:400;text-align:left;max-width:560px;margin:0 auto;">${ai.personalityReading}</div>` : ''}
+
+                        <!-- Home wink — gold pull-quote (small unit, kept whole) -->
+                        ${ai.homeWink ? `<div class="report-keep" style="margin:22px auto 0;max-width:520px;font-family:'Playfair Display',serif;font-style:italic;font-size:15pt;color:${P.navy};line-height:1.4;">
+                            <span style="color:${P.gold};font-size:22pt;line-height:0;vertical-align:-6px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">“</span>${ai.homeWink}<span style="color:${P.gold};font-size:22pt;line-height:0;vertical-align:-6px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">”</span>
                         </div>` : ''}
 
-                        <!-- ARCHETYPE NAME — the hero -->
-                        ${ai.colorArchetype ? `<h2 style="font-family:'Playfair Display',serif;font-size:38pt;color:${P.navy};font-weight:600;letter-spacing:-0.5px;line-height:1.05;margin:0;">${ai.colorArchetype}</h2>` : ''}
-                        <div style="width:60px;height:2px;background:${P.gold};margin:14px auto 18px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
-
-                        <!-- The reading -->
-                        ${ai.personalityReading ? `<div style="font-family:'Playfair Display',serif;font-size:13pt;color:${P.charcoal};line-height:1.7;font-weight:400;text-align:left;max-width:560px;margin:0 auto;">${ai.personalityReading}</div>` : ''}
-
-                        <!-- Home wink — gold pull-quote -->
-                        ${ai.homeWink ? `<div style="margin:26px auto 0;max-width:520px;font-family:'Playfair Display',serif;font-style:italic;font-size:16pt;color:${P.navy};line-height:1.4;">
-                            <span style="color:${P.gold};font-size:24pt;line-height:0;vertical-align:-6px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">“</span>${ai.homeWink}<span style="color:${P.gold};font-size:24pt;line-height:0;vertical-align:-6px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">”</span>
-                        </div>` : ''}
-
-                        <!-- Fun fact ribbon -->
-                        ${ai.funFact ? `<div style="margin:24px auto 0;max-width:540px;background:#fff;border:1px solid ${P.line};border-radius:10px;padding:14px 20px;text-align:left;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
-                            <div style="font-family:'Inter',sans-serif;font-size:8.5pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:6px;">A Fun Fact From Your Palette</div>
+                        <!-- Fun fact ribbon (small unit, kept whole) -->
+                        ${ai.funFact ? `<div class="report-keep" style="margin:20px auto 0;max-width:540px;background:#fff;border:1px solid ${P.line};border-radius:10px;padding:12px 18px;text-align:left;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                            <div style="font-family:'Inter',sans-serif;font-size:8.5pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:5px;">A Fun Fact From Your Palette</div>
                             <div style="font-family:'Inter',sans-serif;font-size:10.5pt;color:${P.text};line-height:1.55;">${ai.funFact}</div>
                         </div>` : ''}
 
-                        <!-- Painter wink — small gracious closing -->
-                        ${ai.painterPun ? `<div style="margin-top:22px;font-family:'Playfair Display',serif;font-style:italic;font-size:11pt;color:${P.muted};">— ${ai.painterPun}</div>` : ''}
+                        ${ai.painterPun ? `<div style="margin-top:18px;font-family:'Playfair Display',serif;font-style:italic;font-size:11pt;color:${P.muted};">— ${ai.painterPun}</div>` : ''}
                     </div>
                 </section>` : ''}
 
@@ -10294,9 +10292,9 @@ Generate JSON with these EXACT keys:
                 ${areaPages}
 
                 <!-- ─── COLOR PALETTE OVERVIEW ─── -->
-                <section style="page-break-before:always;break-before:page;padding:36px 56px 28px;background:#fff;">
+                <section style="padding:32px 56px 28px;background:#fff;">
                     ${sectionHead('Your Story', 'The Palette')}
-                    <div style="max-width:720px;margin:0 auto;">
+                    <div class="report-keep" style="max-width:720px;margin:0 auto;">
                         <div style="display:grid;grid-template-columns:repeat(${Math.min(uniqueSwatches.length || 1, 4)}, 1fr);gap:14px;margin-bottom:20px;">
                             ${uniqueSwatches.map(s => `<div style="text-align:center;">
                                 <div style="width:100%;aspect-ratio:1;background:${s.hex};border-radius:50%;border:1px solid ${P.line};margin-bottom:8px;"></div>
@@ -10320,7 +10318,7 @@ Generate JSON with these EXACT keys:
                     <div style="max-width:480px;margin:14px auto 0;font-family:'Playfair Display',serif;font-size:13pt;color:${P.charcoal};line-height:1.55;font-style:italic;">We stand behind every brush stroke.</div>
 
                     <!-- Two-column layout: warranty card + materials card on the same page -->
-                    <div style="max-width:680px;margin:18px auto 0;display:grid;grid-template-columns:1fr 1fr;gap:14px;text-align:left;">
+                    <div class="report-keep" style="max-width:680px;margin:18px auto 0;display:grid;grid-template-columns:1fr 1fr;gap:14px;text-align:left;">
                         <!-- Warranty card -->
                         <div style="background:${P.cream};border-radius:8px;padding:14px 18px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
                             <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:8px;">Warranty Includes</div>
@@ -10350,7 +10348,7 @@ Generate JSON with these EXACT keys:
                 </section>
 
                 <!-- ─── MAINTENANCE GUIDE ─── -->
-                <section style="page-break-inside:avoid;padding:24px 56px 36px;background:${P.cream};">
+                <section style="padding:24px 56px 36px;background:${P.cream};">
                     ${sectionHead('Care & Keeping', 'Maintenance Guide')}
                     <div style="max-width:640px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:14px;">
                         ${[
@@ -10358,7 +10356,7 @@ Generate JSON with these EXACT keys:
                             ['🚫', 'Avoid', 'Harsh chemicals, ammonia-based cleaners, and rough scrubbing on flat or matte finishes.'],
                             ['💧', 'Spot Wash', 'Test in inconspicuous area first. Pat dry — don\'t scrub. Eggshell and satin are most washable.'],
                             ['🔧', 'Touch-Ups', 'Save the leftover paint can. Light hand stir, brush small area, feather edges. We\'re here if you need us.'],
-                        ].map(([i, t, d]) => `<div style="background:#fff;border:1px solid ${P.line};border-radius:8px;padding:14px 18px;">
+                        ].map(([i, t, d]) => `<div class="report-keep" style="background:#fff;border:1px solid ${P.line};border-radius:8px;padding:14px 18px;">
                             <div style="font-size:18pt;margin-bottom:4px;">${i}</div>
                             <div style="font-family:'Playfair Display',serif;font-size:13pt;color:${P.navy};font-weight:600;margin-bottom:4px;">${t}</div>
                             <div style="font-family:'Inter',sans-serif;font-size:9.5pt;color:${P.text};line-height:1.5;">${d}</div>
@@ -10383,7 +10381,7 @@ Generate JSON with these EXACT keys:
                             [stats.totalSqft ? fmtNum(stats.totalSqft) : null, 'Square feet refreshed'],
                             [totalCoats || null, 'Coats hand-applied'],
                             [(stats.areaCount || palette.length) > 1 ? (stats.areaCount || palette.length) : null, 'Areas transformed'],
-                        ].filter(([v]) => v).map(([v, l]) => `<div style="text-align:center;padding:16px 12px;background:rgba(255,255,255,0.06);-webkit-print-color-adjust:exact;print-color-adjust:exact;border-radius:10px;">
+                        ].filter(([v]) => v).map(([v, l]) => `<div class="report-keep" style="text-align:center;padding:16px 12px;background:rgba(255,255,255,0.06);-webkit-print-color-adjust:exact;print-color-adjust:exact;border-radius:10px;">
                             <div style="font-family:'Bebas Neue',sans-serif;font-size:38pt;color:${P.gold};letter-spacing:1px;line-height:1;">${v}</div>
                             <div style="font-family:'Inter',sans-serif;font-size:9pt;color:rgba(255,255,255,0.9);text-transform:uppercase;letter-spacing:1.5px;margin-top:6px;font-weight:500;line-height:1.3;">${l}</div>
                         </div>`).join('')}
@@ -10394,8 +10392,8 @@ Generate JSON with these EXACT keys:
                      Museum-certificate styled keepsake. Elevates the report
                      from "doc" to "artifact." Decorative gold border, sealed
                      stamp, hand-signed feel. -->
-                <section style="page-break-before:always;break-before:page;page-break-inside:avoid;break-inside:avoid;padding:36px 36px;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
-                    <div style="position:relative;border:2px solid ${P.navy};padding:36px 32px 32px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                <section style="page-break-before:always;break-before:page;padding:36px 36px;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                    <div class="report-keep" style="position:relative;border:2px solid ${P.navy};padding:36px 32px 32px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
                         <!-- Decorative inner gold rule -->
                         <div style="position:absolute;top:6px;left:6px;right:6px;bottom:6px;border:1px solid ${P.gold};pointer-events:none;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
 
@@ -10468,7 +10466,7 @@ Generate JSON with these EXACT keys:
                     return `<section style="padding:32px 56px 24px;background:#fff;text-align:center;">
                         ${sectionHead('Share the Love', `We'd Love Your Google Review`)}
                         <div style="max-width:520px;margin:0 auto;font-family:'Playfair Display',serif;font-size:13pt;color:${P.charcoal};line-height:1.55;font-style:italic;">Loved your experience with us? A few sentences on Google means the world — and helps another homeowner find their painter.</div>
-                        <div style="margin:22px auto 16px;max-width:560px;background:${P.cream};border:1px solid ${P.line};border-radius:12px;padding:22px 24px;display:grid;grid-template-columns:160px 1fr;gap:22px;align-items:center;text-align:left;">
+                        <div class="report-keep" style="margin:22px auto 16px;max-width:560px;background:${P.cream};border:1px solid ${P.line};border-radius:12px;padding:22px 24px;display:grid;grid-template-columns:160px 1fr;gap:22px;align-items:center;text-align:left;">
                             <img src="${qr}" alt="Scan to leave a Google review" style="display:block;width:160px;height:160px;border-radius:8px;background:#fff;padding:6px;border:1px solid ${P.line};">
                             <div>
                                 <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:6px;">Scan with your phone</div>
@@ -10477,7 +10475,7 @@ Generate JSON with these EXACT keys:
                                 <a href="${reviewUrl}" target="_blank" rel="noopener" style="display:inline-block;font-family:'Inter',sans-serif;font-size:10pt;color:#fff;background:${P.navy};-webkit-print-color-adjust:exact;print-color-adjust:exact;text-decoration:none;font-weight:600;padding:8px 14px;border-radius:6px;letter-spacing:0.5px;">⭐ Leave a review →</a>
                             </div>
                         </div>
-                        <div style="background:${P.cream};border-radius:8px;padding:14px 20px;max-width:480px;margin:14px auto 0;">
+                        <div class="report-keep" style="background:${P.cream};border-radius:8px;padding:14px 20px;max-width:480px;margin:14px auto 0;">
                             <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:4px;">Refer a Friend</div>
                             <div style="font-family:'Playfair Display',serif;font-size:16pt;color:${P.navy};font-weight:600;">$100 off their next project — and yours.</div>
                             <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.text};margin-top:4px;">Share this report. When they book, you both save.</div>
@@ -10486,8 +10484,8 @@ Generate JSON with these EXACT keys:
                 })()}
 
                 <!-- ─── THANK YOU ─── -->
-                <section style="page-break-before:always;break-before:page;padding:64px 56px 56px;background:${P.cream};-webkit-print-color-adjust:exact;print-color-adjust:exact;text-align:center;">
-                    <div style="font-family:'Playfair Display',serif;font-size:48pt;color:${P.navy};font-weight:600;letter-spacing:-1px;line-height:1;">Thank You</div>
+                <section class="report-keep" style="padding:48px 56px 44px;background:${P.cream};-webkit-print-color-adjust:exact;print-color-adjust:exact;text-align:center;">
+                    <div style="font-family:'Playfair Display',serif;font-size:44pt;color:${P.navy};font-weight:600;letter-spacing:-1px;line-height:1;">Thank You</div>
                     <div style="width:60px;height:2px;background:${P.gold};margin:18px auto;"></div>
                     <div style="max-width:520px;margin:0 auto;font-family:'Playfair Display',serif;font-size:13pt;color:${P.charcoal};line-height:1.6;font-style:italic;">
                         ${ai.closingMessage || `We hope you love your home as much as we loved transforming it. Until next time — call us anytime, for anything.`}
