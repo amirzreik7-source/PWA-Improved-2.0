@@ -143,7 +143,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v50</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v51</span>
             </div>
 
             <!-- Global Search -->
@@ -711,7 +711,11 @@
                     <input type="number" id="changeOrderAmountInput" placeholder="$0.00" step="0.01" style="flex:1;min-width:80px;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
                     <button class="btn btn-success btn-small" onclick="addChangeOrder()">+ Add</button>
                 </div>
-                <textarea id="changeOrderDescInput" placeholder="Optional description (shown on proposal)" rows="2" style="width:100%;margin-top:6px;padding:8px;border:2px solid #e0e0e0;border-radius:8px;font-size:13px;"></textarea>
+                <textarea id="changeOrderDescInput" placeholder="Description (shown on proposal under the line item — be specific so the customer knows exactly what this covers)" rows="3" style="width:100%;margin-top:6px;padding:8px;border:2px solid #e0e0e0;border-radius:8px;font-size:13px;"></textarea>
+                <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;color:#374151;cursor:pointer;user-select:none;">
+                    <input type="checkbox" id="changeOrderSkipDiscountInput" style="width:18px;height:18px;cursor:pointer;">
+                    <span><strong>Apply without discount</strong> — full amount, even if proposal has a discount. Use for added scope after sign-off.</span>
+                </label>
             </div>
 
             <!-- Credits Section -->
@@ -877,7 +881,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v50</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v51</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -2756,14 +2760,21 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                                 <strong style="color:#11998e;font-size:16px;">$${(prop.grandTotal || 0).toFixed(2)}</strong>
                             </div>
                             <p style="color:#666;font-size:12px;margin:4px 0;">${new Date(prop.date).toLocaleDateString()} ${new Date(prop.date).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true})}</p>
-                            <div style="display:flex;gap:6px;margin-top:8px;">
+                            <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
                                 <button class="btn btn-primary btn-small" onclick="regenerateProposal('${prop.id}')">👁️ View</button>
                                 <button class="btn btn-warning btn-small" onclick="viewJob('${prop.id}')">✏️ Edit</button>
+                                ${isLanded ? `<button class="btn btn-success btn-small" onclick="quickAddChangeOrder('${prop.id}')" style="background:linear-gradient(135deg,#10b981,#059669);">+ Change Order</button>` : ''}
                                 ${!isLanded
                                     ? `<button class="btn btn-success btn-small" onclick="markProposalLanded('${projectId}','${prop.id}')">Mark Landed</button>`
                                     : `<button class="btn btn-info btn-small" onclick="unlandProposal('${projectId}')">↩ Unland</button>`}
                                 <button class="btn btn-danger btn-small" onclick="deleteEstimate('${prop.id}','${project.customerId}')">Del</button>
                             </div>
+                            ${isLanded && (prop.changeOrders || []).length > 0 ? `<div style="margin-top:8px;padding:8px 10px;background:#fff;border:1px solid #d1fae5;border-radius:6px;font-size:12px;color:#065f46;">
+                                <strong>${(prop.changeOrders || []).length} change order${(prop.changeOrders || []).length === 1 ? '' : 's'}</strong> · ${(() => {
+                                    const t = (prop.changeOrders || []).reduce((s, co) => s + (co.amount || 0), 0);
+                                    return (t >= 0 ? '+' : '−') + '$' + Math.abs(t).toFixed(2);
+                                })()}
+                            </div>` : ''}
                         </div>
                     `;
                 });
@@ -7175,17 +7186,22 @@ Only return JSON, no other text.`;
             }
             
             // Base price + change orders form the pre-discount subtotal.
-            // Change orders flow into the proposal between base price and discount —
-            // discount applies to the adjusted price (incl. change orders), so a 10%
-            // discount on a job with a $500 add-on includes that $500 in the discount base.
+            // Change orders that DON'T have skipDiscount flow into the discount
+            // base alongside basePrice. Change orders WITH skipDiscount sit
+            // outside the discount and are added at full value to the subtotal —
+            // useful for scope added after sign-off, when the original discount
+            // shouldn't dilute the new charge.
             const basePrice = currentEstimate.basePrice || 0;
             const changeOrders = currentEstimate.changeOrders || [];
             const changeOrdersTotal = changeOrders.reduce((sum, co) => sum + (co.amount || 0), 0);
-            const adjustedBase = basePrice + changeOrdersTotal;
+            const discountedCOTotal = changeOrders.reduce((sum, co) => sum + (co.skipDiscount ? 0 : (co.amount || 0)), 0);
+            const skipDiscountCOTotal = changeOrders.reduce((sum, co) => sum + (co.skipDiscount ? (co.amount || 0) : 0), 0);
+            const discountBase = basePrice + discountedCOTotal;
+            const adjustedBase = basePrice + changeOrdersTotal; // for display only
 
             let discountAmount = 0;
             if (discountType === 'percentage') {
-                discountAmount = (adjustedBase * discountValue) / 100;
+                discountAmount = (discountBase * discountValue) / 100;
             } else if (discountType === 'fixed') {
                 discountAmount = discountValue;
             }
@@ -7194,7 +7210,7 @@ Only return JSON, no other text.`;
             const credits = currentEstimate.credits || [];
             const totalCredits = credits.reduce((sum, c) => sum + c.amount, 0);
 
-            const subtotal = adjustedBase - discountAmount - totalCredits;
+            const subtotal = discountBase - discountAmount + skipDiscountCOTotal - totalCredits;
             const deposit = subtotal * 0.5;
             const balance = subtotal * 0.5;
 
@@ -7248,7 +7264,10 @@ Only return JSON, no other text.`;
                 coRows.innerHTML = changeOrders.map(co => {
                     const sign = co.amount >= 0 ? '+' : '−';
                     const color = co.amount >= 0 ? '#1e40af' : '#e74c3c';
-                    return `<p style="font-size:14px;"><strong>${co.name}:</strong> <span style="color:${color};">${sign}$${Math.abs(co.amount).toFixed(2)}</span></p>`;
+                    const badge = co.skipDiscount
+                        ? ` <span style="display:inline-block;padding:1px 7px;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:10px;font-size:11px;font-weight:600;margin-left:4px;">after discount</span>`
+                        : '';
+                    return `<p style="font-size:14px;"><strong>${co.name}${badge}:</strong> <span style="color:${color};">${sign}$${Math.abs(co.amount).toFixed(2)}</span></p>`;
                 }).join('');
                 if (coTotalRow) coTotalRow.style.display = 'block';
                 if (coTotalEl) {
@@ -7273,6 +7292,8 @@ Only return JSON, no other text.`;
             const name = document.getElementById('changeOrderNameInput').value.trim();
             const amount = parseFloat(document.getElementById('changeOrderAmountInput').value);
             const description = document.getElementById('changeOrderDescInput').value.trim();
+            const skipDiscountEl = document.getElementById('changeOrderSkipDiscountInput');
+            const skipDiscount = !!(skipDiscountEl && skipDiscountEl.checked);
             if (!name) { alert('Please enter a change order name'); return; }
             if (isNaN(amount) || amount === 0) { alert('Please enter a non-zero amount (positive or negative)'); return; }
             if (!currentEstimate.changeOrders) currentEstimate.changeOrders = [];
@@ -7280,11 +7301,13 @@ Only return JSON, no other text.`;
                 name,
                 amount,
                 description: description || '',
+                skipDiscount,
                 date: new Date().toISOString(),
             });
             document.getElementById('changeOrderNameInput').value = '';
             document.getElementById('changeOrderAmountInput').value = '';
             document.getElementById('changeOrderDescInput').value = '';
+            if (skipDiscountEl) skipDiscountEl.checked = false;
             displayChangeOrders();
             updateDiscountPreview();
             markUnsaved();
@@ -7311,16 +7334,125 @@ Only return JSON, no other text.`;
                 const bg = isCredit ? '#fee2e2' : '#dbeafe';
                 const fg = isCredit ? '#991b1b' : '#1e40af';
                 const sign = co.amount >= 0 ? '+' : '−';
+                const badge = co.skipDiscount
+                    ? ` <span style="display:inline-block;padding:1px 7px;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:10px;font-size:11px;font-weight:600;margin-left:4px;vertical-align:middle;">after discount</span>`
+                    : '';
                 return `<div style="padding:10px;background:${bg};border-radius:8px;margin-bottom:6px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-                        <strong style="color:${fg};flex:1;">${co.name}</strong>
+                        <strong style="color:${fg};flex:1;">${co.name}${badge}</strong>
                         <span style="color:${fg};font-weight:700;white-space:nowrap;">${sign}$${Math.abs(co.amount).toFixed(2)}</span>
                         <button class="btn btn-danger" onclick="deleteChangeOrder(${i})" style="width:24px;height:24px;padding:0;font-size:14px;line-height:24px;border-radius:4px;flex-shrink:0;">×</button>
                     </div>
-                    ${co.description ? `<p style="margin:4px 0 0;font-size:12px;color:#555;font-style:italic;">${co.description}</p>` : ''}
+                    ${co.description ? `<p style="margin:4px 0 0;font-size:12px;color:#555;line-height:1.4;">${co.description}</p>` : ''}
+                    <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12px;color:#374151;cursor:pointer;user-select:none;">
+                        <input type="checkbox" ${co.skipDiscount ? 'checked' : ''} onchange="toggleChangeOrderSkipDiscount(${i})" style="width:14px;height:14px;cursor:pointer;">
+                        <span>Apply without discount (full amount, after any % off)</span>
+                    </label>
                 </div>`;
             }).join('');
         }
+
+        window.toggleChangeOrderSkipDiscount = function(index) {
+            if (!currentEstimate.changeOrders || !currentEstimate.changeOrders[index]) return;
+            currentEstimate.changeOrders[index].skipDiscount = !currentEstimate.changeOrders[index].skipDiscount;
+            displayChangeOrders();
+            updateDiscountPreview();
+            markUnsaved();
+        };
+
+        // Quick "+ Change Order" modal — invoked from a landed proposal card on
+        // the project detail screen so the operator can add a CO without
+        // re-entering the full proposal editor. Writes directly to the job's
+        // changeOrders array, recomputes grandTotal honoring skipDiscount,
+        // and refreshes the project detail view.
+        window.quickAddChangeOrder = function(jobId) {
+            const job = jobs.find(j => j.id === jobId);
+            if (!job) { alert('Proposal not found'); return; }
+            const existing = job.changeOrders || [];
+            const existingTotal = existing.reduce((s, co) => s + (co.amount || 0), 0);
+
+            const overlay = document.createElement('div');
+            overlay.id = 'quickCOOverlay';
+            overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+            overlay.innerHTML = `
+                <div style="background:#fff;border-radius:12px;padding:22px;max-width:440px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto;">
+                    <h3 style="color:#1e3c72;margin:0 0 4px;">+ Change Order</h3>
+                    <p style="color:#666;font-size:13px;margin:0 0 14px;">Adding to <strong>${job.jobName || 'this proposal'}</strong>${job.discountType ? ` · current discount: ${job.discountType === 'percentage' ? job.discountValue + '%' : '$' + (job.discountValue || 0)}` : ''}</p>
+                    ${existing.length > 0 ? `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#065f46;">${existing.length} existing change order${existing.length === 1 ? '' : 's'} · running total ${existingTotal >= 0 ? '+' : '−'}$${Math.abs(existingTotal).toFixed(2)}</div>` : ''}
+                    <div style="margin-bottom:10px;">
+                        <label style="font-weight:600;font-size:13px;display:block;margin-bottom:4px;">Name</label>
+                        <input type="text" id="qcoName" placeholder="e.g., Add wallpaper removal in master" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:15px;">
+                    </div>
+                    <div style="margin-bottom:10px;">
+                        <label style="font-weight:600;font-size:13px;display:block;margin-bottom:4px;">Amount</label>
+                        <input type="number" id="qcoAmount" placeholder="$0.00 (negative = credit)" step="0.01" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:15px;">
+                    </div>
+                    <div style="margin-bottom:10px;">
+                        <label style="font-weight:600;font-size:13px;display:block;margin-bottom:4px;">Description (shown on proposal)</label>
+                        <textarea id="qcoDesc" rows="3" placeholder="Be specific so the customer knows exactly what this covers" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px;resize:vertical;"></textarea>
+                    </div>
+                    ${job.discountType ? `<label style="display:flex;align-items:flex-start;gap:8px;padding:10px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;margin-bottom:14px;font-size:13px;color:#374151;cursor:pointer;user-select:none;">
+                        <input type="checkbox" id="qcoSkip" checked style="width:18px;height:18px;cursor:pointer;flex-shrink:0;margin-top:1px;">
+                        <span><strong>Apply without discount</strong> — recommended for scope added after sign-off. The original ${job.discountType === 'percentage' ? job.discountValue + '%' : '$' + (job.discountValue || 0)} discount stays on the original scope only.</span>
+                    </label>` : `<input type="checkbox" id="qcoSkip" style="display:none;">`}
+                    <div style="display:flex;gap:10px;">
+                        <button onclick="document.getElementById('quickCOOverlay').remove();" style="flex:1;padding:12px;border:1px solid #ddd;border-radius:8px;background:#f5f5f5;font-size:15px;cursor:pointer;">Cancel</button>
+                        <button onclick="confirmQuickAddChangeOrder('${jobId}')" style="flex:2;padding:12px;border:none;border-radius:8px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;font-size:15px;font-weight:600;cursor:pointer;">Add to Proposal</button>
+                    </div>
+                </div>
+            `;
+            document.getElementById('appContainer').appendChild(overlay);
+            setTimeout(() => document.getElementById('qcoName')?.focus(), 50);
+        };
+
+        window.confirmQuickAddChangeOrder = async function(jobId) {
+            const job = jobs.find(j => j.id === jobId);
+            if (!job) { alert('Proposal lost — please reload.'); return; }
+            const name = document.getElementById('qcoName').value.trim();
+            const amount = parseFloat(document.getElementById('qcoAmount').value);
+            const description = document.getElementById('qcoDesc').value.trim();
+            const skipDiscount = !!document.getElementById('qcoSkip').checked;
+            if (!name) { alert('Please enter a change order name'); return; }
+            if (isNaN(amount) || amount === 0) { alert('Please enter a non-zero amount'); return; }
+
+            const cos = (job.changeOrders || []).slice();
+            cos.push({ name, amount, description, skipDiscount, date: new Date().toISOString() });
+            const changeOrdersTotal = cos.reduce((s, co) => s + (co.amount || 0), 0);
+            const discountedCOTotal = cos.reduce((s, co) => s + (co.skipDiscount ? 0 : (co.amount || 0)), 0);
+            const skipDiscountCOTotal = cos.reduce((s, co) => s + (co.skipDiscount ? (co.amount || 0) : 0), 0);
+            const basePrice = job.basePrice || job.grandTotal || 0;
+
+            // Recompute discount + grandTotal off the new CO mix
+            let discountAmount = 0;
+            const discountBase = basePrice + discountedCOTotal;
+            if (job.discountType === 'percentage') discountAmount = (discountBase * (job.discountValue || 0)) / 100;
+            else if (job.discountType === 'fixed') discountAmount = job.discountValue || 0;
+            const totalCredits = (job.credits || []).reduce((s, c) => s + (c.amount || 0), 0);
+            const grandTotal = discountBase - discountAmount + skipDiscountCOTotal - totalCredits;
+
+            try {
+                await updateDoc(doc(db, 'jobs', jobId), {
+                    changeOrders: cos,
+                    changeOrdersTotal,
+                    discountAmount,
+                    grandTotal,
+                    updatedAt: new Date().toISOString(),
+                });
+                // Mutate in-place so the UI refresh sees fresh values
+                job.changeOrders = cos;
+                job.changeOrdersTotal = changeOrdersTotal;
+                job.discountAmount = discountAmount;
+                job.grandTotal = grandTotal;
+                document.getElementById('quickCOOverlay')?.remove();
+                // Refresh the project detail card so the new CO + total show
+                if (job.projectId) {
+                    const project = projects.find(p => p.id === job.projectId);
+                    if (project && typeof viewProjectDetail === 'function') viewProjectDetail(job.projectId);
+                }
+            } catch (e) {
+                alert('Save failed: ' + e.message);
+            }
+        };
 
         // === CREDITS ===
         window.addCredit = function() {
@@ -11771,6 +11903,9 @@ Generate JSON with these EXACT keys:
             // — no CSS classes or pseudo-elements).
             const changeOrders = currentEstimate.changeOrders || [];
             const changeOrdersTotal = changeOrders.reduce((s, co) => s + (co.amount || 0), 0);
+            const _discountedCOTotal = changeOrders.reduce((s, co) => s + (co.skipDiscount ? 0 : (co.amount || 0)), 0);
+            const _skipDiscountCOTotal = changeOrders.reduce((s, co) => s + (co.skipDiscount ? (co.amount || 0) : 0), 0);
+            const _hasSkipDiscount = changeOrders.some(co => co.skipDiscount);
             let changeOrdersSectionHTML = '';
             let changeOrdersPriceRow = '';
             if (changeOrders.length > 0) {
@@ -11778,11 +11913,14 @@ Generate JSON with these EXACT keys:
                     const sign = co.amount >= 0 ? '+' : '−';
                     const amtColor = co.amount >= 0 ? '#1e3a8a' : '#b91c1c';
                     const descLine = co.description
-                        ? `<div style="font-size:9pt;color:#6b7280;margin-top:2px;font-style:italic;">${co.description}</div>`
+                        ? `<div style="font-size:9pt;color:#374151;margin-top:3px;line-height:1.45;">${co.description}</div>`
+                        : '';
+                    const skipBadge = co.skipDiscount
+                        ? `<span style="display:inline-block;margin-left:6px;padding:1px 7px;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:10px;font-size:8.5pt;font-weight:600;letter-spacing:0.3px;">After discount</span>`
                         : '';
                     return `<tr style="border-bottom:1px solid #e5e7eb;">
                         <td style="padding:8px 10px;vertical-align:top;">
-                            <strong style="font-size:10pt;color:#111;">${co.name}</strong>
+                            <strong style="font-size:10pt;color:#111;">${co.name}</strong>${skipBadge}
                             ${descLine}
                         </td>
                         <td style="padding:8px 10px;vertical-align:top;text-align:right;font-size:10pt;color:${amtColor};font-weight:700;white-space:nowrap;">
@@ -11792,6 +11930,9 @@ Generate JSON with these EXACT keys:
                 }).join('');
                 const subtotalSign = changeOrdersTotal >= 0 ? '+' : '−';
                 const subtotalColor = changeOrdersTotal >= 0 ? '#1e3a8a' : '#b91c1c';
+                const skipNote = _hasSkipDiscount
+                    ? `<tr><td colspan="2" style="padding:6px 10px;font-size:8.5pt;color:#6b7280;font-style:italic;background:#fffbeb;border-top:1px solid #fcd34d;">Items marked “After discount” are added at full value — the proposal discount applies to original scope only.</td></tr>`
+                    : '';
                 changeOrdersSectionHTML = `</div><div style="padding:0 0.3in">${sectionTitle('CHANGE ORDERS')}
                     <table style="width:100%;border-collapse:collapse;margin:8px 0;border:1px solid #d1d5db;">
                         ${rowsHTML}
@@ -11799,16 +11940,26 @@ Generate JSON with these EXACT keys:
                             <td style="padding:8px 10px;font-weight:700;font-size:10pt;">Change Orders Subtotal</td>
                             <td style="padding:8px 10px;text-align:right;font-weight:700;font-size:11pt;color:${subtotalColor};white-space:nowrap;">${subtotalSign}$${Math.abs(changeOrdersTotal).toFixed(2)}</td>
                         </tr>
+                        ${skipNote}
                     </table>
                 </div><div class="page-content">`;
 
-                // Price-summary line so the math reconciles cleanly
-                const summarySign = changeOrdersTotal >= 0 ? '+' : '−';
-                const summaryColor = changeOrdersTotal >= 0 ? '#1e3a8a' : '#e74c3c';
-                changeOrdersPriceRow = priceRow(
-                    'Change Orders',
-                    `<span style="color:${summaryColor};">${summarySign}$${Math.abs(changeOrdersTotal).toFixed(2)}</span>`
-                );
+                // Price-summary lines — split when some COs skip the discount
+                // so the math is transparent: discounted-COs roll into the
+                // discount base, after-discount COs sit on a separate line.
+                const fmt = (n) => `${n >= 0 ? '+' : '−'}$${Math.abs(n).toFixed(2)}`;
+                const colorFor = (n) => n >= 0 ? '#1e3a8a' : '#e74c3c';
+                if (_hasSkipDiscount && _discountedCOTotal !== 0 && _skipDiscountCOTotal !== 0) {
+                    changeOrdersPriceRow =
+                        priceRow('Change Orders (in discount)', `<span style="color:${colorFor(_discountedCOTotal)};">${fmt(_discountedCOTotal)}</span>`) +
+                        priceRow('Change Orders (after discount)', `<span style="color:${colorFor(_skipDiscountCOTotal)};">${fmt(_skipDiscountCOTotal)}</span>`);
+                } else {
+                    const label = _hasSkipDiscount ? 'Change Orders (after discount)' : 'Change Orders';
+                    changeOrdersPriceRow = priceRow(
+                        label,
+                        `<span style="color:${colorFor(changeOrdersTotal)};">${fmt(changeOrdersTotal)}</span>`
+                    );
+                }
             }
 
             // Crew mode: build schedule and pricing
