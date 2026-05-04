@@ -147,7 +147,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v56</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v57</span>
             </div>
 
             <!-- Global Search -->
@@ -885,7 +885,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v56</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v57</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -10665,7 +10665,7 @@ Generate JSON with these EXACT keys:
             return `<textarea data-qe="${name}" rows="${rows || 3}" placeholder="${placeholder || ''}" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;font-size:15px;font-family:inherit;line-height:1.5;resize:vertical;">${v}</textarea>`;
         }
 
-        window.openReportQuickEdit = async function(projectId) {
+        window.openReportQuickEdit = async function(projectId, opts) {
             await _ensurePaintDB();
             // Follow ref if subsidiary
             let project = projects.find(p => p.id === projectId);
@@ -10680,7 +10680,17 @@ Generate JSON with these EXACT keys:
             window._qeProjectId = projectId;
             window._qeOriginalSig = cr.paletteSignature || _paletteSignature(cr.colorPalette || []);
 
-            const palette = cr.colorPalette || [];
+            // Working copy for structural edits (deletes/adds). Field edits
+            // (brand/color/code/finish) are read from the form on Save and
+            // merged onto this working copy. Re-renders (after delete/add)
+            // restart from the working copy, NOT from cr — so unsaved
+            // structural changes survive a re-render.
+            const reuseWorking = opts && opts.preserveWorking && Array.isArray(window._qeWorking?.palette);
+            if (!reuseWorking) {
+                window._qeWorking = { palette: JSON.parse(JSON.stringify(cr.colorPalette || [])) };
+            }
+
+            const palette = window._qeWorking.palette;
             const ai = cr.aiContent || {};
             const P = REPORT_PALETTE;
 
@@ -10728,11 +10738,12 @@ Generate JSON with these EXACT keys:
                 const proTip = ai.proTips?.[area.area] || area.tip || '';
                 html += `
                     <div style="background:#fff;border:1px solid ${P.line};border-radius:10px;padding:16px;margin-bottom:14px;">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-                            <div>
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;">
+                            <div style="flex:1;min-width:0;">
                                 <div style="font-family:Inter;font-size:9pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;">Area ${areaIdx + 1}</div>
                                 <input type="text" data-qe="palette.${areaIdx}.area" value="${(area.area || '').replace(/"/g, '&quot;')}" style="font-family:'Playfair Display',serif;font-size:18pt;color:${P.navy};font-weight:600;border:none;outline:none;width:100%;padding:2px 0;background:transparent;border-bottom:1px dashed ${P.line};">
                             </div>
+                            <button onclick="qeRemoveArea(${areaIdx})" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;" title="Remove this entire area from the report">× Remove area</button>
                         </div>
                         <div style="margin-bottom:10px;">
                             <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151;">Special Technique <span style="color:#9ca3af;font-weight:400;">(blank if none)</span></label>
@@ -10742,13 +10753,15 @@ Generate JSON with these EXACT keys:
                             <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#374151;">Pro Tip in Report</label>
                             ${_qeTextarea(`proTip.${area.area}`, proTip, 'Customer-facing tip for this area', 2)}
                         </div>
-                        ${surfaces.length === 0 ? '<div style="color:#9ca3af;font-style:italic;font-size:13px;">No surfaces captured for this area.</div>' : ''}
+                        ${surfaces.length === 0 ? '<div style="color:#9ca3af;font-style:italic;font-size:13px;padding:6px 0;">No surfaces in this area.</div>' : ''}
                         ${surfaces.map(([surfName, v]) => {
                             const sw = v?.hex || _paintColorLookup(v?.brand, v?.code, v?.color) || _colorHex(v?.color, v?.brand);
+                            const safeSurfId = surfName.replace(/'/g, "&#39;");
                             return `<div style="border-top:1px solid ${P.line};padding-top:10px;margin-top:10px;">
                                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
                                     <div style="width:28px;height:28px;border-radius:6px;background:${sw};border:1px solid #ccc;flex:0 0 auto;"></div>
-                                    <div style="font-family:Inter;font-size:11pt;color:${P.navy};text-transform:capitalize;font-weight:600;">${surfName}</div>
+                                    <div style="font-family:Inter;font-size:11pt;color:${P.navy};text-transform:capitalize;font-weight:600;flex:1;">${surfName}</div>
+                                    <button onclick="qeRemoveSurface(${areaIdx}, '${safeSurfId}')" style="background:#fff;color:#991b1b;border:1px solid #fecaca;border-radius:6px;width:28px;height:28px;font-size:16px;cursor:pointer;line-height:1;flex-shrink:0;" title="Remove this surface (AI may have added one that isn't really there)">×</button>
                                 </div>
                                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
                                     <div><label style="display:block;font-size:11px;color:#6b7280;margin-bottom:2px;">Brand</label>${_qeInput(`palette.${areaIdx}.surfaces.${surfName}.brand`, v?.brand, 'Benjamin Moore')}</div>
@@ -10758,9 +10771,13 @@ Generate JSON with these EXACT keys:
                                 </div>
                             </div>`;
                         }).join('')}
+                        <button onclick="qeAddSurface(${areaIdx})" style="margin-top:12px;background:#ecfdf5;color:#065f46;border:1px dashed #6ee7b7;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:600;cursor:pointer;width:100%;">+ Add surface to this area</button>
                     </div>
                 `;
             });
+
+            // Add an "+ Add new area" button at the bottom of the form
+            html += `<button onclick="qeAddArea()" style="margin-top:4px;background:#eff6ff;color:#1e40af;border:1px dashed #93c5fd;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;width:100%;">+ Add a new area</button>`;
 
             document.getElementById('reportQuickEditContent').innerHTML = html;
             showScreen('reportQuickEditScreen');
@@ -10770,8 +10787,82 @@ Generate JSON with these EXACT keys:
         window.exitReportQuickEdit = function() {
             const projectId = window._qeProjectId;
             window._qeProjectId = null;
+            window._qeWorking = null;
             if (projectId) viewCompletionReport(projectId);
             else showScreen('homeScreen');
+        };
+
+        // ─── Structural edit helpers — mutate the working palette in place,
+        // capture current form-input values into the working copy first so
+        // typed (but unsaved) edits survive the re-render, then re-render. ─
+
+        function _qeCaptureFormInputsToWorking() {
+            if (!window._qeWorking) return;
+            const palette = window._qeWorking.palette;
+            document.querySelectorAll('#reportQuickEditContent [data-qe^="palette."]').forEach(el => {
+                const path = el.dataset.qe;
+                const val = el.value || '';
+                const m = path.match(/^palette\.(\d+)\.(.+)$/);
+                if (!m) return;
+                const idx = parseInt(m[1], 10);
+                const rest = m[2];
+                if (!palette[idx]) return;
+                if (rest === 'area') palette[idx].area = val;
+                else if (rest === 'technique') palette[idx].technique = val;
+                else {
+                    const sm = rest.match(/^surfaces\.(.+?)\.(brand|color|code|finish)$/);
+                    if (sm) {
+                        const [, surfName, field] = sm;
+                        if (!palette[idx].surfaces) palette[idx].surfaces = {};
+                        if (!palette[idx].surfaces[surfName]) palette[idx].surfaces[surfName] = {};
+                        palette[idx].surfaces[surfName][field] = val;
+                    }
+                }
+            });
+        }
+
+        window.qeRemoveSurface = function(areaIdx, surfName) {
+            if (!window._qeWorking) return;
+            const area = window._qeWorking.palette[areaIdx];
+            if (!area || !area.surfaces || !(surfName in area.surfaces)) return;
+            if (!confirm(`Remove "${surfName}" from "${area.area || 'this area'}"?\n\nUse this when the AI listed a surface that wasn't actually painted in this area.`)) return;
+            _qeCaptureFormInputsToWorking();
+            delete area.surfaces[surfName];
+            openReportQuickEdit(window._qeProjectId, { preserveWorking: true });
+        };
+
+        window.qeRemoveArea = function(areaIdx) {
+            if (!window._qeWorking) return;
+            const area = window._qeWorking.palette[areaIdx];
+            if (!area) return;
+            if (!confirm(`Remove the entire area "${area.area || 'this area'}" from the report?\n\nThis deletes the area page and all its surfaces.`)) return;
+            _qeCaptureFormInputsToWorking();
+            window._qeWorking.palette.splice(areaIdx, 1);
+            openReportQuickEdit(window._qeProjectId, { preserveWorking: true });
+        };
+
+        window.qeAddSurface = function(areaIdx) {
+            if (!window._qeWorking) return;
+            const area = window._qeWorking.palette[areaIdx];
+            if (!area) return;
+            const name = prompt('New surface name (e.g., walls, ceiling, trim, doors, bookshelves):', '');
+            if (!name) return;
+            const key = name.trim().toLowerCase();
+            if (!key) return;
+            if (!area.surfaces) area.surfaces = {};
+            if (key in area.surfaces) { alert(`"${key}" already exists in this area.`); return; }
+            _qeCaptureFormInputsToWorking();
+            area.surfaces[key] = { brand: '', color: '', code: '', finish: '', coats: 2, hex: '' };
+            openReportQuickEdit(window._qeProjectId, { preserveWorking: true });
+        };
+
+        window.qeAddArea = function() {
+            if (!window._qeWorking) return;
+            const name = prompt('New area name (e.g., Master Bedroom, Foyer, Exterior — Front):', '');
+            if (!name) return;
+            _qeCaptureFormInputsToWorking();
+            window._qeWorking.palette.push({ area: name.trim(), surfaces: {}, technique: '', tip: '' });
+            openReportQuickEdit(window._qeProjectId, { preserveWorking: true });
         };
 
         window.saveReportQuickEdit = async function() {
@@ -10797,8 +10888,14 @@ Generate JSON with these EXACT keys:
                 cur[parts[parts.length - 1]] = val;
             });
 
-            // Apply to a working copy of completionReport
+            // Apply to a working copy of completionReport. Structural edits
+            // (added/removed surfaces and areas) live on window._qeWorking;
+            // field edits live in the form inputs — merge them in order.
             const newCr = JSON.parse(JSON.stringify(cr));
+            // 1) Replace the palette with the structural working copy first
+            if (window._qeWorking && Array.isArray(window._qeWorking.palette)) {
+                newCr.colorPalette = JSON.parse(JSON.stringify(window._qeWorking.palette));
+            }
             newCr.aiContent = newCr.aiContent || {};
             if (updates.ai) {
                 newCr.aiContent.introduction = updates.ai.introduction ?? newCr.aiContent.introduction;
@@ -10816,6 +10913,8 @@ Generate JSON with these EXACT keys:
                     newCr.aiContent.proTips[area] = tip;
                 });
             }
+            // 2) Apply field-level edits on top of the structural copy. Skip
+            // updates whose area index no longer exists (area was removed).
             if (updates.palette) {
                 Object.entries(updates.palette).forEach(([idx, areaUpdates]) => {
                     const i = parseInt(idx, 10);
@@ -10825,7 +10924,8 @@ Generate JSON with these EXACT keys:
                     if (areaUpdates.technique !== undefined) a.technique = areaUpdates.technique;
                     if (areaUpdates.surfaces) {
                         Object.entries(areaUpdates.surfaces).forEach(([surfName, surfUpdates]) => {
-                            if (!a.surfaces[surfName]) a.surfaces[surfName] = {};
+                            // Skip if the surface was removed from the working copy
+                            if (!a.surfaces || !(surfName in a.surfaces)) return;
                             const s = a.surfaces[surfName];
                             if (surfUpdates.brand !== undefined) s.brand = surfUpdates.brand;
                             if (surfUpdates.color !== undefined) s.color = surfUpdates.color;
@@ -10853,6 +10953,7 @@ Generate JSON with these EXACT keys:
             try {
                 await updateDoc(doc(db, 'projects', projectId), { completionReport: newCr });
                 project.completionReport = newCr;
+                window._qeWorking = null; // commit done — discard the working copy
                 alert(paletteChanged
                     ? 'Saved. Colors changed — open & re-finish to refresh AI prose, or keep this version.'
                     : 'Saved. No color changes — narrative kept as-is.');
