@@ -147,7 +147,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v54</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v55</span>
             </div>
 
             <!-- Global Search -->
@@ -885,7 +885,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v54</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v55</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -10171,49 +10171,50 @@ Generate JSON with these EXACT keys:
             return `
             <style>
                 /* ── Print contract ─────────────────────────────────────────
-                   Fixed @page margins → predictable usable area: 7.5 × 10 in
-                   = 720 × 960 px at 96 dpi. Strategy: only the things that
-                   MUST stay whole (.report-keep, e.g. cover, swatch grids,
-                   certificate frame, stat tiles) are unbreakable; text-heavy
-                   sections flow freely so they don't leave dead space at the
-                   bottom of pages.
+                   @page margin: 0 — kills the browser-injected URL / page
+                   title / date / page-number that otherwise prints in the
+                   page margins. Visual breathing room comes from the
+                   section padding inside each page instead.
                    ───────────────────────────────────────────────────────── */
-                @page { size: letter; margin: 0.5in; }
+                @page { size: letter; margin: 0; }
                 .report-doc, .report-doc * { box-sizing: border-box; }
                 .report-doc { font-family: 'Inter', -apple-system, sans-serif; color: ${P.text}; line-height: 1.5; }
                 .report-doc h1, .report-doc h2, .report-doc h3 { margin: 0; }
                 .report-doc img { max-width: 100%; }
                 .report-doc .report-keep { page-break-inside: avoid; break-inside: avoid; }
                 @media print {
+                    @page { size: letter; margin: 0; }
                     .report-doc .report-keep { page-break-inside: avoid; break-inside: avoid; }
                 }
             </style>
             <div class="report-doc">
 
                 <!-- ─── COVER ─── -->
-                <!-- 700px = 7.29in — fits with 2.7in of headroom on Letter @ 0.5in
-                     margins and even tighter print setups. Single in-flow content
-                     wrapper (no flex / transform / absolute-positioned text) so
-                     print engines can't pull blocks onto another page. -->
-                <section class="report-keep" style="page-break-after:always;break-after:page;height:700px;position:relative;overflow:hidden;background-color:${P.navyDeep};-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#fff;">
+                <!-- Full-bleed cover. With @page margin: 0, Letter is 1056px
+                     tall at 96dpi; 1040px gets us right to the edge while
+                     leaving a hair of safety so a tight printer doesn't
+                     push the next page before the break fires. -->
+                <section class="report-keep" style="page-break-after:always;break-after:page;height:1040px;position:relative;overflow:hidden;background-color:${P.navyDeep};-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#fff;">
                     ${heroPhotoUrl ? `<img src="${heroPhotoUrl}" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;display:block;z-index:0;">` : ''}
                     <div style="position:absolute;top:0;left:0;right:0;bottom:0;background-color:rgba(15,27,51,0.6);-webkit-print-color-adjust:exact;print-color-adjust:exact;z-index:1;"></div>
                     <div style="position:absolute;top:0;left:0;right:0;height:240px;background-color:rgba(15,27,51,0.25);-webkit-print-color-adjust:exact;print-color-adjust:exact;z-index:1;"></div>
                     <div style="position:absolute;bottom:0;left:0;right:0;height:280px;background-color:rgba(15,27,51,0.45);-webkit-print-color-adjust:exact;print-color-adjust:exact;z-index:1;"></div>
-                    <!-- Content wrapper. Spacer divs (no flex) keep the print engine happy. -->
-                    <div style="position:relative;z-index:2;width:100%;height:100%;padding:40px 52px;text-align:center;">
+                    <!-- Content wrapper. Spacer divs (no flex) keep the print engine happy.
+                         Spacers sized for the full-page cover (1040px) so the
+                         customer name lands roughly at optical center. -->
+                    <div style="position:relative;z-index:2;width:100%;height:100%;padding:60px 52px;text-align:center;">
                         <!-- Top brand tagline -->
                         <div style="font-family:'Inter',sans-serif;font-size:11pt;color:${P.gold};letter-spacing:5px;text-transform:uppercase;font-weight:600;">Northern Star Painters</div>
                         <div style="width:80px;height:1.5px;background:${P.gold};margin:12px auto 0;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
-                        <!-- Spacer (tightened from 140 → 110) -->
-                        <div style="height:110px;"></div>
+                        <!-- Top spacer — pushes customer name toward optical center -->
+                        <div style="height:280px;"></div>
                         <!-- Customer name block -->
-                        <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.gold};letter-spacing:4px;text-transform:uppercase;font-weight:500;margin-bottom:14px;">A Project Completion Report for</div>
-                        <h1 style="font-family:'Playfair Display',serif;font-size:52pt;color:#fff;font-weight:600;margin:0;letter-spacing:-1px;line-height:1;">${customerName}</h1>
-                        ${customerAddress ? `<div style="font-family:'Playfair Display',serif;font-size:13pt;color:#fff;font-style:italic;margin-top:12px;font-weight:300;opacity:0.9;">${customerAddress}</div>` : ''}
-                        <div style="font-family:'Inter',sans-serif;font-size:11pt;color:${P.gold};margin-top:24px;letter-spacing:2px;text-transform:uppercase;font-weight:500;">${completedAtStr}</div>
-                        <!-- Spacer (tightened from 120 → 90) -->
-                        <div style="height:90px;"></div>
+                        <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.gold};letter-spacing:4px;text-transform:uppercase;font-weight:500;margin-bottom:16px;">A Project Completion Report for</div>
+                        <h1 style="font-family:'Playfair Display',serif;font-size:60pt;color:#fff;font-weight:600;margin:0;letter-spacing:-1px;line-height:1;">${customerName}</h1>
+                        ${customerAddress ? `<div style="font-family:'Playfair Display',serif;font-size:14pt;color:#fff;font-style:italic;margin-top:14px;font-weight:300;opacity:0.9;">${customerAddress}</div>` : ''}
+                        <div style="font-family:'Inter',sans-serif;font-size:11pt;color:${P.gold};margin-top:28px;letter-spacing:2px;text-transform:uppercase;font-weight:500;">${completedAtStr}</div>
+                        <!-- Bottom spacer -->
+                        <div style="height:240px;"></div>
                         <!-- Brand close -->
                         <div style="font-family:'Playfair Display',serif;font-style:italic;font-size:13pt;color:${P.gold};">"Excellence in Color"</div>
                         <div style="font-family:'Inter',sans-serif;font-size:9pt;color:rgba(255,255,255,0.6);margin-top:12px;letter-spacing:1px;">Report ${reportNum}${projectNum ? ' · Project ' + projectNum : ''}</div>
