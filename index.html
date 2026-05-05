@@ -147,7 +147,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v59</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v60</span>
             </div>
 
             <!-- Global Search -->
@@ -885,7 +885,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v59</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v60</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -10135,8 +10135,10 @@ Generate JSON with these EXACT keys:
                 // still forces a fresh page is the combined-scope chapter
                 // divider ("Part One / Part Two") above.
                 return `${dividerSection}<section style="padding:24px 48px 24px;background:${P.cream};color:${P.text};">
-                    ${sectionHead('Area ' + (idx + 1) + ' of ' + palette.length, area.area)}
-                    ${photosBlock}
+                    <div class="report-keep">
+                        ${sectionHead('Area ' + (idx + 1) + ' of ' + palette.length, area.area)}
+                        ${photosBlock}
+                    </div>
                     <div class="report-keep" style="background:#fff;border:1px solid ${P.line};border-radius:8px;padding:14px 20px;margin-bottom:12px;">
                         <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};text-transform:uppercase;letter-spacing:1.5px;font-weight:600;margin-bottom:6px;">Colors Used</div>
                         ${surfaceList || `<div style=\"color:${P.muted};font-style:italic;\">No surface colors recorded.</div>`}
@@ -10198,11 +10200,12 @@ Generate JSON with these EXACT keys:
             <div class="report-doc">
 
                 <!-- ─── COVER ─── -->
-                <!-- Full-bleed cover. With @page margin: 0, Letter is 1056px
-                     tall at 96dpi; 1040px gets us right to the edge while
-                     leaving a hair of safety so a tight printer doesn't
-                     push the next page before the break fires. -->
-                <section class="report-keep" style="page-break-after:always;break-after:page;height:1040px;position:relative;overflow:hidden;background-color:${P.navyDeep};-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#fff;">
+                <!-- height:100vh = exactly one printable page in the print
+                     box (browser-enforced print margins are already excluded
+                     from vh). No page-break-after — the next section uses
+                     page-break-before instead, which avoids the
+                     "page-break-after on a full page = blank page" bug. -->
+                <section class="report-keep" style="height:100vh;position:relative;overflow:hidden;background-color:${P.navyDeep};-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#fff;">
                     ${heroPhotoUrl ? `<img src="${heroPhotoUrl}" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;display:block;z-index:0;">` : ''}
                     <div style="position:absolute;top:0;left:0;right:0;bottom:0;background-color:rgba(15,27,51,0.6);-webkit-print-color-adjust:exact;print-color-adjust:exact;z-index:1;"></div>
                     <div style="position:absolute;top:0;left:0;right:0;height:240px;background-color:rgba(15,27,51,0.25);-webkit-print-color-adjust:exact;print-color-adjust:exact;z-index:1;"></div>
@@ -10230,7 +10233,9 @@ Generate JSON with these EXACT keys:
                 </section>
 
                 <!-- ─── INTRODUCTION ─── -->
-                <section style="padding:40px 56px 28px;background:${P.cream};">
+                <!-- page-break-before guarantees this lands on page 2 even
+                     if the cover renders shorter than 100vh (defensive). -->
+                <section style="page-break-before:always;break-before:page;padding:40px 56px 28px;background:${P.cream};">
                     ${sectionHead('A Note From Us', 'Welcome Home')}
                     <div style="max-width:560px;margin:0 auto;font-family:'Playfair Display',serif;font-size:13pt;color:${P.charcoal};line-height:1.65;font-weight:400;">
                         ${ai.introduction || `Dear ${customerName}, thank you for trusting Northern Star Painters with your home. We've documented every color and detail of your project — yours to keep, share, and reference for years to come.`}
@@ -10379,11 +10384,11 @@ Generate JSON with these EXACT keys:
                 </section>
 
                 <!-- ─── BY THE NUMBERS ─── -->
-                <!-- Smart stat filter: only show stats that actually exist in
-                     the data. "Areas transformed: 1" is dropped (tautological
-                     for single-area jobs). The hard-coded "1 Beautiful home"
-                     stat is gone — it carried no information. -->
-                <section style="padding:36px 56px;background:${P.navy};-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#fff;">
+                <!-- Full-page navy stat showcase. min-height:100vh + flex
+                     center makes the navy bg fill the page intentionally
+                     instead of leaving a void below the stats when the
+                     next section can't fit on the same page. -->
+                <section style="page-break-before:always;break-before:page;min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:36px 56px;background:${P.navy};-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#fff;">
                     ${sectionHead('By the Numbers', 'A Project in Detail').replace(P.navy, '#fff').replace(P.gold, P.gold)}
                     <div style="max-width:720px;margin:0 auto;display:grid;grid-template-columns:repeat(${(() => {
                         const numStats = [stats.totalHours, stats.gallonsUsed, stats.totalSqft, totalCoats, ((stats.areaCount || palette.length) > 1 ? (stats.areaCount || palette.length) : null)].filter(v => v).length;
@@ -10403,10 +10408,10 @@ Generate JSON with these EXACT keys:
                 </section>
 
                 <!-- ─── CERTIFICATE OF PROVENANCE ───
-                     Museum-certificate styled keepsake. Elevates the report
-                     from "doc" to "artifact." Decorative gold border, sealed
-                     stamp, hand-signed feel. -->
-                <section style="padding:24px 36px;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                     Museum-certificate keepsake. page-break-before forces a
+                     fresh page so the cert is never split or pushed by
+                     residual space from the previous section. -->
+                <section style="page-break-before:always;break-before:page;padding:24px 36px;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
                     <div class="report-keep" style="position:relative;border:2px solid ${P.navy};padding:30px 28px 28px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
                         <!-- Decorative inner gold rule -->
                         <div style="position:absolute;top:6px;left:6px;right:6px;bottom:6px;border:1px solid ${P.gold};pointer-events:none;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
@@ -10478,9 +10483,10 @@ Generate JSON with these EXACT keys:
                     const reviewUrl = configured || fallback;
                     const qr = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&color=1A2B4A&bgcolor=FAF7F2&data=${encodeURIComponent(reviewUrl)}`;
                     return `<section style="padding:32px 56px 24px;background:#fff;text-align:center;">
+                        <div class="report-keep">
                         ${sectionHead('Share the Love', `We'd Love Your Google Review`)}
                         <div style="max-width:520px;margin:0 auto;font-family:'Playfair Display',serif;font-size:13pt;color:${P.charcoal};line-height:1.55;font-style:italic;">Loved your experience with us? A few sentences on Google means the world — and helps another homeowner find their painter.</div>
-                        <div class="report-keep" style="margin:22px auto 16px;max-width:560px;background:${P.cream};border:1px solid ${P.line};border-radius:12px;padding:22px 24px;display:grid;grid-template-columns:160px 1fr;gap:22px;align-items:center;text-align:left;">
+                        <div style="margin:22px auto 16px;max-width:560px;background:${P.cream};border:1px solid ${P.line};border-radius:12px;padding:22px 24px;display:grid;grid-template-columns:160px 1fr;gap:22px;align-items:center;text-align:left;">
                             <img src="${qr}" alt="Scan to leave a Google review" style="display:block;width:160px;height:160px;border-radius:8px;background:#fff;padding:6px;border:1px solid ${P.line};">
                             <div>
                                 <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:6px;">Scan with your phone</div>
@@ -10488,6 +10494,7 @@ Generate JSON with these EXACT keys:
                                 <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.text};line-height:1.5;margin-bottom:10px;">Open your camera, point at the code — two minutes is all it takes.</div>
                                 <a href="${reviewUrl}" target="_blank" rel="noopener" style="display:inline-block;font-family:'Inter',sans-serif;font-size:10pt;color:#fff;background:${P.navy};-webkit-print-color-adjust:exact;print-color-adjust:exact;text-decoration:none;font-weight:600;padding:8px 14px;border-radius:6px;letter-spacing:0.5px;">⭐ Leave a review →</a>
                             </div>
+                        </div>
                         </div>
                         <div class="report-keep" style="background:${P.cream};border-radius:8px;padding:14px 20px;max-width:480px;margin:14px auto 0;">
                             <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:4px;">Refer a Friend</div>
