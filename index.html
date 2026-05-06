@@ -147,7 +147,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v60</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v61</span>
             </div>
 
             <!-- Global Search -->
@@ -885,7 +885,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v60</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v61</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -8778,7 +8778,7 @@ Only return JSON, no other text.`;
             muted: '#9ca3af',
             line: '#E5E7EB',
         };
-        const REPORT_FONTS_LINK = 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700;800&family=Bebas+Neue&display=swap';
+        const REPORT_FONTS_LINK = 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,700&family=Bebas+Neue&family=Allura&display=swap';
         // Inject the font link once per session
         function _ensureReportFonts() {
             if (document.getElementById('reportFontsLink')) return;
@@ -10069,454 +10069,568 @@ Generate JSON with these EXACT keys:
                 || (Object.values(photos.rooms || {}).map(r => r.after?.url).filter(Boolean)[0])
                 || '';
 
-            // Common heading style helper.
-            // page-break-after:avoid keeps the heading glued to whatever
-            // content follows — prevents the "title alone at the bottom of
-            // a page, content on the next page" orphan bug.
-            const sectionHead = (kicker, title) => `
-                <div style="text-align:center;margin-bottom:18px;page-break-after:avoid;break-after:avoid;">
-                    <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.gold};letter-spacing:3px;text-transform:uppercase;font-weight:500;margin-bottom:4px;">${kicker}</div>
-                    <h2 style="font-family:'Playfair Display',serif;font-size:24pt;color:${P.navy};margin:0;font-weight:600;letter-spacing:-0.5px;line-height:1.1;page-break-after:avoid;break-after:avoid;">${title}</h2>
-                    <div style="width:50px;height:2px;background:${P.gold};margin:10px auto 0;page-break-after:avoid;break-after:avoid;"></div>
-                </div>`;
+            // ── Design tokens & page architecture (full-bleed magazine) ──
+            // CSS lives inline in the report HTML so the print pipeline (which
+            // renders the screen DOM, not a separate document) sees its own
+            // scoped variables and rules. Classes here are limited to page
+            // skeleton — every visual treatment is still inline so a stray
+            // app-level rule can't reach in and override anything.
+            const styleBlock = `<style>
+                @page { size: letter; margin: 0; }
+                @media print {
+                    body { margin: 0; }
+                    .no-print { display: none !important; }
+                }
+                .report-doc {
+                    --navy: #1A2B4A;
+                    --navy-deep: #14223A;
+                    --gold: #C9A961;
+                    --gold-soft: #D9BE7E;
+                    --cream: #F5EFE3;
+                    --cream-deep: #EDE5D3;
+                    --ink: #1F2937;
+                    --ink-soft: #4B5563;
+                    --paper: #FFFEF9;
+                    --paper-soft: rgba(255, 254, 249, 0.78);
+                    font-family: 'Inter', -apple-system, sans-serif;
+                    color: var(--ink);
+                    line-height: 1.5;
+                }
+                .report-doc, .report-doc * { box-sizing: border-box; }
+                .report-doc h1, .report-doc h2, .report-doc h3, .report-doc h4 { margin: 0; }
+                .report-doc img { display: block; max-width: 100%; }
+                .report-doc .page {
+                    width: 8.5in;
+                    height: 11in;
+                    page-break-after: always;
+                    break-after: page;
+                    position: relative;
+                    overflow: hidden;
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                    -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
+                }
+                .report-doc .page:last-child { page-break-after: auto; break-after: auto; }
+                .report-doc .page-cream { background: var(--cream); color: var(--ink); }
+                .report-doc .page-navy  { background: var(--navy);  color: var(--paper); }
+                .report-doc .page-cover { background: var(--navy-deep); color: var(--paper); }
+                .report-doc .page-inner {
+                    position: relative;
+                    z-index: 2;
+                    padding: 0.85in;
+                    height: 100%;
+                    display: flex;
+                    flex-direction: column;
+                }
+                .report-doc .smallcaps {
+                    font-family: 'Inter', sans-serif;
+                    font-weight: 600;
+                    font-size: 11px;
+                    letter-spacing: 0.18em;
+                    text-transform: uppercase;
+                    color: var(--gold);
+                }
+                .report-doc .gold-rule {
+                    height: 1px;
+                    background: var(--gold);
+                    -webkit-print-color-adjust: exact;
+                    print-color-adjust: exact;
+                }
+                .report-doc .signature-script {
+                    font-family: 'Allura', cursive;
+                    font-weight: 400;
+                }
+                @media screen {
+                    #reportContent .report-doc .page {
+                        margin: 18px auto;
+                        box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+                    }
+                }
+            </style>`;
 
-            // Per-area renderer (one printable page each)
-            const areaPages = palette.map((area, idx) => {
-                const surfaces = area.surfaces || {};
-                const surfaceList = Object.entries(surfaces)
-                    .filter(([, v]) => v && v.color)
-                    .map(([surfName, v]) => {
-                        const swatch = (v.hex || _paintColorLookup(v.brand, v.code, v.color) || _colorHex(v.color, v.brand));
-                        return `<div style="display:grid;grid-template-columns:24px 1fr;gap:12px;padding:10px 0;border-bottom:1px solid ${P.line};align-items:flex-start;">
-                            <div style="width:20px;height:20px;border-radius:50%;background:${swatch};border:1px solid #ccc;margin-top:2px;"></div>
-                            <div>
-                                <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.muted};text-transform:uppercase;letter-spacing:1px;font-weight:500;">${_titleCase(surfName)}</div>
-                                <div style="font-family:'Playfair Display',serif;font-size:14pt;color:${P.navy};font-weight:500;margin-top:2px;">${v.color}${v.code ? ' <span style=\"font-family:Inter;font-size:10pt;color:'+P.muted+';font-weight:400;\">('+v.code+')</span>' : ''}</div>
-                                <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.text};margin-top:2px;">${[v.brand, v.finish, v.coats ? v.coats + ' coats' : ''].filter(Boolean).join(' · ')}</div>
-                            </div>
-                        </div>`;
-                    }).join('');
+            // Photo selection — hero is the explicit cover (or first after).
+            // Detail strip on Note page picks a *different* after photo when
+            // possible so the same shot doesn't appear twice in a row.
+            const allAfters = palette
+                .map(a => photos.rooms?.[a.area]?.after?.url)
+                .filter(Boolean);
+            const detailPhotoUrl = (allAfters.find(u => u !== heroPhotoUrl)) || heroPhotoUrl || '';
 
-                const before = photos.rooms?.[area.area]?.before?.url || '';
-                const after = photos.rooms?.[area.area]?.after?.url || '';
-                const tip = ai.proTips?.[area.area] || area.tip || '';
+            // Stat formatting — show "—" for missing values rather than skip
+            // cells, so the 3×3 At-a-Glance grid never collapses.
+            const fmtNum = n => (n || n === 0) ? Math.round(n).toLocaleString() : '—';
+            const orDash = v => (v || v === 0) ? v : '—';
 
-                const photosBlock = (before || after) ? `
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px;">
-                        <div>
-                            <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.muted};text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;font-weight:600;">Before</div>
-                            ${before ? `<img src="${before}" style="width:100%;height:220px;object-fit:cover;border-radius:6px;display:block;">`
-                                     : `<div style="width:100%;height:220px;background:#F3F4F6;border-radius:6px;display:flex;align-items:center;justify-content:center;color:${P.muted};font-size:10pt;">no photo</div>`}
-                        </div>
-                        <div>
-                            <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;font-weight:600;">After</div>
-                            ${after ? `<img src="${after}" style="width:100%;height:220px;object-fit:cover;border-radius:6px;display:block;">`
-                                    : `<div style="width:100%;height:220px;background:#F3F4F6;border-radius:6px;display:flex;align-items:center;justify-content:center;color:${P.muted};font-size:10pt;">no photo</div>`}
-                        </div>
-                    </div>` : '';
-
-                // Combined-scope jobType divider — emit before the first area
-                // of each new jobType when scope spans more than one type.
-                const distinctTypes = Array.from(new Set(palette.map(p => p._jobType).filter(Boolean)));
-                const isCombined = (report.scope === 'combined') && distinctTypes.length > 1;
-                const prevType = idx > 0 ? palette[idx - 1]._jobType : null;
-                const showDivider = isCombined && area._jobType && area._jobType !== prevType;
-                const dividerSection = showDivider ? `
-                    <section class="report-keep" style="page-break-before:always;break-before:page;padding:80px 56px;background:${P.navyDeep};-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#fff;text-align:center;min-height:360px;display:flex;flex-direction:column;justify-content:center;">
-                        <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.gold};letter-spacing:5px;text-transform:uppercase;font-weight:600;margin-bottom:18px;">${area._jobType === 'Exterior' ? 'Part Two' : 'Part One'}</div>
-                        <h2 style="font-family:'Playfair Display',serif;font-size:48pt;color:#fff;font-weight:600;margin:0;letter-spacing:-1px;line-height:1;">${area._jobType}</h2>
-                        <div style="width:60px;height:2px;background:${P.gold};margin:18px auto 0;"></div>
-                        <div style="font-family:'Playfair Display',serif;font-style:italic;font-size:14pt;color:${P.gold};margin-top:18px;font-weight:300;">${area._jobType === 'Exterior' ? '— The Outside —' : '— The Inside —'}</div>
-                    </section>` : '';
-
-                // No forced page breaks on areas anymore — the user's #1
-                // complaint was empty pages, and forced breaks are how those
-                // get created. Areas flow naturally; the only thing that
-                // still forces a fresh page is the combined-scope chapter
-                // divider ("Part One / Part Two") above.
-                return `${dividerSection}<section style="padding:24px 48px 24px;background:${P.cream};color:${P.text};">
-                    <div class="report-keep">
-                        ${sectionHead('Area ' + (idx + 1) + ' of ' + palette.length, area.area)}
-                        ${photosBlock}
-                    </div>
-                    <div class="report-keep" style="background:#fff;border:1px solid ${P.line};border-radius:8px;padding:14px 20px;margin-bottom:12px;">
-                        <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};text-transform:uppercase;letter-spacing:1.5px;font-weight:600;margin-bottom:6px;">Colors Used</div>
-                        ${surfaceList || `<div style=\"color:${P.muted};font-style:italic;\">No surface colors recorded.</div>`}
-                        ${area.technique ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid ${P.line};"><span style="font-family:Inter;font-size:9pt;color:${P.muted};text-transform:uppercase;letter-spacing:1.2px;font-weight:600;">Technique:</span> <span style="font-family:Inter;font-size:11pt;color:${P.navy};">${area.technique}</span></div>` : ''}
-                    </div>
-                    ${tip ? `<div class="report-keep" style="background:${P.navy};-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#fff;padding:14px 20px;border-radius:8px;font-family:'Playfair Display',serif;font-size:12pt;font-style:italic;line-height:1.5;text-align:center;">
-                        <span style="color:${P.gold};font-style:normal;font-size:9pt;letter-spacing:2px;text-transform:uppercase;font-family:Inter;font-weight:600;display:block;margin-bottom:4px;">Pro Tip</span>
-                        "${tip}"
-                    </div>` : ''}
-                </section>`;
-            }).join('');
-
-            // Color palette overview page (visual grid)
-            const allSwatches = palette.flatMap(a =>
-                Object.entries(a.surfaces || {})
-                    .filter(([, v]) => v?.color)
-                    .map(([surf, v]) => ({ ...v, surf, area: a.area, hex: (v.hex || _paintColorLookup(v.brand, v.code, v.color) || _colorHex(v.color, v.brand)) }))
-            );
-            const uniqueSwatches = [];
-            const seen = new Set();
-            allSwatches.forEach(s => {
-                const key = (s.color || '').toLowerCase() + '|' + (s.code || '');
-                if (!seen.has(key)) { seen.add(key); uniqueSwatches.push(s); }
-            });
-
-            // Stats helpers
-            const fmtNum = n => Math.round(n).toLocaleString();
-            const statBox = (value, label, sub) => `<div style="text-align:center;padding:24px 16px;">
-                <div style="font-family:'Bebas Neue',sans-serif;font-size:48pt;color:${P.navy};letter-spacing:1px;line-height:1;">${value}</div>
-                <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.gold};text-transform:uppercase;letter-spacing:2px;font-weight:600;margin-top:6px;">${label}</div>
-                ${sub ? `<div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.muted};margin-top:4px;">${sub}</div>` : ''}
-            </div>`;
+            const statValues = {
+                projectNum: project.jobNumber || '—',
+                completedDate: completedAtStr || '—',
+                type: jobTypeStr || '—',
+                areas: orDash(stats.areaCount || palette.length || 0),
+                sqft: stats.totalSqft ? fmtNum(stats.totalSqft) : '—',
+                hours: stats.totalHours ? fmtNum(stats.totalHours) : '—',
+                days: orDash(stats.daysToComplete),
+                crew: orDash(stats.crewSize),
+                gallons: orDash(stats.gallonsUsed),
+            };
 
             const reportNum = report.reportId || ('RPT-' + (project.jobNumber || ''));
             const projectNum = project.jobNumber || '';
+            const consultantName = cs.consultantName || 'Amir Zreik';
+            const consultantTitle = cs.consultantTitle || 'Project Construction Specialist';
+            const companyName = cs.companyName || 'Northern Star Painters';
+            const crewLeader = project.assignedCrewLeader || project.actuals?.crewLeader || 'Emilio';
+            const phone = cs.companyPhone || cs.phone || cs.consultantPhone || '';
+            const email = cs.companyEmail || cs.email || cs.consultantEmail || 'info@northernstarpainters.com';
 
-            // Konami easter egg trigger lives on the cover
-            const easterEgg = `<script>(function(){const seq=['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','b','a'];let i=0;const onKey=(e)=>{const k=e.key;if(k&&k.toLowerCase()===seq[i].toLowerCase()){i++;if(i===seq.length){const m=document.createElement('div');m.style.cssText='position:fixed;inset:0;background:rgba(26,43,74,0.95);color:#D4AF37;display:flex;align-items:center;justify-content:center;font-family:\\'Playfair Display\\',serif;font-size:32px;text-align:center;padding:40px;z-index:99999;';m.innerHTML='<div>You found the easter egg ✨<br><span style=\\'font-size:18px;color:#fff;font-style:italic;\\'>Thank you for trusting us with your home.</span><br><br><button onclick=\\'this.parentElement.parentElement.remove()\\' style=\\'background:#D4AF37;color:#1A2B4A;border:none;padding:10px 24px;border-radius:6px;font-family:Inter;font-size:14px;cursor:pointer;\\'>Close</button></div>';document.body.appendChild(m);i=0;}}else{i=0;}};document.addEventListener('keydown',onKey);})();<\/script>`;
+            // Unique swatches across the whole palette (palette page + ref card)
+            const allSwatches = palette.flatMap(a =>
+                Object.entries(a.surfaces || {})
+                    .filter(([, v]) => v?.color)
+                    .map(([surf, v]) => ({
+                        ...v,
+                        surf,
+                        area: a.area,
+                        hex: (v.hex || _paintColorLookup(v.brand, v.code, v.color) || _colorHex(v.color, v.brand)),
+                    }))
+            );
+            const uniqueSwatches = [];
+            const swatchSeen = new Set();
+            allSwatches.forEach(s => {
+                const key = (s.color || '').toLowerCase() + '|' + (s.code || '');
+                if (!swatchSeen.has(key)) { swatchSeen.add(key); uniqueSwatches.push(s); }
+            });
 
-            return `
-            <style>
-                /* ── Print contract ─────────────────────────────────────────
-                   @page margin: 0 — kills the browser-injected URL / page
-                   title / date / page-number that otherwise prints in the
-                   page margins. Visual breathing room comes from the
-                   section padding inside each page instead.
-                   ───────────────────────────────────────────────────────── */
-                @page { size: letter; margin: 0; }
-                .report-doc, .report-doc * { box-sizing: border-box; }
-                .report-doc { font-family: 'Inter', -apple-system, sans-serif; color: ${P.text}; line-height: 1.5; }
-                .report-doc h1, .report-doc h2, .report-doc h3 { margin: 0; }
-                .report-doc img { max-width: 100%; }
-                .report-doc .report-keep { page-break-inside: avoid; break-inside: avoid; }
-                @media print {
-                    @page { size: letter; margin: 0; }
-                    .report-doc .report-keep { page-break-inside: avoid; break-inside: avoid; }
-                }
-            </style>
-            <div class="report-doc">
+            // Group swatches by color (which surfaces in which areas use it) for the reference card
+            const colorGroups = uniqueSwatches.map(sw => {
+                const usedOn = [];
+                palette.forEach(a => {
+                    Object.entries(a.surfaces || {}).forEach(([surfName, v]) => {
+                        if (v && (v.color || '').toLowerCase() === (sw.color || '').toLowerCase()
+                            && (v.code || '') === (sw.code || '')) {
+                            usedOn.push(`${a.area} ${_titleCase(surfName)}`);
+                        }
+                    });
+                });
+                return { ...sw, usedOn };
+            });
 
-                <!-- ─── COVER ─── -->
-                <!-- height:100vh = exactly one printable page in the print
-                     box (browser-enforced print margins are already excluded
-                     from vh). No page-break-after — the next section uses
-                     page-break-before instead, which avoids the
-                     "page-break-after on a full page = blank page" bug. -->
-                <section class="report-keep" style="height:100vh;position:relative;overflow:hidden;background-color:${P.navyDeep};-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#fff;">
-                    ${heroPhotoUrl ? `<img src="${heroPhotoUrl}" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;display:block;z-index:0;">` : ''}
-                    <div style="position:absolute;top:0;left:0;right:0;bottom:0;background-color:rgba(15,27,51,0.6);-webkit-print-color-adjust:exact;print-color-adjust:exact;z-index:1;"></div>
-                    <div style="position:absolute;top:0;left:0;right:0;height:240px;background-color:rgba(15,27,51,0.25);-webkit-print-color-adjust:exact;print-color-adjust:exact;z-index:1;"></div>
-                    <div style="position:absolute;bottom:0;left:0;right:0;height:280px;background-color:rgba(15,27,51,0.45);-webkit-print-color-adjust:exact;print-color-adjust:exact;z-index:1;"></div>
-                    <!-- Content wrapper. Spacer divs (no flex) keep the print engine happy.
-                         Spacers sized for the full-page cover (1040px) so the
-                         customer name lands roughly at optical center. -->
-                    <div style="position:relative;z-index:2;width:100%;height:100%;padding:60px 52px;text-align:center;">
-                        <!-- Top brand tagline -->
-                        <div style="font-family:'Inter',sans-serif;font-size:11pt;color:${P.gold};letter-spacing:5px;text-transform:uppercase;font-weight:600;">Northern Star Painters</div>
-                        <div style="width:80px;height:1.5px;background:${P.gold};margin:12px auto 0;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
-                        <!-- Top spacer — pushes customer name toward optical center -->
-                        <div style="height:280px;"></div>
-                        <!-- Customer name block -->
-                        <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.gold};letter-spacing:4px;text-transform:uppercase;font-weight:500;margin-bottom:16px;">A Project Completion Report for</div>
-                        <h1 style="font-family:'Playfair Display',serif;font-size:60pt;color:#fff;font-weight:600;margin:0;letter-spacing:-1px;line-height:1;">${customerName}</h1>
-                        ${customerAddress ? `<div style="font-family:'Playfair Display',serif;font-size:14pt;color:#fff;font-style:italic;margin-top:14px;font-weight:300;opacity:0.9;">${customerAddress}</div>` : ''}
-                        <div style="font-family:'Inter',sans-serif;font-size:11pt;color:${P.gold};margin-top:28px;letter-spacing:2px;text-transform:uppercase;font-weight:500;">${completedAtStr}</div>
-                        <!-- Bottom spacer -->
-                        <div style="height:240px;"></div>
-                        <!-- Brand close -->
-                        <div style="font-family:'Playfair Display',serif;font-style:italic;font-size:13pt;color:${P.gold};">"Excellence in Color"</div>
-                        <div style="font-family:'Inter',sans-serif;font-size:9pt;color:rgba(255,255,255,0.6);margin-top:12px;letter-spacing:1px;">Report ${reportNum}${projectNum ? ' · Project ' + projectNum : ''}</div>
+            // ─── Helpers ────────────────────────────────────────────────────
+            const sc = (text) => `<div class="smallcaps">${text}</div>`;
+
+            // ─── PAGE 1 — COVER ─────────────────────────────────────────────
+            const coverPage = `
+            <div class="page page-cover">
+                ${heroPhotoUrl ? `<img src="${heroPhotoUrl}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;">` : ''}
+                <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(20,34,58,0.35) 0%,rgba(20,34,58,0.78) 100%);z-index:1;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+                <div class="page-inner" style="text-align:center;">
+                    <div>
+                        <div style="width:60px;height:2px;background:var(--gold);margin:0 auto 14px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+                        <div style="font-family:'Inter',sans-serif;font-weight:600;font-size:12px;letter-spacing:0.32em;text-transform:uppercase;color:var(--gold);">${companyName}</div>
                     </div>
-                </section>
-
-                <!-- ─── INTRODUCTION ─── -->
-                <!-- page-break-before guarantees this lands on page 2 even
-                     if the cover renders shorter than 100vh (defensive). -->
-                <section style="page-break-before:always;break-before:page;padding:40px 56px 28px;background:${P.cream};">
-                    ${sectionHead('A Note From Us', 'Welcome Home')}
-                    <div style="max-width:560px;margin:0 auto;font-family:'Playfair Display',serif;font-size:13pt;color:${P.charcoal};line-height:1.65;font-weight:400;">
-                        ${ai.introduction || `Dear ${customerName}, thank you for trusting Northern Star Painters with your home. We've documented every color and detail of your project — yours to keep, share, and reference for years to come.`}
+                    <div style="flex:1;"></div>
+                    <div>
+                        <div style="font-family:'Inter',sans-serif;font-weight:500;font-size:11px;letter-spacing:0.32em;text-transform:uppercase;color:var(--paper);">A Project Completion Report for</div>
+                        <h1 style="font-family:'Playfair Display',serif;font-weight:700;font-size:84pt;line-height:0.95;letter-spacing:-0.02em;margin:24px 0 0;color:var(--paper);">${customerName}</h1>
+                        ${customerAddress ? `<div style="font-family:'Playfair Display',serif;font-style:italic;font-weight:400;font-size:22pt;color:var(--paper-soft);margin-top:18px;">${customerAddress}</div>` : ''}
                     </div>
-                    <div style="text-align:center;margin-top:24px;">
-                        <div style="font-family:'Playfair Display',serif;font-style:italic;font-size:16pt;color:${P.navy};">— Amir & the NSP Team</div>
-                    </div>
-                </section>
+                    <div style="flex:1;"></div>
+                    <div style="font-family:'Inter',sans-serif;font-weight:600;font-size:11px;letter-spacing:0.32em;text-transform:uppercase;color:var(--gold);">${completedAtStr}</div>
+                </div>
+            </div>`;
 
-                <!-- ─── PROJECT OVERVIEW ─── -->
-                <section style="padding:32px 56px 40px;background:#fff;">
-                    ${sectionHead('At a Glance', 'Project Overview')}
-                    <div style="max-width:680px;margin:0 auto;background:${P.cream};border-radius:12px;padding:24px 32px;">
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 28px;font-family:'Inter',sans-serif;">
-                            <div><div style="font-size:9pt;color:${P.muted};text-transform:uppercase;letter-spacing:1.5px;font-weight:600;">Type</div><div style="font-size:13pt;color:${P.navy};font-weight:500;margin-top:3px;">${jobTypeStr}</div></div>
-                            <div><div style="font-size:9pt;color:${P.muted};text-transform:uppercase;letter-spacing:1.5px;font-weight:600;">Areas</div><div style="font-size:13pt;color:${P.navy};font-weight:500;margin-top:3px;">${stats.areaCount || palette.length}</div></div>
-                            ${stats.totalSqft ? `<div><div style="font-size:9pt;color:${P.muted};text-transform:uppercase;letter-spacing:1.5px;font-weight:600;">Square Footage</div><div style="font-size:13pt;color:${P.navy};font-weight:500;margin-top:3px;">${fmtNum(stats.totalSqft)} sq ft</div></div>` : ''}
-                            ${stats.totalHours ? `<div><div style="font-size:9pt;color:${P.muted};text-transform:uppercase;letter-spacing:1.5px;font-weight:600;">Hours</div><div style="font-size:13pt;color:${P.navy};font-weight:500;margin-top:3px;">${fmtNum(stats.totalHours)} hours of craftsmanship</div></div>` : ''}
-                            ${stats.daysToComplete ? `<div><div style="font-size:9pt;color:${P.muted};text-transform:uppercase;letter-spacing:1.5px;font-weight:600;">Days</div><div style="font-size:13pt;color:${P.navy};font-weight:500;margin-top:3px;">${stats.daysToComplete} day${stats.daysToComplete === 1 ? '' : 's'}</div></div>` : ''}
-                            ${stats.crewSize ? `<div><div style="font-size:9pt;color:${P.muted};text-transform:uppercase;letter-spacing:1.5px;font-weight:600;">Crew</div><div style="font-size:13pt;color:${P.navy};font-weight:500;margin-top:3px;">${stats.crewSize} ${stats.crewSize === 1 ? 'professional' : 'professionals'}</div></div>` : ''}
-                            ${stats.gallonsUsed ? `<div><div style="font-size:9pt;color:${P.muted};text-transform:uppercase;letter-spacing:1.5px;font-weight:600;">Paint</div><div style="font-size:13pt;color:${P.navy};font-weight:500;margin-top:3px;">${stats.gallonsUsed} gallons applied</div></div>` : ''}
-                            ${totalCoats ? `<div><div style="font-size:9pt;color:${P.muted};text-transform:uppercase;letter-spacing:1.5px;font-weight:600;">Coats</div><div style="font-size:13pt;color:${P.navy};font-weight:500;margin-top:3px;">${totalCoats} hand-applied</div></div>` : ''}
+            // ─── PAGE 2 — A NOTE FROM US ────────────────────────────────────
+            const firstName = (customerName || '').split(' ')[0] || 'Friend';
+            const typeLower = (jobTypeStr || 'painting').toLowerCase();
+            const noteBody = ai.introduction
+                || `Dear ${firstName}, thank you for entrusting us with your home's ${typeLower} transformation. This report celebrates the beautiful results we achieved together and serves as a lasting record of your project's thoughtful color selections and craftsmanship details.`;
+            const notePage = `
+            <div class="page page-cream">
+                <div style="position:absolute;top:0.85in;left:0.85in;right:0.85in;">
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;">
+                        <div class="smallcaps">From the Founder</div>
+                        <div class="smallcaps" style="color:var(--ink-soft);">${reportNum}</div>
+                    </div>
+                    <div class="gold-rule" style="margin-top:14px;"></div>
+                </div>
+                <div style="position:absolute;top:50%;left:1.2in;right:1.2in;transform:translateY(-50%);text-align:center;">
+                    <h2 style="font-family:'Playfair Display',serif;font-style:italic;font-weight:700;font-size:44pt;color:var(--ink);line-height:1.05;letter-spacing:-0.01em;">Welcome Home</h2>
+                    <p style="font-family:'Playfair Display',serif;font-weight:400;font-size:16pt;line-height:1.7;color:var(--ink);margin:32px auto 0;max-width:5.5in;">${noteBody}</p>
+                    <div style="font-family:'Playfair Display',serif;font-style:italic;font-weight:400;font-size:18pt;color:var(--ink-soft);margin-top:24px;text-align:right;padding-right:0.4in;">— ${(consultantName.split(' ')[0])} &amp; the NSP Team</div>
+                </div>
+                ${detailPhotoUrl ? `<img src="${detailPhotoUrl}" style="position:absolute;bottom:0;left:0;right:0;width:100%;height:1.7in;object-fit:cover;display:block;">` : ''}
+            </div>`;
+
+            // ─── PAGE 3 — AT A GLANCE ───────────────────────────────────────
+            const statTagline = stats.totalHours && (stats.daysToComplete || stats.areaCount)
+                ? `${stats.totalHours} hours of craftsmanship. A lifetime of curb appeal.`
+                : `Documented, finished, and finely detailed — yours for the keeping.`;
+            const statCells = [
+                ['Project Number', statValues.projectNum],
+                ['Completion Date', statValues.completedDate],
+                ['Project Type', statValues.type],
+                ['Areas Painted', statValues.areas],
+                ['Square Footage', statValues.sqft],
+                ['Hours of Craftsmanship', statValues.hours],
+                ['Days On Site', statValues.days],
+                ['Crew Size', statValues.crew],
+                ['Gallons Applied', statValues.gallons],
+            ];
+            const atGlancePage = `
+            <div class="page page-navy">
+                <div class="page-inner">
+                    <div class="smallcaps">At a Glance</div>
+                    <h2 style="font-family:'Playfair Display',serif;font-weight:700;font-size:52pt;color:var(--paper);line-height:1.0;letter-spacing:-0.01em;margin-top:8px;">Project Overview</h2>
+                    <div style="font-family:'Playfair Display',serif;font-style:italic;font-weight:400;font-size:18pt;color:var(--paper-soft);margin-top:10px;">A record of every coat, every color, every hour.</div>
+                    <div class="gold-rule" style="margin-top:20px;"></div>
+                    <div style="flex:1;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:24px 32px;margin-top:36px;align-content:center;">
+                        ${statCells.map(([label, value]) => `<div style="display:flex;flex-direction:column;justify-content:flex-end;">
+                            <div style="font-family:'Playfair Display',serif;font-weight:700;font-size:54pt;color:var(--gold);line-height:0.95;letter-spacing:-0.02em;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${value}</div>
+                            <div style="font-family:'Inter',sans-serif;font-weight:600;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:var(--paper-soft);margin-top:8px;">${label}</div>
+                        </div>`).join('')}
+                    </div>
+                    <div class="gold-rule" style="margin-top:24px;"></div>
+                    <div style="font-family:'Playfair Display',serif;font-style:italic;font-weight:400;font-size:14pt;color:var(--paper-soft);margin-top:14px;text-align:center;">"${statTagline}"</div>
+                </div>
+            </div>`;
+
+            // ─── PAGE 4 — BEHIND THE BEAUTY (NEW) ──────────────────────────
+            const behindSteps = [
+                ['Inspection &amp; Power Wash', 'Every surface assessed and cleaned to remove dirt, mildew, and chalking.'],
+                ['Scrape, Sand &amp; Repair', 'Loose paint removed, surfaces sanded smooth, damaged wood repaired.'],
+                ['Caulk &amp; Seal', 'Every gap, joint, and seam sealed with premium caulk to prevent moisture intrusion.'],
+                ['Prime Bare Spots', 'Stain-blocking primer applied where wood was exposed for uniform topcoat adhesion.'],
+                ['Premium Topcoats', 'Two coats of Benjamin Moore applied with proper dry time between, brush and roller as the surface demands.'],
+                ['Final Walk-Through', 'Every corner inspected. Touch-ups completed. Site cleaned. Customer approval before we leave.'],
+            ];
+            const behindClose = stats.totalHours
+                ? `This is what ${stats.totalHours} hours of craftsmanship actually looks like.`
+                : `This is what real craftsmanship actually looks like.`;
+            const behindPage = `
+            <div class="page page-cream">
+                <div class="page-inner">
+                    <div class="smallcaps">Our Process</div>
+                    <h2 style="font-family:'Playfair Display',serif;font-weight:700;font-size:52pt;color:var(--ink);line-height:1.0;letter-spacing:-0.01em;margin-top:8px;">Behind the Beauty</h2>
+                    <div style="font-family:'Playfair Display',serif;font-style:italic;font-weight:400;font-size:18pt;color:var(--ink-soft);margin-top:10px;">The work you don't see is what makes the work you do see last.</div>
+                    <div class="gold-rule" style="margin-top:20px;"></div>
+                    <div style="flex:1;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(2,1fr);gap:32px 28px;margin-top:36px;align-content:center;">
+                        ${behindSteps.map(([title, desc], i) => `<div>
+                            <div style="display:flex;align-items:center;gap:14px;margin-bottom:10px;">
+                                <div style="width:48px;height:48px;border-radius:50%;background:var(--gold);display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',serif;font-weight:700;font-size:22pt;color:var(--paper);-webkit-print-color-adjust:exact;print-color-adjust:exact;">${i + 1}</div>
+                                <div style="font-family:'Playfair Display',serif;font-weight:600;font-size:18pt;color:var(--ink);line-height:1.15;flex:1;">${title}</div>
+                            </div>
+                            <div style="font-family:'Inter',sans-serif;font-weight:400;font-size:13pt;line-height:1.55;color:var(--ink-soft);">${desc}</div>
+                        </div>`).join('')}
+                    </div>
+                    <div class="gold-rule" style="margin-top:24px;"></div>
+                    <div style="font-family:'Playfair Display',serif;font-style:italic;font-weight:400;font-size:14pt;color:var(--ink-soft);margin-top:14px;text-align:center;">${behindClose}</div>
+                </div>
+            </div>`;
+
+            // ─── PAGE 5+ — AREA PAGES ───────────────────────────────────────
+            const areaPages = palette.map((area, idx) => {
+                const surfaces = area.surfaces || {};
+                const beforeUrl = photos.rooms?.[area.area]?.before?.url || '';
+                const afterUrl = photos.rooms?.[area.area]?.after?.url || '';
+                const tip = ai.proTips?.[area.area] || area.tip || '';
+
+                const surfaceRows = Object.entries(surfaces)
+                    .filter(([, v]) => v && v.color)
+                    .map(([surfName, v], i, arr) => {
+                        const swatch = (v.hex || _paintColorLookup(v.brand, v.code, v.color) || _colorHex(v.color, v.brand));
+                        const isLast = i === arr.length - 1;
+                        const meta = [v.brand, v.finish, v.coats ? v.coats + ' coats' : ''].filter(Boolean).join(' · ');
+                        return `<div style="display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;padding:14px 0;${isLast ? '' : 'border-bottom:1px solid var(--ink-soft);'}">
+                            <div style="width:24px;height:24px;border-radius:50%;background:${swatch};border:1px solid rgba(0,0,0,0.1);-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+                            <div>
+                                <div class="smallcaps" style="font-size:10px;">${_titleCase(surfName)}</div>
+                                <div style="font-family:'Playfair Display',serif;font-weight:600;font-size:14pt;color:var(--ink);margin-top:2px;line-height:1.2;">${v.color}${v.code ? ` <span style="color:var(--ink-soft);font-weight:400;font-size:11pt;">(${v.code})</span>` : ''}</div>
+                            </div>
+                            <div style="font-family:'Inter',sans-serif;font-weight:400;font-size:11pt;color:var(--ink-soft);text-align:right;white-space:nowrap;">${meta}</div>
+                        </div>`;
+                    }).join('');
+
+                return `
+            <div class="page page-cream">
+                <div class="page-inner">
+                    <div class="smallcaps">Area ${idx + 1} of ${palette.length}</div>
+                    <h2 style="font-family:'Playfair Display',serif;font-weight:700;font-size:52pt;color:var(--ink);line-height:1.0;letter-spacing:-0.01em;margin-top:8px;">${area.area}</h2>
+                    <div class="gold-rule" style="margin-top:18px;"></div>
+
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:32px;">
+                        <div>
+                            <div class="smallcaps" style="color:var(--ink-soft);font-size:10px;margin-bottom:6px;">Before</div>
+                            <div style="height:5px;width:32px;background:var(--gold);margin-bottom:8px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+                            ${beforeUrl
+                                ? `<img src="${beforeUrl}" style="width:100%;height:3.2in;object-fit:cover;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.08);">`
+                                : `<div style="width:100%;height:3.2in;background:var(--cream-deep);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-family:'Playfair Display',serif;font-style:italic;font-size:13pt;-webkit-print-color-adjust:exact;print-color-adjust:exact;">no photo</div>`
+                            }
+                        </div>
+                        <div>
+                            <div class="smallcaps" style="font-size:10px;margin-bottom:6px;">After</div>
+                            <div style="height:5px;width:32px;background:var(--gold);margin-bottom:8px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+                            ${afterUrl
+                                ? `<img src="${afterUrl}" style="width:100%;height:3.2in;object-fit:cover;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.08);">`
+                                : `<div style="width:100%;height:3.2in;background:var(--cream-deep);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-family:'Playfair Display',serif;font-style:italic;font-size:13pt;-webkit-print-color-adjust:exact;print-color-adjust:exact;">no photo</div>`
+                            }
                         </div>
                     </div>
-                    ${ai.colorStory ? `<div style="max-width:600px;margin:24px auto 0;text-align:center;font-family:'Playfair Display',serif;font-style:italic;font-size:13pt;color:${P.charcoal};line-height:1.55;">"${ai.colorStory}"</div>` : ''}
-                </section>
 
-                <!-- ─── YOUR COLOR PERSONALITY (the wow page) ───
-                     Magazine-style reveal: archetype name + horoscope-meets-
-                     design-magazine reading. NO forced break — flows after
-                     Overview to fill the page. The header (kicker + swatch
-                     strip + archetype) stays glued together as a unit; the
-                     reading and below are free to break naturally if needed,
-                     so we never strand a half-empty page. -->
-                ${ai.colorArchetype || ai.personalityReading ? `
-                <section style="padding:32px 56px 28px;background:${P.cream};-webkit-print-color-adjust:exact;print-color-adjust:exact;">
-                    <div style="max-width:640px;margin:0 auto;text-align:center;">
-                        <!-- Header unit: kicker + name + swatches + archetype name -->
-                        <div class="report-keep">
-                            <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.gold};letter-spacing:4px;text-transform:uppercase;font-weight:600;margin-bottom:6px;">Your Color Personality</div>
-                            <div style="font-family:'Playfair Display',serif;font-style:italic;font-size:11pt;color:${P.muted};margin-bottom:14px;">A reading for ${customerName}</div>
-                            ${uniqueSwatches.length ? `<div style="display:flex;justify-content:center;gap:10px;margin-bottom:18px;">
-                                ${uniqueSwatches.slice(0, 6).map(s => `<div style="width:24px;height:24px;border-radius:50%;background:${s.hex};border:1px solid rgba(0,0,0,0.08);-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>`).join('')}
-                            </div>` : ''}
-                            ${ai.colorArchetype ? `<h2 style="font-family:'Playfair Display',serif;font-size:34pt;color:${P.navy};font-weight:600;letter-spacing:-0.5px;line-height:1.05;margin:0;">${ai.colorArchetype}</h2>` : ''}
-                            <div style="width:60px;height:2px;background:${P.gold};margin:12px auto 16px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
-                        </div>
-
-                        <!-- The reading — allowed to flow naturally -->
-                        ${ai.personalityReading ? `<div style="font-family:'Playfair Display',serif;font-size:12.5pt;color:${P.charcoal};line-height:1.65;font-weight:400;text-align:left;max-width:560px;margin:0 auto;">${ai.personalityReading}</div>` : ''}
-
-                        <!-- Home wink — gold pull-quote (small unit, kept whole) -->
-                        ${ai.homeWink ? `<div class="report-keep" style="margin:22px auto 0;max-width:520px;font-family:'Playfair Display',serif;font-style:italic;font-size:15pt;color:${P.navy};line-height:1.4;">
-                            <span style="color:${P.gold};font-size:22pt;line-height:0;vertical-align:-6px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">“</span>${ai.homeWink}<span style="color:${P.gold};font-size:22pt;line-height:0;vertical-align:-6px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">”</span>
-                        </div>` : ''}
-
-                        <!-- Fun fact ribbon (small unit, kept whole) -->
-                        ${ai.funFact ? `<div class="report-keep" style="margin:20px auto 0;max-width:540px;background:#fff;border:1px solid ${P.line};border-radius:10px;padding:12px 18px;text-align:left;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
-                            <div style="font-family:'Inter',sans-serif;font-size:8.5pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:5px;">A Fun Fact From Your Palette</div>
-                            <div style="font-family:'Inter',sans-serif;font-size:10.5pt;color:${P.text};line-height:1.55;">${ai.funFact}</div>
-                        </div>` : ''}
-
-                        ${ai.painterPun ? `<div style="margin-top:18px;font-family:'Playfair Display',serif;font-style:italic;font-size:11pt;color:${P.muted};">— ${ai.painterPun}</div>` : ''}
+                    <div style="background:var(--cream-deep);border-radius:12px;padding:20px 24px;margin-top:32px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                        <div class="smallcaps">Colors Used</div>
+                        ${surfaceRows || `<div style="font-family:'Playfair Display',serif;font-style:italic;color:var(--ink-soft);padding:12px 0;">No surface colors recorded.</div>`}
+                        ${area.technique ? `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--ink-soft);font-family:'Inter',sans-serif;font-size:11pt;color:var(--ink-soft);"><span class="smallcaps" style="display:inline;font-size:10px;">Technique</span> &nbsp; <span style="color:var(--ink);">${area.technique}</span></div>` : ''}
                     </div>
-                </section>` : ''}
 
-                <!-- ─── ROOM-BY-ROOM ─── -->
-                ${areaPages}
+                    ${tip ? `<div style="flex:1;display:flex;align-items:flex-end;margin-top:24px;">
+                        <div style="background:var(--navy);color:var(--paper);padding:20px 28px;border-radius:8px;width:100%;text-align:center;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                            <div class="smallcaps" style="margin-bottom:6px;">Pro Tip</div>
+                            <div style="font-family:'Playfair Display',serif;font-style:italic;font-weight:400;font-size:15pt;color:var(--paper);line-height:1.4;">"${tip}"</div>
+                        </div>
+                    </div>` : ''}
+                </div>
+            </div>`;
+            }).join('');
 
-                <!-- ─── COLOR PALETTE OVERVIEW ───
-                     Swatches at 130px — visible and substantial but never
-                     dominating a page (a row of 4 at 130px = ~580px wide,
-                     two rows = ~340px tall, easy fit). Whole section is one
-                     report-keep unit so head + grid + color story ship
-                     together — title can never strand. -->
-                <section class="report-keep" style="padding:28px 56px 24px;background:#fff;">
-                    ${sectionHead('Your Story', 'The Palette')}
-                    <div style="max-width:720px;margin:0 auto;">
-                        <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:22px 28px;margin-bottom:20px;">
-                            ${uniqueSwatches.map(s => `<div style="width:140px;text-align:center;">
-                                <div style="width:130px;height:130px;background:${s.hex};border-radius:50%;border:1px solid ${P.line};margin:0 auto 10px;-webkit-print-color-adjust:exact;print-color-adjust:exact;box-shadow:0 1px 3px rgba(0,0,0,0.06);"></div>
-                                <div style="font-family:'Playfair Display',serif;font-size:12pt;color:${P.navy};font-weight:500;line-height:1.2;">${s.color}</div>
-                                ${s.code ? `<div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.muted};margin-top:2px;">${s.code}</div>` : ''}
-                                ${s.brand ? `<div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.muted};">${s.brand}</div>` : ''}
+            // ─── PAGE 6 — THE PALETTE ──────────────────────────────────────
+            // Palette circles: 2.8" diameter. With 6.8in content width, 2 fit
+            // comfortably per row with breathing room. Up to 6 colors fit on
+            // one page; if more, they'll be smaller — acceptable for very rare
+            // many-color projects.
+            const paletteSwatches = uniqueSwatches.slice(0, 6);
+            const palettePage = `
+            <div class="page page-navy">
+                <div class="page-inner" style="text-align:center;">
+                    <div class="smallcaps">Your Story</div>
+                    <h2 style="font-family:'Playfair Display',serif;font-weight:700;font-size:52pt;color:var(--paper);line-height:1.0;letter-spacing:-0.01em;margin-top:8px;">The Palette</h2>
+                    <div style="width:60px;height:1px;background:var(--gold);margin:18px auto 0;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+
+                    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;">
+                        <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:36px 56px;margin:0 auto;max-width:6in;">
+                            ${paletteSwatches.map(s => `<div style="text-align:center;width:2.8in;">
+                                <div style="width:2.8in;height:2.8in;border-radius:50%;background:${s.hex};box-shadow:0 4px 16px rgba(0,0,0,0.25);-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+                                <div style="font-family:'Playfair Display',serif;font-weight:600;font-size:18pt;color:var(--paper);margin-top:14px;line-height:1.15;">${s.color}</div>
+                                ${s.code ? `<div style="font-family:'Inter',sans-serif;font-size:11pt;color:var(--paper-soft);margin-top:2px;">${s.code}</div>` : ''}
+                                ${s.brand ? `<div class="smallcaps" style="margin-top:6px;font-size:9px;">${s.brand}</div>` : ''}
                             </div>`).join('')}
                         </div>
-                        ${ai.colorStory ? `<div style="background:${P.cream};border-left:3px solid ${P.gold};padding:14px 20px;border-radius:4px;font-family:'Playfair Display',serif;font-size:12pt;color:${P.charcoal};line-height:1.55;font-style:italic;">${ai.colorStory}</div>` : ''}
+
+                        ${ai.colorStory ? `<div style="margin:48px auto 0;max-width:5.5in;border-left:3px solid var(--gold);padding-left:20px;text-align:left;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                            <div style="font-family:'Playfair Display',serif;font-style:italic;font-weight:400;font-size:14pt;line-height:1.7;color:var(--paper);">${ai.colorStory}</div>
+                        </div>` : ''}
                     </div>
-                </section>
 
-                <!-- ─── WARRANTY + MATERIALS (merged) ─── -->
-                <!-- Premium Materials and Warranty share a "we stand behind it"
-                     theme. Merged into a single page-cohesive section so neither
-                     gets stranded on a half-empty page. -->
-                <section style="padding:32px 56px 28px;background:#fff;text-align:center;">
-                    ${sectionHead('Our Promise', 'Built to Last')}
-                    <div style="font-family:'Bebas Neue',sans-serif;font-size:64pt;color:${P.gold};letter-spacing:2px;line-height:1;-webkit-print-color-adjust:exact;print-color-adjust:exact;">2</div>
-                    <div style="font-family:'Inter',sans-serif;font-size:12pt;color:${P.navy};letter-spacing:5px;text-transform:uppercase;font-weight:600;margin-top:-4px;">Year Workmanship Warranty</div>
-                    <div style="max-width:480px;margin:14px auto 0;font-family:'Playfair Display',serif;font-size:13pt;color:${P.charcoal};line-height:1.55;font-style:italic;">We stand behind every brush stroke.</div>
+                    <div class="gold-rule" style="margin-top:24px;"></div>
+                </div>
+            </div>`;
 
-                    <!-- Two-column layout: warranty card + materials card on the same page -->
-                    <div class="report-keep" style="max-width:680px;margin:18px auto 0;display:grid;grid-template-columns:1fr 1fr;gap:14px;text-align:left;">
-                        <!-- Warranty card -->
-                        <div style="background:${P.cream};border-radius:8px;padding:14px 18px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
-                            <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:8px;">Warranty Includes</div>
-                            <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.text};line-height:1.7;">
-                                ✓ Paint adhesion<br>
-                                ✓ Peeling, bubbling, flaking<br>
-                                ✓ Workmanship issues<br>
-                                ✓ Color uniformity
+            // ─── PAGE 7 — BUILT TO LAST + CARE & KEEPING (combined) ────────
+            const careCards = [
+                ['🧽', 'Cleaning', 'Wipe with a soft, damp cloth and mild soap. Avoid abrasive cleaners that dull the finish.'],
+                ['🚫', 'Avoid', 'Harsh chemicals, ammonia-based cleaners, and rough scrubbing on flat or matte finishes.'],
+                ['💧', 'Spot Wash', 'Test in an inconspicuous area first. Pat dry — don\'t scrub. Eggshell and satin are most washable.'],
+                ['🔧', 'Touch-Ups', 'Save the leftover paint can. Light hand stir, brush small area, feather edges. Call us if you need help.'],
+            ];
+            const builtPage = `
+            <div class="page page-cream">
+                <div class="page-inner">
+                    <div class="smallcaps">Our Promise</div>
+                    <h2 style="font-family:'Playfair Display',serif;font-weight:700;font-size:44pt;color:var(--ink);line-height:1.0;letter-spacing:-0.01em;margin-top:8px;">Built to Last</h2>
+
+                    <div style="text-align:center;margin-top:18px;">
+                        <div style="font-family:'Playfair Display',serif;font-weight:700;font-size:120pt;color:var(--gold);line-height:0.95;-webkit-print-color-adjust:exact;print-color-adjust:exact;">2</div>
+                        <div class="smallcaps" style="color:var(--ink);font-size:11px;margin-top:-6px;">Year Workmanship Warranty</div>
+                        <div style="font-family:'Playfair Display',serif;font-style:italic;font-weight:400;font-size:14pt;color:var(--ink-soft);margin-top:10px;">We stand behind every brush stroke.</div>
+                    </div>
+
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:18px;">
+                        <div style="background:var(--cream-deep);border-radius:8px;padding:20px 22px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                            <div class="smallcaps" style="margin-bottom:10px;">Warranty Includes</div>
+                            <div style="font-family:'Inter',sans-serif;font-weight:400;font-size:11.5pt;color:var(--ink);line-height:1.85;">
+                                Paint adhesion<br>Peeling, bubbling, flaking<br>Workmanship issues<br>Color uniformity
                             </div>
                         </div>
-                        <!-- Materials card (was its own page; now folded in) -->
-                        <div style="background:${P.cream};border-radius:8px;padding:14px 18px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
-                            <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:8px;">Premium Materials</div>
-                            <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.text};line-height:1.7;">
-                                ✓ Decades of lasting beauty<br>
-                                ✓ Washable, fade-resistant<br>
-                                ✓ Mold &amp; mildew resistant<br>
-                                ✓ Low VOC, family-safe
+                        <div style="background:var(--cream-deep);border-radius:8px;padding:20px 22px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                            <div class="smallcaps" style="margin-bottom:10px;">Premium Materials</div>
+                            <div style="font-family:'Inter',sans-serif;font-weight:400;font-size:11.5pt;color:var(--ink);line-height:1.85;">
+                                Decades of lasting beauty<br>Washable, fade-resistant<br>Mold &amp; mildew resistant<br>Low VOC, family-safe
                             </div>
                         </div>
                     </div>
 
-                    <!-- Touch-up contact strip (full width below the cards) -->
-                    <div style="max-width:680px;margin:14px auto 0;font-family:'Inter',sans-serif;font-size:10.5pt;color:${P.text};padding:10px 16px;background:${P.cream};border-radius:8px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
-                        <strong>Need a touch-up?</strong> Call us first.${(cs.companyPhone || cs.phone) ? ` &nbsp; 📞 ${cs.companyPhone || cs.phone}` : ''} &nbsp; ✉️ ${cs.companyEmail || cs.email || 'Info@northernstarpainters.com'}
+                    <div style="background:var(--navy);color:var(--paper);border-radius:6px;padding:14px 22px;margin-top:14px;font-family:'Inter',sans-serif;font-size:11.5pt;font-weight:500;text-align:center;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                        Need a touch-up? Call us first. ${phone ? `&nbsp; ${phone} &nbsp;·&nbsp;` : ''} ${email}
                     </div>
-                </section>
 
-                <!-- ─── MAINTENANCE GUIDE ─── -->
-                <section style="padding:24px 56px 36px;background:${P.cream};">
-                    ${sectionHead('Care & Keeping', 'Maintenance Guide')}
-                    <div style="max-width:640px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-                        ${[
-                            ['🧽', 'Cleaning', 'Wipe with soft, damp cloth and mild soap. Avoid abrasive cleaners that can dull the finish.'],
-                            ['🚫', 'Avoid', 'Harsh chemicals, ammonia-based cleaners, and rough scrubbing on flat or matte finishes.'],
-                            ['💧', 'Spot Wash', 'Test in inconspicuous area first. Pat dry — don\'t scrub. Eggshell and satin are most washable.'],
-                            ['🔧', 'Touch-Ups', 'Save the leftover paint can. Light hand stir, brush small area, feather edges. We\'re here if you need us.'],
-                        ].map(([i, t, d]) => `<div class="report-keep" style="background:#fff;border:1px solid ${P.line};border-radius:8px;padding:14px 18px;">
-                            <div style="font-size:18pt;margin-bottom:4px;">${i}</div>
-                            <div style="font-family:'Playfair Display',serif;font-size:13pt;color:${P.navy};font-weight:600;margin-bottom:4px;">${t}</div>
-                            <div style="font-family:'Inter',sans-serif;font-size:9.5pt;color:${P.text};line-height:1.5;">${d}</div>
+                    <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-top:32px;">
+                        <div style="height:1px;width:80px;background:var(--gold);-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+                        <div style="font-family:'Playfair Display',serif;font-style:italic;font-size:11pt;color:var(--ink-soft);">Care &amp; Keeping</div>
+                        <div style="height:1px;width:80px;background:var(--gold);-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+                    </div>
+
+                    <div style="text-align:center;margin-top:18px;">
+                        <h3 style="font-family:'Playfair Display',serif;font-weight:700;font-size:32pt;color:var(--ink);line-height:1.0;">Maintenance Guide</h3>
+                    </div>
+
+                    <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:14px;margin-top:18px;">
+                        ${careCards.map(([icon, title, desc]) => `<div style="background:var(--cream-deep);border-radius:8px;padding:16px 18px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                            <div style="font-size:14pt;line-height:1;">${icon}</div>
+                            <div style="font-family:'Playfair Display',serif;font-weight:600;font-size:14pt;color:var(--ink);margin-top:6px;">${title}</div>
+                            <div style="font-family:'Inter',sans-serif;font-weight:400;font-size:11pt;line-height:1.5;color:var(--ink-soft);margin-top:4px;">${desc}</div>
                         </div>`).join('')}
                     </div>
-                </section>
+                </div>
+            </div>`;
 
-                <!-- ─── BY THE NUMBERS ─── -->
-                <!-- Full-page navy stat showcase. min-height:100vh + flex
-                     center makes the navy bg fill the page intentionally
-                     instead of leaving a void below the stats when the
-                     next section can't fit on the same page. -->
-                <section style="page-break-before:always;break-before:page;min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:36px 56px;background:${P.navy};-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#fff;">
-                    ${sectionHead('By the Numbers', 'A Project in Detail').replace(P.navy, '#fff').replace(P.gold, P.gold)}
-                    <div style="max-width:720px;margin:0 auto;display:grid;grid-template-columns:repeat(${(() => {
-                        const numStats = [stats.totalHours, stats.gallonsUsed, stats.totalSqft, totalCoats, ((stats.areaCount || palette.length) > 1 ? (stats.areaCount || palette.length) : null)].filter(v => v).length;
-                        return numStats >= 4 ? 3 : Math.max(numStats, 1);
-                    })()}, 1fr);gap:14px;">
+            // ─── PAGE 8 — COLOR REFERENCE CARD (NEW) ───────────────────────
+            const refRows = colorGroups.map((s, i, arr) => {
+                const dealer = (s.brand || '').toLowerCase().includes('sherwin')
+                    ? 'sherwin-williams.com'
+                    : 'benjaminmoore.com';
+                const isLast = i === arr.length - 1;
+                return `<div style="display:grid;grid-template-columns:1in 1fr 1.6in;gap:20px;align-items:center;padding:18px 0;${isLast ? '' : 'border-bottom:1px solid var(--ink-soft);'}">
+                    <div style="width:1in;height:1in;border-radius:8px;background:${s.hex};box-shadow:0 2px 6px rgba(0,0,0,0.12);-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+                    <div>
+                        <div style="font-family:'Playfair Display',serif;font-weight:600;font-size:16pt;color:var(--ink);line-height:1.15;">${s.color}${s.code ? ` <span style="color:var(--ink-soft);font-weight:400;font-size:13pt;">${s.code}</span>` : ''}</div>
+                        <div class="smallcaps" style="margin-top:4px;font-size:10px;">${[s.brand, s.finish].filter(Boolean).join(' · ') || 'Paint'}</div>
+                        ${s.usedOn.length ? `<div style="font-family:'Inter',sans-serif;font-weight:400;font-size:11pt;color:var(--ink-soft);margin-top:6px;"><span style="color:var(--ink);font-weight:500;">Used on:</span> ${s.usedOn.join(', ')}</div>` : ''}
+                    </div>
+                    <div style="text-align:right;">
+                        <div class="smallcaps" style="font-size:9px;color:var(--ink-soft);">Where to Buy</div>
+                        <div style="font-family:'Inter',sans-serif;font-weight:500;font-size:12pt;color:var(--ink);margin-top:4px;">${dealer}</div>
+                    </div>
+                </div>`;
+            }).join('');
+            const colorRefPage = `
+            <div class="page page-cream">
+                <div class="page-inner">
+                    <div class="smallcaps" style="text-align:center;">For Your Records</div>
+                    <h2 style="font-family:'Playfair Display',serif;font-weight:700;font-size:44pt;color:var(--ink);line-height:1.0;letter-spacing:-0.01em;margin-top:8px;text-align:center;">Color Reference Card</h2>
+                    <div style="font-family:'Playfair Display',serif;font-style:italic;font-weight:400;font-size:16pt;color:var(--ink-soft);margin-top:10px;text-align:center;">Keep this page. When it's time for a touch-up, here's everything you need.</div>
+
+                    <div style="flex:1;display:flex;align-items:center;">
+                        <div style="background:var(--cream-deep);border-radius:12px;padding:32px;border:2px dashed var(--gold-soft);width:100%;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                            ${refRows || `<div style="font-family:'Playfair Display',serif;font-style:italic;color:var(--ink-soft);text-align:center;padding:24px;">No colors recorded yet.</div>`}
+                        </div>
+                    </div>
+
+                    <div style="font-family:'Playfair Display',serif;font-style:italic;font-weight:400;font-size:12pt;color:var(--ink-soft);text-align:center;margin-top:16px;">Tip: order a quart, not a gallon, for touch-ups. Ask for the exact code above — colors can drift between batches.</div>
+                </div>
+            </div>`;
+
+            // ─── PAGE 9 — CERTIFICATE OF PROVENANCE ─────────────────────────
+            const certificatePage = `
+            <div class="page page-cream">
+                <div style="position:absolute;top:0.55in;left:0.55in;font-family:'Playfair Display',serif;font-size:24pt;color:var(--gold);line-height:1;-webkit-print-color-adjust:exact;print-color-adjust:exact;">❦</div>
+                <div style="position:absolute;bottom:0.55in;right:0.55in;font-family:'Playfair Display',serif;font-size:24pt;color:var(--gold);line-height:1;-webkit-print-color-adjust:exact;print-color-adjust:exact;transform:rotate(180deg);">❦</div>
+                <div class="page-inner" style="text-align:center;align-items:center;">
+                    <div style="font-family:'Playfair Display',serif;font-weight:700;font-size:18pt;color:var(--gold);letter-spacing:0.4em;-webkit-print-color-adjust:exact;print-color-adjust:exact;">✦ ✦ ✦</div>
+                    <div class="smallcaps" style="margin-top:24px;">Certificate</div>
+                    <div style="font-family:'Playfair Display',serif;font-style:italic;font-weight:400;font-size:36pt;color:var(--ink);line-height:1.0;margin-top:6px;">of Provenance</div>
+                    <div style="width:60px;height:1px;background:var(--gold);margin-top:20px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+
+                    <div style="font-family:'Playfair Display',serif;font-weight:400;font-size:16pt;color:var(--ink);line-height:1.65;margin-top:24px;max-width:5in;">This certifies that the home of</div>
+                    <div style="font-family:'Playfair Display',serif;font-weight:700;font-size:44pt;color:var(--ink);line-height:1.05;letter-spacing:-0.01em;margin-top:14px;">${customerName}</div>
+                    ${customerAddress ? `<div style="font-family:'Playfair Display',serif;font-style:italic;font-weight:400;font-size:16pt;color:var(--ink-soft);margin-top:8px;">${customerAddress}</div>` : ''}
+                    <div style="font-family:'Playfair Display',serif;font-weight:400;font-size:16pt;color:var(--ink);line-height:1.65;margin-top:18px;max-width:5in;">has been authentically painted, finished, and lovingly cared for by Northern Star Painters — and that this report is the official record of every brush, every color, and every coat.</div>
+
+                    <div style="display:flex;justify-content:center;gap:48px;margin-top:36px;">
                         ${[
-                            [stats.totalHours ? fmtNum(stats.totalHours) : null, 'Hours of craftsmanship'],
-                            [stats.gallonsUsed || null, 'Gallons of premium paint'],
-                            [stats.totalSqft ? fmtNum(stats.totalSqft) : null, 'Square feet refreshed'],
-                            [totalCoats || null, 'Coats hand-applied'],
-                            [(stats.areaCount || palette.length) > 1 ? (stats.areaCount || palette.length) : null, 'Areas transformed'],
-                        ].filter(([v]) => v).map(([v, l]) => `<div class="report-keep" style="text-align:center;padding:16px 12px;background:rgba(255,255,255,0.06);-webkit-print-color-adjust:exact;print-color-adjust:exact;border-radius:10px;">
-                            <div style="font-family:'Bebas Neue',sans-serif;font-size:38pt;color:${P.gold};letter-spacing:1px;line-height:1;">${v}</div>
-                            <div style="font-family:'Inter',sans-serif;font-size:9pt;color:rgba(255,255,255,0.9);text-transform:uppercase;letter-spacing:1.5px;margin-top:6px;font-weight:500;line-height:1.3;">${l}</div>
+                            ['Completed', completedAtStr || '—'],
+                            ['Areas', orDash(stats.areaCount || palette.length || 0)],
+                            ['Hours', stats.totalHours ? fmtNum(stats.totalHours) : '—'],
+                            ['Gallons', orDash(stats.gallonsUsed)],
+                        ].map(([label, value]) => `<div style="text-align:center;">
+                            <div class="smallcaps" style="font-size:9px;">${label}</div>
+                            <div style="font-family:'Playfair Display',serif;font-weight:600;font-size:18pt;color:var(--ink);margin-top:4px;line-height:1.1;">${value}</div>
                         </div>`).join('')}
                     </div>
-                </section>
 
-                <!-- ─── CERTIFICATE OF PROVENANCE ───
-                     Museum-certificate keepsake. page-break-before forces a
-                     fresh page so the cert is never split or pushed by
-                     residual space from the previous section. -->
-                <section style="page-break-before:always;break-before:page;padding:24px 36px;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
-                    <div class="report-keep" style="position:relative;border:2px solid ${P.navy};padding:30px 28px 28px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
-                        <!-- Decorative inner gold rule -->
-                        <div style="position:absolute;top:6px;left:6px;right:6px;bottom:6px;border:1px solid ${P.gold};pointer-events:none;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+                    <div style="flex:1;"></div>
 
-                        <div style="text-align:center;position:relative;">
-                            <!-- Top flourish -->
-                            <div style="font-family:'Playfair Display',serif;font-size:18pt;color:${P.gold};letter-spacing:2px;line-height:1;-webkit-print-color-adjust:exact;print-color-adjust:exact;">✦ ✦ ✦</div>
-                            <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};letter-spacing:5px;text-transform:uppercase;font-weight:600;margin-top:14px;">Certificate</div>
-                            <div style="font-family:'Playfair Display',serif;font-size:28pt;color:${P.navy};font-weight:600;letter-spacing:-0.5px;line-height:1.1;margin-top:2px;">of Provenance</div>
-                            <div style="width:60px;height:1.5px;background:${P.gold};margin:14px auto 18px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
-
-                            <!-- Body -->
-                            <div style="font-family:'Playfair Display',serif;font-size:11.5pt;color:${P.charcoal};line-height:1.65;font-style:italic;max-width:520px;margin:0 auto;">
-                                This certifies that the home of
-                            </div>
-                            <div style="font-family:'Playfair Display',serif;font-size:26pt;color:${P.navy};font-weight:600;letter-spacing:-0.3px;margin-top:8px;line-height:1.15;">${customerName}</div>
-                            ${customerAddress ? `<div style="font-family:'Playfair Display',serif;font-style:italic;font-size:11pt;color:${P.muted};margin-top:4px;">${customerAddress}</div>` : ''}
-                            <div style="font-family:'Playfair Display',serif;font-size:11.5pt;color:${P.charcoal};line-height:1.65;font-style:italic;max-width:520px;margin:14px auto 0;">
-                                has been authentically painted, finished, and lovingly cared for by Northern Star Painters — and that this report is the official record of every brush, every color, and every coat.
-                            </div>
-
-                            <!-- Stat strip -->
-                            <div style="margin-top:22px;display:grid;grid-template-columns:repeat(${[stats.completedAt || report.createdAt, stats.areaCount || palette.length, stats.totalHours, stats.gallonsUsed].filter(v => v).length || 1}, 1fr);gap:10px;max-width:560px;margin-left:auto;margin-right:auto;">
-                                ${[
-                                    [completedAtStr || null, 'Completed'],
-                                    [(stats.areaCount || palette.length) || null, 'Areas'],
-                                    [stats.totalHours ? fmtNum(stats.totalHours) + ' hrs' : null, 'Craftsmanship'],
-                                    [stats.gallonsUsed ? stats.gallonsUsed + ' gal' : null, 'Premium Paint'],
-                                ].filter(([v]) => v).map(([v, l]) => `<div style="background:${P.cream};border-radius:6px;padding:10px 8px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
-                                    <div style="font-family:'Inter',sans-serif;font-size:8pt;color:${P.gold};letter-spacing:1.5px;text-transform:uppercase;font-weight:600;">${l}</div>
-                                    <div style="font-family:'Playfair Display',serif;font-size:13pt;color:${P.navy};font-weight:600;margin-top:3px;line-height:1.1;">${v}</div>
-                                </div>`).join('')}
-                            </div>
-
-                            <!-- Signature row -->
-                            <div style="margin-top:30px;display:grid;grid-template-columns:1fr 1fr;gap:32px;max-width:520px;margin-left:auto;margin-right:auto;text-align:left;">
-                                <div>
-                                    <div style="border-bottom:1px solid ${P.navy};height:32px;font-family:'Playfair Display',serif;font-style:italic;font-size:18pt;color:${P.navy};display:flex;align-items:flex-end;padding-bottom:2px;">${cs.consultantName || 'Amir'}</div>
-                                    <div style="font-family:'Inter',sans-serif;font-size:8pt;color:${P.muted};letter-spacing:1.5px;text-transform:uppercase;margin-top:4px;font-weight:600;">Signed, ${cs.consultantTitle || 'Project Lead'}</div>
-                                </div>
-                                <div>
-                                    <div style="border-bottom:1px solid ${P.navy};height:32px;font-family:'Playfair Display',serif;font-size:11pt;color:${P.charcoal};display:flex;align-items:flex-end;padding-bottom:4px;">${project.assignedCrewLeader || project.actuals?.crewLeader || 'NSP Crew'}</div>
-                                    <div style="font-family:'Inter',sans-serif;font-size:8pt;color:${P.muted};letter-spacing:1.5px;text-transform:uppercase;margin-top:4px;font-weight:600;">Hand of the Crew Lead</div>
-                                </div>
-                            </div>
-
-                            <!-- Seal -->
-                            <div style="margin:28px auto 0;width:90px;height:90px;border:2px solid ${P.gold};border-radius:50%;display:flex;align-items:center;justify-content:center;background:${P.cream};-webkit-print-color-adjust:exact;print-color-adjust:exact;">
-                                <div style="text-align:center;">
-                                    <div style="font-family:'Playfair Display',serif;font-size:14pt;color:${P.navy};font-weight:600;line-height:1;">NSP</div>
-                                    <div style="font-family:'Inter',sans-serif;font-size:6.5pt;color:${P.gold};letter-spacing:1.5px;text-transform:uppercase;font-weight:600;margin-top:2px;">Verified</div>
-                                </div>
-                            </div>
-
-                            <!-- Footer reference -->
-                            <div style="margin-top:18px;font-family:'Inter',sans-serif;font-size:8.5pt;color:${P.muted};letter-spacing:2px;text-transform:uppercase;">${reportNum}${projectNum ? ' · Project ' + projectNum : ''}</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:64px;width:100%;max-width:5in;">
+                        <div style="text-align:center;">
+                            <div class="signature-script" style="font-size:32pt;color:var(--ink);line-height:1;">${consultantName}</div>
+                            <div style="height:1px;background:var(--ink);margin-top:8px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+                            <div class="smallcaps" style="font-size:9px;color:var(--ink-soft);margin-top:8px;">Signed, ${consultantTitle}</div>
+                        </div>
+                        <div style="text-align:center;">
+                            <div class="signature-script" style="font-size:32pt;color:var(--ink);line-height:1;">${crewLeader}</div>
+                            <div style="height:1px;background:var(--ink);margin-top:8px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+                            <div class="smallcaps" style="font-size:9px;color:var(--ink-soft);margin-top:8px;">Hand of the Crew Lead</div>
                         </div>
                     </div>
-                </section>
 
-                <!-- ─── REVIEW REQUEST (Google) ─── -->
-                ${(() => {
-                    // Use the configured Google profile URL; fall back to a
-                    // Google search for the company name so the QR is never
-                    // missing on a customer-facing report.
-                    const configured = (cs.googleReviewUrl || '').trim();
-                    const companyName = (cs.companyName || 'Northern Star Painters').trim();
-                    const fallback = `https://www.google.com/search?q=${encodeURIComponent(companyName + ' reviews')}`;
-                    const reviewUrl = configured || fallback;
-                    const qr = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&color=1A2B4A&bgcolor=FAF7F2&data=${encodeURIComponent(reviewUrl)}`;
-                    return `<section style="padding:32px 56px 24px;background:#fff;text-align:center;">
-                        <div class="report-keep">
-                        ${sectionHead('Share the Love', `We'd Love Your Google Review`)}
-                        <div style="max-width:520px;margin:0 auto;font-family:'Playfair Display',serif;font-size:13pt;color:${P.charcoal};line-height:1.55;font-style:italic;">Loved your experience with us? A few sentences on Google means the world — and helps another homeowner find their painter.</div>
-                        <div style="margin:22px auto 16px;max-width:560px;background:${P.cream};border:1px solid ${P.line};border-radius:12px;padding:22px 24px;display:grid;grid-template-columns:160px 1fr;gap:22px;align-items:center;text-align:left;">
-                            <img src="${qr}" alt="Scan to leave a Google review" style="display:block;width:160px;height:160px;border-radius:8px;background:#fff;padding:6px;border:1px solid ${P.line};">
-                            <div>
-                                <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:6px;">Scan with your phone</div>
-                                <div style="font-family:'Playfair Display',serif;font-size:20pt;color:${P.navy};font-weight:600;line-height:1.1;margin-bottom:8px;">Leave us a Google review</div>
-                                <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.text};line-height:1.5;margin-bottom:10px;">Open your camera, point at the code — two minutes is all it takes.</div>
-                                <a href="${reviewUrl}" target="_blank" rel="noopener" style="display:inline-block;font-family:'Inter',sans-serif;font-size:10pt;color:#fff;background:${P.navy};-webkit-print-color-adjust:exact;print-color-adjust:exact;text-decoration:none;font-weight:600;padding:8px 14px;border-radius:6px;letter-spacing:0.5px;">⭐ Leave a review →</a>
-                            </div>
-                        </div>
-                        </div>
-                        <div class="report-keep" style="background:${P.cream};border-radius:8px;padding:14px 20px;max-width:480px;margin:14px auto 0;">
-                            <div style="font-family:'Inter',sans-serif;font-size:9pt;color:${P.gold};letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:4px;">Refer a Friend</div>
-                            <div style="font-family:'Playfair Display',serif;font-size:16pt;color:${P.navy};font-weight:600;">$100 off their next project — and yours.</div>
-                            <div style="font-family:'Inter',sans-serif;font-size:10pt;color:${P.text};margin-top:4px;">Share this report. When they book, you both save.</div>
-                        </div>
-                    </section>`;
-                })()}
-
-                <!-- ─── THANK YOU ─── -->
-                <section class="report-keep" style="padding:48px 56px 44px;background:${P.cream};-webkit-print-color-adjust:exact;print-color-adjust:exact;text-align:center;">
-                    <div style="font-family:'Playfair Display',serif;font-size:44pt;color:${P.navy};font-weight:600;letter-spacing:-1px;line-height:1;">Thank You</div>
-                    <div style="width:60px;height:2px;background:${P.gold};margin:18px auto;"></div>
-                    <div style="max-width:520px;margin:0 auto;font-family:'Playfair Display',serif;font-size:13pt;color:${P.charcoal};line-height:1.6;font-style:italic;">
-                        ${ai.closingMessage || `We hope you love your home as much as we loved transforming it. Until next time — call us anytime, for anything.`}
+                    <div style="margin-top:24px;">
+                        <div class="smallcaps" style="font-size:10px;letter-spacing:0.3em;">NSP Verified</div>
+                        <div style="width:80px;height:1px;background:var(--gold);margin:6px auto 0;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
                     </div>
-                    <div style="margin-top:28px;font-family:'Playfair Display',serif;font-size:16pt;color:${P.navy};">— ${cs.consultantName || 'Amir'}</div>
-                    <div style="font-family:'Inter',sans-serif;font-size:9.5pt;color:${P.muted};letter-spacing:2px;text-transform:uppercase;margin-top:4px;font-weight:500;">${cs.consultantTitle || 'Project Specialist'}, ${cs.companyName || 'Northern Star Painters'}</div>
-                    <div style="margin-top:32px;font-family:'Inter',sans-serif;font-size:9pt;color:${P.muted};letter-spacing:1.5px;">${reportNum}</div>
-                </section>
+                    <div style="font-family:'Inter',sans-serif;font-size:10pt;color:var(--ink-soft);letter-spacing:0.18em;text-transform:uppercase;margin-top:14px;font-weight:500;">${reportNum}</div>
+                </div>
+            </div>`;
+
+            // ─── PAGE 10 — THANK YOU + REVIEW ──────────────────────────────
+            const reviewUrl = (cs.googleReviewUrl || '').trim()
+                || `https://www.google.com/search?q=${encodeURIComponent(companyName + ' reviews')}`;
+            const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&color=1A2B4A&bgcolor=EDE5D3&data=${encodeURIComponent(reviewUrl)}`;
+            const closingMessage = ai.closingMessage
+                || `We're honored to have brought your vision to life. Please don't hesitate to share your transformation with friends and neighbors who appreciate exceptional craftsmanship.`;
+            const thankYouPage = `
+            <div class="page page-navy">
+                <div class="page-inner">
+                    <div class="smallcaps" style="text-align:center;">Share the Love</div>
+                    <h2 style="font-family:'Playfair Display',serif;font-weight:700;font-size:32pt;color:var(--paper);line-height:1.05;letter-spacing:-0.01em;margin-top:8px;text-align:center;">We'd Love Your Google Review</h2>
+                    <div style="font-family:'Playfair Display',serif;font-style:italic;font-weight:400;font-size:14pt;color:var(--paper-soft);margin-top:10px;text-align:center;max-width:5in;margin-left:auto;margin-right:auto;">Loved your experience? A few sentences on Google means the world — and helps another homeowner find their painter.</div>
+
+                    <div style="background:var(--cream-deep);border-radius:12px;padding:28px;margin-top:20px;display:grid;grid-template-columns:1.8in 1fr;gap:24px;align-items:center;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                        <div style="background:var(--paper);border:1px solid var(--gold);border-radius:8px;padding:8px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                            <img src="${qrImg}" alt="Scan to leave a Google review" style="width:1.6in;height:1.6in;display:block;">
+                        </div>
+                        <div>
+                            <div class="smallcaps">Scan with your phone</div>
+                            <div style="font-family:'Playfair Display',serif;font-weight:600;font-size:18pt;color:var(--ink);margin-top:6px;line-height:1.15;">Leave us a Google review</div>
+                            <div style="font-family:'Inter',sans-serif;font-weight:400;font-size:11pt;color:var(--ink-soft);margin-top:8px;line-height:1.5;">Open your camera, point at the code — two minutes is all it takes.</div>
+                            <a href="${reviewUrl}" target="_blank" rel="noopener" style="display:inline-block;font-family:'Inter',sans-serif;font-weight:600;font-size:11pt;color:var(--paper);background:var(--navy-deep);text-decoration:none;padding:9px 16px;border-radius:6px;margin-top:12px;letter-spacing:0.04em;-webkit-print-color-adjust:exact;print-color-adjust:exact;">⭐ Leave a review →</a>
+                        </div>
+                    </div>
+
+                    <div class="gold-rule" style="margin-top:28px;"></div>
+                    <div style="text-align:center;margin-top:14px;">
+                        <div class="smallcaps">Refer a Friend</div>
+                        <div style="font-family:'Playfair Display',serif;font-weight:600;font-size:18pt;color:var(--paper);margin-top:6px;line-height:1.2;">$100 off their next project — and yours.</div>
+                        <div style="font-family:'Inter',sans-serif;font-weight:400;font-size:11pt;color:var(--paper-soft);margin-top:6px;">Share this report. When they book, you both save.</div>
+                    </div>
+                    <div class="gold-rule" style="margin-top:14px;"></div>
+
+                    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;margin-top:24px;">
+                        <h2 style="font-family:'Playfair Display',serif;font-weight:700;font-size:64pt;color:var(--paper);line-height:1.0;letter-spacing:-0.02em;">Thank You</h2>
+                        <div style="font-family:'Playfair Display',serif;font-style:italic;font-weight:400;font-size:15pt;color:var(--paper-soft);margin-top:18px;max-width:5.5in;line-height:1.6;">${closingMessage}</div>
+                        <div class="signature-script" style="font-size:42pt;color:var(--gold);margin-top:24px;line-height:1;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${consultantName}</div>
+                        <div class="smallcaps" style="color:var(--paper-soft);margin-top:8px;">${consultantTitle} · ${companyName}</div>
+                    </div>
+
+                    <div style="font-family:'Inter',sans-serif;font-size:9pt;color:var(--paper-soft);letter-spacing:0.18em;text-transform:uppercase;text-align:center;font-weight:500;">${reportNum}</div>
+                </div>
+            </div>`;
+
+            // Konami easter egg trigger lives outside the printable pages
+            const easterEgg = `<script>(function(){const seq=['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','b','a'];let i=0;const onKey=(e)=>{const k=e.key;if(k&&k.toLowerCase()===seq[i].toLowerCase()){i++;if(i===seq.length){const m=document.createElement('div');m.style.cssText='position:fixed;inset:0;background:rgba(26,43,74,0.95);color:#C9A961;display:flex;align-items:center;justify-content:center;font-family:\\'Playfair Display\\',serif;font-size:32px;text-align:center;padding:40px;z-index:99999;';m.innerHTML='<div>You found the easter egg ✨<br><span style=\\'font-size:18px;color:#fff;font-style:italic;\\'>Thank you for trusting us with your home.</span><br><br><button onclick=\\'this.parentElement.parentElement.remove()\\' style=\\'background:#C9A961;color:#1A2B4A;border:none;padding:10px 24px;border-radius:6px;font-family:Inter;font-size:14px;cursor:pointer;\\'>Close</button></div>';document.body.appendChild(m);i=0;}}else{i=0;}};document.addEventListener('keydown',onKey);})();<\/script>`;
+
+            return `${styleBlock}
+            <div class="report-doc">
+                ${coverPage}
+                ${notePage}
+                ${atGlancePage}
+                ${behindPage}
+                ${areaPages}
+                ${palettePage}
+                ${builtPage}
+                ${colorRefPage}
+                ${certificatePage}
+                ${thankYouPage}
             </div>
             ${easterEgg}`;
+
         }
 
         // ── Authoritative paint color database ──────────────────────────
