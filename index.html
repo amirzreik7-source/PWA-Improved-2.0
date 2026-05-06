@@ -147,7 +147,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v61</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v62</span>
             </div>
 
             <!-- Global Search -->
@@ -885,7 +885,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v61</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v62</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -10099,9 +10099,15 @@ Generate JSON with these EXACT keys:
                 .report-doc, .report-doc * { box-sizing: border-box; }
                 .report-doc h1, .report-doc h2, .report-doc h3, .report-doc h4 { margin: 0; }
                 .report-doc img { display: block; max-width: 100%; }
+                /* .page sizes itself to the print viewport, NOT to fixed
+                   inches. Fixed 8.5in × 11in caused phantom blank pages on
+                   any print pipeline that applies its own page margins
+                   (most do, even with @page margin:0). 100vh in print mode
+                   = exactly the printable area regardless of margins, so
+                   each .page fills its physical page exactly. */
                 .report-doc .page {
-                    width: 8.5in;
-                    height: 11in;
+                    width: 100%;
+                    height: 100vh;
                     page-break-after: always;
                     break-after: page;
                     position: relative;
@@ -10112,6 +10118,15 @@ Generate JSON with these EXACT keys:
                     print-color-adjust: exact;
                 }
                 .report-doc .page:last-child { page-break-after: auto; break-after: auto; }
+                /* On screen the print viewport is whatever the browser
+                   window is, so fix dimensions visually so the preview
+                   resembles a real page. */
+                @media screen {
+                    .report-doc .page {
+                        width: 8.5in;
+                        height: 11in;
+                    }
+                }
                 .report-doc .page-cream { background: var(--cream); color: var(--ink); }
                 .report-doc .page-navy  { background: var(--navy);  color: var(--paper); }
                 .report-doc .page-cover { background: var(--navy-deep); color: var(--paper); }
@@ -10145,6 +10160,15 @@ Generate JSON with these EXACT keys:
                     #reportContent .report-doc .page {
                         margin: 18px auto;
                         box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+                    }
+                }
+                /* Hard reset for print — guarantees the screen-only margin
+                   above never leaks into the PDF if the print pipeline
+                   somehow applies screen styles too. */
+                @media print {
+                    #reportContent .report-doc .page {
+                        margin: 0 !important;
+                        box-shadow: none !important;
                     }
                 }
             </style>`;
@@ -10283,11 +10307,19 @@ Generate JSON with these EXACT keys:
                     <h2 style="font-family:'Playfair Display',serif;font-weight:700;font-size:52pt;color:var(--paper);line-height:1.0;letter-spacing:-0.01em;margin-top:8px;">Project Overview</h2>
                     <div style="font-family:'Playfair Display',serif;font-style:italic;font-weight:400;font-size:18pt;color:var(--paper-soft);margin-top:10px;">A record of every coat, every color, every hour.</div>
                     <div class="gold-rule" style="margin-top:20px;"></div>
-                    <div style="flex:1;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:24px 32px;margin-top:36px;align-content:center;">
-                        ${statCells.map(([label, value]) => `<div style="display:flex;flex-direction:column;justify-content:flex-end;">
-                            <div style="font-family:'Playfair Display',serif;font-weight:700;font-size:54pt;color:var(--gold);line-height:0.95;letter-spacing:-0.02em;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${value}</div>
-                            <div style="font-family:'Inter',sans-serif;font-weight:600;font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:var(--paper-soft);margin-top:8px;">${label}</div>
-                        </div>`).join('')}
+                    <div style="flex:1;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:20px 28px;margin-top:32px;align-content:center;">
+                        ${statCells.map(([label, value]) => {
+                            const valStr = String(value);
+                            // Long text values (dates, project numbers, type
+                            // names) get smaller font + wrap. Short numerics
+                            // stay big for the "magazine number" feel.
+                            const isLongText = valStr.length > 6 && /[a-zA-Z]/.test(valStr);
+                            const fontSize = isLongText ? '24pt' : '40pt';
+                            return `<div style="display:flex;flex-direction:column;justify-content:flex-end;min-width:0;">
+                                <div style="font-family:'Playfair Display',serif;font-weight:700;font-size:${fontSize};color:var(--gold);line-height:0.95;letter-spacing:-0.01em;word-break:break-word;overflow-wrap:break-word;-webkit-print-color-adjust:exact;print-color-adjust:exact;">${valStr}</div>
+                                <div style="font-family:'Inter',sans-serif;font-weight:600;font-size:9.5px;letter-spacing:0.18em;text-transform:uppercase;color:var(--paper-soft);margin-top:8px;">${label}</div>
+                            </div>`;
+                        }).join('')}
                     </div>
                     <div class="gold-rule" style="margin-top:24px;"></div>
                     <div style="font-family:'Playfair Display',serif;font-style:italic;font-weight:400;font-size:14pt;color:var(--paper-soft);margin-top:14px;text-align:center;">"${statTagline}"</div>
@@ -10406,14 +10438,24 @@ Generate JSON with these EXACT keys:
                     <div style="width:60px;height:1px;background:var(--gold);margin:18px auto 0;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
 
                     <div style="flex:1;display:flex;flex-direction:column;justify-content:center;">
-                        <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:36px 56px;margin:0 auto;max-width:6in;">
-                            ${paletteSwatches.map(s => `<div style="text-align:center;width:2.8in;">
-                                <div style="width:2.8in;height:2.8in;border-radius:50%;background:${s.hex};box-shadow:0 4px 16px rgba(0,0,0,0.25);-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
-                                <div style="font-family:'Playfair Display',serif;font-weight:600;font-size:18pt;color:var(--paper);margin-top:14px;line-height:1.15;">${s.color}</div>
-                                ${s.code ? `<div style="font-family:'Inter',sans-serif;font-size:11pt;color:var(--paper-soft);margin-top:2px;">${s.code}</div>` : ''}
-                                ${s.brand ? `<div class="smallcaps" style="margin-top:6px;font-size:9px;">${s.brand}</div>` : ''}
-                            </div>`).join('')}
-                        </div>
+                        ${(() => {
+                            // Sizing adapts to color count so circles always
+                            // fit inside the 6.8in safe area.
+                            //  ≤2 colors: huge (2.8in), single row
+                            //  3 colors:  large (2.0in), single row of 3
+                            //  4–6 colors: medium (1.8in), 3-across × 2-row grid
+                            const n = paletteSwatches.length;
+                            const dia = n <= 2 ? '2.8in' : n === 3 ? '2.0in' : '1.8in';
+                            const labelSize = n <= 3 ? '18pt' : '14pt';
+                            return `<div style="display:flex;flex-wrap:wrap;justify-content:center;gap:32px 40px;margin:0 auto;max-width:6.4in;">
+                                ${paletteSwatches.map(s => `<div style="text-align:center;width:${dia};">
+                                    <div style="width:${dia};height:${dia};border-radius:50%;background:${s.hex};box-shadow:0 4px 16px rgba(0,0,0,0.25);-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+                                    <div style="font-family:'Playfair Display',serif;font-weight:600;font-size:${labelSize};color:var(--paper);margin-top:12px;line-height:1.15;">${s.color}</div>
+                                    ${s.code ? `<div style="font-family:'Inter',sans-serif;font-size:10pt;color:var(--paper-soft);margin-top:2px;">${s.code}</div>` : ''}
+                                    ${s.brand ? `<div class="smallcaps" style="margin-top:5px;font-size:9px;">${s.brand}</div>` : ''}
+                                </div>`).join('')}
+                            </div>`;
+                        })()}
 
                         ${ai.colorStory ? `<div style="margin:48px auto 0;max-width:5.5in;border-left:3px solid var(--gold);padding-left:20px;text-align:left;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
                             <div style="font-family:'Playfair Display',serif;font-style:italic;font-weight:400;font-size:14pt;line-height:1.7;color:var(--paper);">${ai.colorStory}</div>
@@ -10435,48 +10477,48 @@ Generate JSON with these EXACT keys:
             <div class="page page-cream">
                 <div class="page-inner">
                     <div class="smallcaps">Our Promise</div>
-                    <h2 style="font-family:'Playfair Display',serif;font-weight:700;font-size:44pt;color:var(--ink);line-height:1.0;letter-spacing:-0.01em;margin-top:8px;">Built to Last</h2>
+                    <h2 style="font-family:'Playfair Display',serif;font-weight:700;font-size:36pt;color:var(--ink);line-height:1.0;letter-spacing:-0.01em;margin-top:6px;">Built to Last</h2>
 
-                    <div style="text-align:center;margin-top:18px;">
-                        <div style="font-family:'Playfair Display',serif;font-weight:700;font-size:120pt;color:var(--gold);line-height:0.95;-webkit-print-color-adjust:exact;print-color-adjust:exact;">2</div>
-                        <div class="smallcaps" style="color:var(--ink);font-size:11px;margin-top:-6px;">Year Workmanship Warranty</div>
-                        <div style="font-family:'Playfair Display',serif;font-style:italic;font-weight:400;font-size:14pt;color:var(--ink-soft);margin-top:10px;">We stand behind every brush stroke.</div>
+                    <div style="text-align:center;margin-top:8px;">
+                        <div style="font-family:'Playfair Display',serif;font-weight:700;font-size:80pt;color:var(--gold);line-height:0.9;-webkit-print-color-adjust:exact;print-color-adjust:exact;">2</div>
+                        <div class="smallcaps" style="color:var(--ink);font-size:10.5px;margin-top:-2px;">Year Workmanship Warranty</div>
+                        <div style="font-family:'Playfair Display',serif;font-style:italic;font-weight:400;font-size:13pt;color:var(--ink-soft);margin-top:6px;">We stand behind every brush stroke.</div>
                     </div>
 
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:18px;">
-                        <div style="background:var(--cream-deep);border-radius:8px;padding:20px 22px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
-                            <div class="smallcaps" style="margin-bottom:10px;">Warranty Includes</div>
-                            <div style="font-family:'Inter',sans-serif;font-weight:400;font-size:11.5pt;color:var(--ink);line-height:1.85;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px;">
+                        <div style="background:var(--cream-deep);border-radius:8px;padding:14px 18px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                            <div class="smallcaps" style="margin-bottom:6px;">Warranty Includes</div>
+                            <div style="font-family:'Inter',sans-serif;font-weight:400;font-size:10.5pt;color:var(--ink);line-height:1.7;">
                                 Paint adhesion<br>Peeling, bubbling, flaking<br>Workmanship issues<br>Color uniformity
                             </div>
                         </div>
-                        <div style="background:var(--cream-deep);border-radius:8px;padding:20px 22px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
-                            <div class="smallcaps" style="margin-bottom:10px;">Premium Materials</div>
-                            <div style="font-family:'Inter',sans-serif;font-weight:400;font-size:11.5pt;color:var(--ink);line-height:1.85;">
+                        <div style="background:var(--cream-deep);border-radius:8px;padding:14px 18px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                            <div class="smallcaps" style="margin-bottom:6px;">Premium Materials</div>
+                            <div style="font-family:'Inter',sans-serif;font-weight:400;font-size:10.5pt;color:var(--ink);line-height:1.7;">
                                 Decades of lasting beauty<br>Washable, fade-resistant<br>Mold &amp; mildew resistant<br>Low VOC, family-safe
                             </div>
                         </div>
                     </div>
 
-                    <div style="background:var(--navy);color:var(--paper);border-radius:6px;padding:14px 22px;margin-top:14px;font-family:'Inter',sans-serif;font-size:11.5pt;font-weight:500;text-align:center;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                    <div style="background:var(--navy);color:var(--paper);border-radius:6px;padding:10px 18px;margin-top:10px;font-family:'Inter',sans-serif;font-size:10.5pt;font-weight:500;text-align:center;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
                         Need a touch-up? Call us first. ${phone ? `&nbsp; ${phone} &nbsp;·&nbsp;` : ''} ${email}
                     </div>
 
-                    <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-top:32px;">
-                        <div style="height:1px;width:80px;background:var(--gold);-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+                    <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-top:18px;">
+                        <div style="height:1px;width:64px;background:var(--gold);-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
                         <div style="font-family:'Playfair Display',serif;font-style:italic;font-size:11pt;color:var(--ink-soft);">Care &amp; Keeping</div>
-                        <div style="height:1px;width:80px;background:var(--gold);-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+                        <div style="height:1px;width:64px;background:var(--gold);-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
                     </div>
 
-                    <div style="text-align:center;margin-top:18px;">
-                        <h3 style="font-family:'Playfair Display',serif;font-weight:700;font-size:32pt;color:var(--ink);line-height:1.0;">Maintenance Guide</h3>
+                    <div style="text-align:center;margin-top:10px;">
+                        <h3 style="font-family:'Playfair Display',serif;font-weight:700;font-size:24pt;color:var(--ink);line-height:1.0;">Maintenance Guide</h3>
                     </div>
 
-                    <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:14px;margin-top:18px;">
-                        ${careCards.map(([icon, title, desc]) => `<div style="background:var(--cream-deep);border-radius:8px;padding:16px 18px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
-                            <div style="font-size:14pt;line-height:1;">${icon}</div>
-                            <div style="font-family:'Playfair Display',serif;font-weight:600;font-size:14pt;color:var(--ink);margin-top:6px;">${title}</div>
-                            <div style="font-family:'Inter',sans-serif;font-weight:400;font-size:11pt;line-height:1.5;color:var(--ink-soft);margin-top:4px;">${desc}</div>
+                    <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:12px;margin-top:12px;">
+                        ${careCards.map(([icon, title, desc]) => `<div style="background:var(--cream-deep);border-radius:8px;padding:12px 16px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                            <div style="font-size:13pt;line-height:1;">${icon}</div>
+                            <div style="font-family:'Playfair Display',serif;font-weight:600;font-size:13pt;color:var(--ink);margin-top:4px;">${title}</div>
+                            <div style="font-family:'Inter',sans-serif;font-weight:400;font-size:10pt;line-height:1.45;color:var(--ink-soft);margin-top:3px;">${desc}</div>
                         </div>`).join('')}
                     </div>
                 </div>
