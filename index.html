@@ -147,7 +147,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v64</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v65</span>
             </div>
 
             <!-- Global Search -->
@@ -885,7 +885,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v64</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v65</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -3114,24 +3114,104 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             showScreen('customerDetailScreen');
         };
 
+        // ─── Status sync helpers ───────────────────────────────────────────
+        // All status changes funnel through these. Single source of truth so
+        // projects + their landed-proposal jobs + linked siblings stay in lock-
+        // step regardless of which screen triggered the change. Replaces the
+        // earlier scatter where saveProfitActuals, updateProjectStatus, and
+        // updateLinkedGroupStatus each had their own (drifting) write logic.
+
+        // BFS through linkedProjects in both directions. A→B even without B→A
+        // still merges into one group, matching viewCustomerDetail's grouping.
+        function _resolveLinkedGroupIds(projectId) {
+            if (!projects.find(p => p.id === projectId)) return [projectId];
+            const seen = new Set();
+            const queue = [projectId];
+            while (queue.length > 0) {
+                const cur = queue.shift();
+                if (seen.has(cur)) continue;
+                seen.add(cur);
+                const p = projects.find(pr => pr.id === cur);
+                if (!p) continue;
+                (p.linkedProjects || []).forEach(lid => { if (!seen.has(lid)) queue.push(lid); });
+                projects.forEach(other => {
+                    if (!seen.has(other.id) && (other.linkedProjects || []).includes(cur)) {
+                        queue.push(other.id);
+                    }
+                });
+            }
+            return Array.from(seen);
+        }
+
+        // Write status (+ optional deadReason + history append) to every project
+        // in the group AND mirror to its landed proposal job. Returns failures.
+        async function _applyProjectStatus(projectIds, newStatus, opts = {}) {
+            const isoNow = opts.isoNow || new Date().toISOString();
+            const note = opts.note || '';
+            const deadReason = opts.deadReason || null;
+            const failures = [];
+
+            for (const pid of projectIds) {
+                try {
+                    const p = projects.find(pr => pr.id === pid);
+                    if (!p) { failures.push({ id: pid, reason: 'project not in cache' }); continue; }
+
+                    const history = (p.statusHistory || []).slice();
+                    history.push({ status: newStatus, date: isoNow, note });
+                    const updates = { status: newStatus, statusHistory: history };
+                    if (deadReason) updates.deadReason = deadReason;
+
+                    await updateDoc(doc(db, 'projects', pid), updates);
+                    p.status = newStatus;
+                    p.statusHistory = history;
+                    if (deadReason) p.deadReason = deadReason;
+
+                    if (p.landedProposalId) {
+                        try {
+                            await updateDoc(doc(db, 'jobs', p.landedProposalId), { status: newStatus });
+                            const job = jobs.find(j => j.id === p.landedProposalId);
+                            if (job) job.status = newStatus;
+                        } catch (e) {
+                            console.error('Failed to mirror status to job', p.landedProposalId, e);
+                        }
+                    }
+                } catch (e) {
+                    failures.push({ id: pid, reason: e.message || String(e) });
+                }
+            }
+            return failures;
+        }
+
+        // Reload caches + repaint derived views (dashboard counts, lead counts).
+        // Call this once after any status or actuals write so list views never
+        // show stale data.
+        async function _refreshAfterStatusChange() {
+            await Promise.all([loadProjects(), loadJobs()]);
+            if (typeof refreshDashboard === 'function') refreshDashboard();
+            if (typeof updateLeadCounts === 'function') updateLeadCounts();
+        }
+
         window.updateProjectStatus = async function(projectId, newStatus) {
             try {
-                const project = projects.find(p => p.id === projectId);
-                const history = project?.statusHistory || [];
-                history.push({ status: newStatus, date: new Date().toISOString(), note: '' });
+                const groupIds = _resolveLinkedGroupIds(projectId);
 
-                const updates = { status: newStatus, statusHistory: history };
-
+                let deadReason = null;
                 if (newStatus === 'Dead') {
-                    const reason = prompt('Why was this job lost? (Competition, Price, Timing, Changed mind, Other)');
-                    if (reason) updates.deadReason = reason;
+                    const promptMsg = groupIds.length > 1
+                        ? `Marking ${groupIds.length} linked projects as Dead. Why was this job lost? (Competition, Price, Timing, Changed mind, Other)`
+                        : 'Why was this job lost? (Competition, Price, Timing, Changed mind, Other)';
+                    deadReason = prompt(promptMsg);
+                    if (deadReason === null) return;
                 }
 
-                await updateDoc(doc(db, 'projects', projectId), updates);
-                await loadProjects();
+                const failures = await _applyProjectStatus(groupIds, newStatus, { deadReason });
+                await _refreshAfterStatusChange();
 
-                // Auto-trigger actuals when marking Complete
-                if (newStatus === 'Complete') {
+                if (failures.length > 0) {
+                    alert(`Updated ${groupIds.length - failures.length}/${groupIds.length} projects.\nFailures:\n${failures.map(f => '  ' + f.id + ': ' + f.reason).join('\n')}`);
+                }
+
+                if (newStatus === 'Complete' && failures.length === 0) {
                     if (confirm('Log job actuals now? (crew payout, material costs, etc.)')) {
                         openProjectActuals(projectId);
                         return;
@@ -3145,45 +3225,22 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
         // Cascade a status change across all members of a linked project group.
         // Used by the unified group card on the customer detail screen so a
         // single dropdown change updates all linked projects (interior + exterior
-        // halves of the same job, etc.) atomically. Falls back to per-project
-        // sequential updates if any one fails — partial success > nothing.
+        // halves of the same job, etc.) atomically.
         window.updateLinkedGroupStatus = async function(projectIds, newStatus) {
             if (!Array.isArray(projectIds) || projectIds.length === 0) return;
-            const isoNow = new Date().toISOString();
 
-            // Special handling for 'Dead': ask reason once, apply to all.
             let deadReason = null;
             if (newStatus === 'Dead') {
                 deadReason = prompt(`Marking ${projectIds.length} linked projects as Dead. Why was this job lost? (Competition, Price, Timing, Changed mind, Other)`);
-                if (deadReason === null) return; // user cancelled
+                if (deadReason === null) return;
             }
 
-            // Apply to each member sequentially. We don't use a Firestore writeBatch
-            // here because each project has its own statusHistory array we need to
-            // read-modify-write (batch can't read-then-write in one shot).
-            const failures = [];
-            for (const pid of projectIds) {
-                try {
-                    const p = projects.find(pr => pr.id === pid);
-                    if (!p) { failures.push({ id: pid, reason: 'project not found in cache' }); continue; }
-                    const history = p.statusHistory || [];
-                    history.push({ status: newStatus, date: isoNow, note: 'Linked group status change' });
-                    const updates = { status: newStatus, statusHistory: history };
-                    if (deadReason) updates.deadReason = deadReason;
-                    await updateDoc(doc(db, 'projects', pid), updates);
-                    p.status = newStatus;
-                    p.statusHistory = history;
-                    if (deadReason) p.deadReason = deadReason;
-                } catch (e) {
-                    failures.push({ id: pid, reason: e.message || String(e) });
-                }
-            }
+            const failures = await _applyProjectStatus(projectIds, newStatus, {
+                note: 'Linked group status change',
+                deadReason
+            });
+            await _refreshAfterStatusChange();
 
-            await loadProjects();
-
-            // Marking Complete on a linked group is an actuals event — offer to
-            // jump into actuals on the FIRST project in the group (which becomes
-            // the primary; saveProfitActuals's existing cascade handles the rest).
             if (newStatus === 'Complete' && failures.length === 0) {
                 if (confirm(`${projectIds.length} linked projects marked Complete. Log job actuals now?`)) {
                     openProjectActuals(projectIds[0]);
@@ -3194,13 +3251,8 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             const successCount = projectIds.length - failures.length;
             if (failures.length > 0) {
                 alert(`Updated ${successCount}/${projectIds.length} projects.\nFailures:\n${failures.map(f => '  ' + f.id + ': ' + f.reason).join('\n')}`);
-            } else {
-                // Brief confirmation. Re-render the customer detail to reflect new state.
-                console.log(`Linked group: ${successCount} projects updated to "${newStatus}"`);
             }
 
-            // Find the customer for the first project so we can re-render the
-            // customer detail screen they're currently looking at.
             const firstProj = projects.find(p => p.id === projectIds[0]);
             if (firstProj?.customerId) viewCustomerDetail(firstProj.customerId);
         };
@@ -8297,52 +8349,67 @@ Only return JSON, no other text.`;
                     }
 
                     // Symmetric linked save: write the SAME actuals copy to every
-                    // linked side (including this one). Clear any legacy actualsRef
-                    // pointers so dashboards can't re-hide a side. No more primary/
-                    // subsidiary asymmetry — every linked project carries its own
-                    // copy of the truth, and the dashboard groups them on read.
+                    // linked side AND mirror status (when markComplete) to each
+                    // side's landed proposal job. Single loop covers both projects
+                    // and jobs collections so the customer-detail "drift" badge
+                    // can never appear after this write.
                     const allIds = [projectId, ...(window._actualsLinkedProjectIds || []).filter(id => id !== projectId)];
+                    const isoNow = new Date().toISOString();
                     for (const pid of allIds) {
+                        const lp = projects.find(pr => pr.id === pid);
+
                         const update = { actuals, actualsRef: deleteField() };
-                        if (markComplete) update.status = 'Complete';
+                        if (markComplete) {
+                            update.status = 'Complete';
+                            const history = (lp?.statusHistory || []).slice();
+                            history.push({ status: 'Complete', date: isoNow, note: 'Marked complete via Log Actuals' });
+                            update.statusHistory = history;
+                        }
                         try {
                             await updateDoc(doc(db, 'projects', pid), update);
                         } catch (e) {
                             console.error('Failed to update linked project', pid, e);
                         }
-                        const lp = projects.find(pr => pr.id === pid);
                         if (lp) {
                             lp.actuals = actuals;
                             delete lp.actualsRef;
-                            if (markComplete) lp.status = 'Complete';
+                            if (markComplete) {
+                                lp.status = 'Complete';
+                                lp.statusHistory = update.statusHistory;
+                            }
+                        }
+
+                        // Mirror to THIS linked project's landed proposal (not just
+                        // the one the user opened the form on). Fixes the bug where
+                        // linked projects' job documents drifted out of sync.
+                        const proposalId = lp?.landedProposalId;
+                        if (proposalId) {
+                            const propUpdate = markComplete ? { actuals, status: 'Complete' } : { actuals };
+                            try {
+                                await updateDoc(doc(db, 'jobs', proposalId), propUpdate);
+                                const job = jobs.find(j => j.id === proposalId);
+                                if (job) { job.actuals = actuals; if (markComplete) job.status = 'Complete'; }
+                            } catch (e) {
+                                console.error('Failed to mirror to job', proposalId, e);
+                            }
                         }
                     }
 
-                    // Mirror to landed proposal of the project the user is on (for
-                    // standalone-job code paths that still read off the proposal).
-                    if (proj?.landedProposalId) {
-                        const propUpdate = markComplete ? { actuals, status: 'Complete' } : { actuals };
-                        try {
-                            await updateDoc(doc(db, 'jobs', proj.landedProposalId), propUpdate);
-                            const job = jobs.find(j => j.id === proj.landedProposalId);
-                            if (job) { job.actuals = actuals; if (markComplete) job.status = 'Complete'; }
-                        } catch (e) { console.error(e); }
-                    }
-
-                    await loadProjects();
+                    await _refreshAfterStatusChange();
                     const linkedCount = allIds.length - 1;
                     const linkedNote = linkedCount > 0 ? ` (synced to ${linkedCount} linked side${linkedCount === 1 ? '' : 's'})` : '';
                     alert(markComplete ? `Job completed! Actuals saved${linkedNote}.` : `Actuals saved${linkedNote}. Status unchanged.`);
                     viewProjectDetail(projectId);
                 } else {
-                    // Standalone job (legacy)
+                    // Standalone job (legacy — pre-project migration)
                     const jobId = window.currentJobIdForProfit;
                     if (!jobId) { alert('No job to save actuals for.'); return; }
-                    const jobUpdate = markComplete ? { actuals, status: 'Complete' } : { actuals };
                     if (markComplete) actuals.completedAt = new Date().toISOString();
+                    const jobUpdate = markComplete ? { actuals, status: 'Complete' } : { actuals };
                     await updateDoc(doc(db, 'jobs', jobId), jobUpdate);
                     const job = jobs.find(j => j.id === jobId);
                     if (job) { job.actuals = actuals; if (markComplete) job.status = 'Complete'; }
+                    await _refreshAfterStatusChange();
                     alert(markComplete ? 'Job completed! Actuals saved.' : 'Actuals saved. Status unchanged.');
                     showScreen('estimateStep6Screen');
                 }
