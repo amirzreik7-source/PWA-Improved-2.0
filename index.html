@@ -147,7 +147,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v65</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v66</span>
             </div>
 
             <!-- Global Search -->
@@ -885,7 +885,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v65</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v66</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -2677,6 +2677,19 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                         linkHTML += '<p style="color:#999;font-size:12px;">No other projects for this customer to link.</p>';
                     }
 
+                    // Combined-proposal shortcut from inside the project detail
+                    // — saves the user from having to back out to the customer
+                    // detail to find it. Same gating: every linked side must
+                    // have a landed proposal.
+                    if (linkedList.length > 0) {
+                        const _allMembers = [project, ...linkedList];
+                        const _allLanded = _allMembers.every(m => m.landedProposalId);
+                        const _missingNames = _allMembers.filter(m => !m.landedProposalId).map(m => m.projectName);
+                        linkHTML += _allLanded
+                            ? `<button class="btn btn-success btn-small" onclick="viewCombinedProposal('${projectId}')" style="width:100%;margin-top:8px;font-weight:600;">📄 View Combined Proposal PDF (${_allMembers.length} sides)</button>`
+                            : `<div style="margin-top:8px;padding:6px 10px;background:#f3f4f6;border:1px dashed #d1d5db;border-radius:6px;font-size:11px;color:#6b7280;text-align:center;">📄 Combined PDF available once each side has a landed proposal${_missingNames.length ? ` (missing: ${_missingNames.join(', ')})` : ''}</div>`;
+                    }
+
                     linkHTML += '</div>';
                     return linkHTML;
                 })()}
@@ -3190,6 +3203,179 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             if (typeof refreshDashboard === 'function') refreshDashboard();
             if (typeof updateLeadCounts === 'function') updateLeadCounts();
         }
+
+        // ─── Combined proposal (linked group) ──────────────────────────────
+        // When a customer hires us for both interior + exterior at once, we
+        // bill them on a single proposal that covers both. Rather than persist
+        // a third "combined" job document (which would drift from its parts),
+        // we render the combined proposal on demand from each linked project's
+        // landed proposal. Source of truth stays in the per-project records.
+        //
+        // The rendered HTML is uploaded to Firebase Storage and the URL stored
+        // on every linked project doc as `combinedProposalUrl`, so the future
+        // QB invoicer agent can attach it to the QB invoice without having to
+        // regenerate it.
+
+        // Pull each linked project's landed proposal, merge into one virtual
+        // estimate that the existing generateProposal renderer can consume.
+        // Sort: Interior first, Exterior second, others alphabetical — so the
+        // PDF always reads top-down in the same order.
+        function _buildCombinedEstimate(projectIds) {
+            const groupProjects = projectIds
+                .map(id => projects.find(p => p.id === id))
+                .filter(Boolean);
+            if (groupProjects.length < 2) {
+                throw new Error('Combined proposal needs at least two linked projects.');
+            }
+            const missing = groupProjects.filter(p => !p.landedProposalId);
+            if (missing.length > 0) {
+                throw new Error(`These linked projects don't have a landed proposal yet: ${missing.map(p => p.projectName).join(', ')}. Land a proposal on each side first.`);
+            }
+            const pairs = groupProjects.map(p => {
+                const prop = jobs.find(j => j.id === p.landedProposalId);
+                if (!prop) throw new Error(`Landed proposal not found in cache for ${p.projectName}. Try refreshing.`);
+                return { proj: p, prop };
+            });
+
+            const order = { 'Interior': 0, 'Exterior': 1 };
+            pairs.sort((a, b) => {
+                const aO = order[a.proj.jobType] ?? 2;
+                const bO = order[b.proj.jobType] ?? 2;
+                if (aO !== bO) return aO - bO;
+                return (a.proj.projectName || '').localeCompare(b.proj.projectName || '');
+            });
+
+            // Tag every room with which project it came from. The renderer
+            // inserts a section divider whenever this tag changes.
+            const combinedRooms = [];
+            pairs.forEach(({ proj, prop }) => {
+                (prop.rooms || []).forEach(room => {
+                    combinedRooms.push({
+                        ...room,
+                        _sourceProjectId: proj.id,
+                        _sourceProjectName: proj.projectName,
+                        _sourceProjectNumber: proj.jobNumber,
+                        _sourceJobType: proj.jobType
+                    });
+                });
+            });
+
+            const jobTypes = [...new Set(pairs.map(p => p.proj.jobType).filter(Boolean))];
+            const combinedJobType = jobTypes.length > 1 ? 'Combined' : (jobTypes[0] || 'Combined');
+
+            // Combined discount = sum of per-project discount amounts, shown
+            // as one line. Per the design decision in the PR — keeps the
+            // customer-facing PDF clean, per-project records stay independent.
+            const sumDiscount = pairs.reduce((s, x) => s + (x.prop.discountAmount || 0), 0);
+
+            return {
+                customerId: pairs[0].prop.customerId,
+                customerName: pairs[0].prop.customerName,
+                jobName: pairs.map(x => x.proj.projectName).join(' + '),
+                jobType: combinedJobType,
+                profileId: pairs[0].prop.profileId,
+                projectId: pairs[0].proj.id,
+                proposalLabel: 'Combined',
+                rooms: combinedRooms,
+                basePrice: pairs.reduce((s, x) => s + (x.prop.basePrice || x.prop.grandTotal || 0), 0),
+                priceOverride: false,
+                discountType: sumDiscount > 0 ? 'amount' : null,
+                discountValue: sumDiscount,
+                discountName: 'Combined Discount',
+                discountAmount: sumDiscount,
+                credits: pairs.flatMap(x => x.prop.credits || []),
+                changeOrders: pairs.flatMap(x => (x.prop.changeOrders || []).map(co => ({
+                    ...co,
+                    _sourceProjectName: x.proj.projectName
+                }))),
+                changeOrdersTotal: pairs.reduce((s, x) => s + (x.prop.changeOrdersTotal || 0), 0),
+                projectSummaryNotes: pairs.map(x => x.prop.projectSummaryNotes).filter(Boolean).join('\n\n'),
+                totalLabor: pairs.reduce((s, x) => s + (x.prop.totalLabor || 0), 0),
+                totalMaterials: pairs.reduce((s, x) => s + (x.prop.totalMaterials || 0), 0),
+                grandTotal: pairs.reduce((s, x) => s + (x.prop.grandTotal || 0), 0),
+                companySignature: null,
+                customerSignature: null,
+                _combined: true,
+                _combinedProjectIds: pairs.map(x => x.proj.id),
+                _combinedSources: pairs.map(x => ({
+                    projectId: x.proj.id,
+                    projectName: x.proj.projectName,
+                    projectNumber: x.proj.jobNumber,
+                    jobType: x.proj.jobType,
+                    basePrice: x.prop.basePrice || x.prop.grandTotal || 0,
+                    discountAmount: x.prop.discountAmount || 0,
+                    changeOrdersTotal: x.prop.changeOrdersTotal || 0
+                }))
+            };
+        }
+
+        // After the proposal HTML is rendered, snapshot it to Firebase Storage
+        // and write the URL onto every linked project doc. The QB agent reads
+        // `combinedProposalUrl` from any side of the linked group when it
+        // needs to attach a PDF to the QB invoice — no regeneration required.
+        // Stable filename per group (no timestamp), so each render overwrites
+        // the previous artifact and we don't accumulate orphans in Storage.
+        async function _uploadCombinedProposal(projectIds) {
+            try {
+                const html = document.getElementById('proposalContent')?.innerHTML;
+                if (!html) return null;
+                const sortedIds = [...projectIds].sort();
+                const groupKey = sortedIds[0];
+                const path = `users/${currentUser.uid}/proposals/combined-${groupKey}.html`;
+                const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Combined Proposal</title></head><body style="margin:0;padding:0;">${html}</body></html>`;
+                const blob = new Blob([fullHtml], { type: 'text/html' });
+                const sRef = ref(storage, path);
+                await uploadBytes(sRef, blob);
+                const url = await getDownloadURL(sRef);
+                const updateData = {
+                    combinedProposalUrl: url,
+                    combinedProposalUpdatedAt: new Date().toISOString(),
+                    combinedProposalGroupIds: sortedIds
+                };
+                for (const pid of projectIds) {
+                    try {
+                        await updateDoc(doc(db, 'projects', pid), updateData);
+                        const p = projects.find(pr => pr.id === pid);
+                        if (p) Object.assign(p, updateData);
+                    } catch (e) {
+                        console.error('Failed to write combinedProposalUrl on', pid, e);
+                    }
+                }
+                return url;
+            } catch (e) {
+                console.error('Combined proposal upload failed:', e);
+                return null;
+            }
+        }
+
+        window.viewCombinedProposal = async function(projectId) {
+            try {
+                const groupIds = _resolveLinkedGroupIds(projectId);
+                if (groupIds.length < 2) {
+                    alert('This project is not linked to other projects.');
+                    return;
+                }
+                const merged = _buildCombinedEstimate(groupIds);
+                currentEstimate = merged;
+                window._proposalReturnScreen = 'customerDetailScreen';
+                window.isEditMode = false;
+                window.editingJobId = null;
+                window._unsavedEstimate = false;
+
+                await generateProposal('customerDetailScreen');
+
+                // Background upload — fire-and-forget so the user sees the
+                // proposal immediately. The toast confirms when it lands.
+                _uploadCombinedProposal(groupIds).then(url => {
+                    if (url && typeof showToast === 'function') {
+                        showToast('Combined proposal saved to cloud', 'success');
+                    }
+                });
+            } catch (e) {
+                alert('Could not generate combined proposal: ' + e.message);
+                console.error(e);
+            }
+        };
 
         window.updateProjectStatus = async function(projectId, newStatus) {
             try {
@@ -4577,6 +4763,15 @@ Based on the journal entries, calculate and return this JSON (no other text):
                             ? `<div style="font-size:11px;color:#92400e;background:#fef3c7;padding:5px 8px;border-radius:4px;margin-top:6px;">⚠ Member statuses differ — selecting a status applies to all ${members.length} projects.</div>`
                             : '';
 
+                        // Combined-proposal button: only enabled when every linked
+                        // member has a landed proposal. Otherwise we'd be missing
+                        // half the scope and the customer-facing PDF would be wrong.
+                        const _allLanded = sortedMembers.every(m => m.landedProposalId);
+                        const _missingNames = sortedMembers.filter(m => !m.landedProposalId).map(m => m.projectName);
+                        const combinedProposalBtn = _allLanded
+                            ? `<button class="btn btn-success btn-small" onclick="event.stopPropagation();viewCombinedProposal('${sortedMembers[0].id}')" style="width:100%;margin-top:8px;font-weight:600;">📄 View Combined Proposal PDF</button>`
+                            : `<div style="margin-top:8px;padding:6px 10px;background:#f3f4f6;border:1px dashed #d1d5db;border-radius:6px;font-size:11px;color:#6b7280;text-align:center;">📄 Combined PDF available once each linked side has a landed proposal${_missingNames.length ? ` (missing: ${_missingNames.join(', ')})` : ''}</div>`;
+
                         html += `
                             <div class="room-card" style="border-left:4px solid ${sc};">
                                 <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">
@@ -4591,6 +4786,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
                                 </div>
                                 ${memberRows}
                                 ${driftNote}
+                                ${combinedProposalBtn}
                             </div>
                         `;
                     }
@@ -12271,21 +12467,49 @@ Generate JSON with these EXACT keys:
             const sectionTitle = (t) => `<div style="color:#1e3a8a;padding:6px 0 4px 0;margin:15px 0 0;font-weight:700;font-size:11pt;letter-spacing:0.5px;border-bottom:2px solid #2563eb">${t}</div><div style="height:2px;width:50px;background-color:#f4a624;margin-top:-2px;${pca}"></div>`;
             const priceRow = (label, val, extra='') => `<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:10pt;border-bottom:1px solid #e5e7eb;${extra}"><span>${label}</span><span>${val}</span></div>`;
 
-            // Contract terms (use cache — loaded at app init, no await needed)
-            let contractText;
-            if (window.contractTerms) {
-                contractText = currentEstimate.jobType === 'Interior' ? contractTerms.interiorContract : contractTerms.exteriorContract;
+            // Contract terms (use cache — loaded at app init, no await needed).
+            // Combined proposals covering both interior + exterior render BOTH
+            // contracts stacked, since the customer is signing for both scopes.
+            const _isCombined = currentEstimate._combined === true;
+            const _combinedJobTypes = _isCombined
+                ? [...new Set((currentEstimate._combinedSources || []).map(s => s.jobType).filter(Boolean))]
+                : [currentEstimate.jobType];
+            const _hasInterior = _combinedJobTypes.includes('Interior');
+            const _hasExterior = _combinedJobTypes.includes('Exterior');
+            let formattedContract;
+            if (_isCombined && _hasInterior && _hasExterior) {
+                const interiorText = (window.contractTerms?.interiorContract) || getDefaultInteriorContract();
+                const exteriorText = (window.contractTerms?.exteriorContract) || getDefaultExteriorContract();
+                formattedContract = `<h3 style="color:#1e3a8a;font-size:11pt;margin:10px 0 6px;border-left:3px solid #f4a624;padding-left:8px;${pca}">Interior Contract Terms</h3>` +
+                    formatContractTextForPDF(interiorText) +
+                    `<h3 style="color:#1e3a8a;font-size:11pt;margin:18px 0 6px;border-left:3px solid #f4a624;padding-left:8px;${pca}">Exterior Contract Terms</h3>` +
+                    formatContractTextForPDF(exteriorText);
             } else {
-                contractText = currentEstimate.jobType === 'Interior' ? getDefaultInteriorContract() : getDefaultExteriorContract();
+                let contractText;
+                if (window.contractTerms) {
+                    contractText = currentEstimate.jobType === 'Interior' ? contractTerms.interiorContract : contractTerms.exteriorContract;
+                } else {
+                    contractText = currentEstimate.jobType === 'Interior' ? getDefaultInteriorContract() : getDefaultExteriorContract();
+                }
+                formattedContract = formatContractTextForPDF(contractText);
             }
-            const formattedContract = formatContractTextForPDF(contractText);
 
             // Build project details table
             let detailsHTML = '';
             if (showBreakdown) {
                 const ths = `background-color:#1e3a8a;color:#fff;padding:6px;text-align:left;font-size:8.5pt;font-weight:600;${pca}`;
                 let rows = '';
+                let _lastSourceProjectId = null;
                 groupedRooms.forEach(room => {
+                    // Combined mode: insert a section divider when we cross
+                    // from one source project's rooms to the next, so the
+                    // customer can clearly see "INTERIOR — NSP-2026-001" vs
+                    // "EXTERIOR — NSP-2026-002" boundaries in the details table.
+                    if (_isCombined && room._sourceProjectId && room._sourceProjectId !== _lastSourceProjectId) {
+                        const labelParts = [room._sourceJobType, room._sourceProjectNumber, room._sourceProjectName].filter(Boolean);
+                        rows += `<tr><td colspan="6" style="background-color:#1e3a8a;color:#fff;padding:8px 10px;font-size:10pt;font-weight:700;letter-spacing:0.5px;${pca}">${labelParts.join(' — ').toUpperCase()}</td></tr>`;
+                        _lastSourceProjectId = room._sourceProjectId;
+                    }
                     const svcCount = (room.additionalServices || []).length;
                     const rowCount = room.surfaces.length + svcCount + 1;
                     const photos = room.photos || (room.photoData ? [room.photoData] : []);
@@ -12453,8 +12677,10 @@ Generate JSON with these EXACT keys:
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-top:15px;gap:15px;page-break-inside:avoid">
 <div style="max-width:260px">${co.logoUrl ? '<img src="'+co.logoUrl+'" style="max-width:220px;max-height:80px;display:block">' : '<div style="color:#f4a624;font-size:16px;letter-spacing:2px;'+pca+'">★ ★ ★ ★ ★</div><div style="font-size:18px;font-weight:800;color:#1e3a8a">'+(co.companyName||'Northern Star Painters')+'</div>'}</div>
 <div style="flex:1;max-width:260px;background-color:#e8f0fe;border:1px solid #c7d7f0;border-radius:6px;padding:10px 12px;${pca}">
-<div style="font-size:12pt;font-weight:700;color:#1e3a8a;margin:0 0 4px 0">${currentEstimate.jobType} ${window._crewMode ? 'Work Order' : 'Proposal'}</div>
-<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:8pt;border-bottom:1px solid #c7d7f0"><span style="font-weight:600;color:#1e3a8a">Proposal #</span><span style="color:#D4AF37;font-weight:600">${proposalNumber}</span></div>
+<div style="font-size:12pt;font-weight:700;color:#1e3a8a;margin:0 0 4px 0">${_isCombined ? 'Combined' : currentEstimate.jobType} ${window._crewMode ? 'Work Order' : 'Proposal'}</div>
+${_isCombined && currentEstimate._combinedSources?.length
+    ? currentEstimate._combinedSources.map(s => `<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:8pt;border-bottom:1px solid #c7d7f0"><span style="font-weight:600;color:#1e3a8a">${s.jobType || 'Project'} #</span><span style="color:#D4AF37;font-weight:600">${s.projectNumber || ''}</span></div>`).join('')
+    : `<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:8pt;border-bottom:1px solid #c7d7f0"><span style="font-weight:600;color:#1e3a8a">Proposal #</span><span style="color:#D4AF37;font-weight:600">${proposalNumber}</span></div>`}
 <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:8pt;border-bottom:1px solid #c7d7f0"><span style="font-weight:600;color:#1e3a8a">Date</span><span style="color:#D4AF37;font-weight:600">${date}</span></div>
 <div style="display:flex;justify-content:space-between;padding:2px 0;font-size:8pt;border-bottom:1px solid #c7d7f0"><span style="font-weight:600;color:#1e3a8a">Valid Until</span><span style="color:#D4AF37;font-weight:600">${validUntil}</span></div>
 ${customer.address ? '<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:8pt"><span style="font-weight:600;color:#1e3a8a">Address</span><span style="color:#D4AF37;font-weight:600;text-align:right;max-width:140px">'+customer.address+'</span></div>' : ''}
@@ -12489,7 +12715,7 @@ ${sectionTitle('PROJECT SUMMARY')}
 <ul>${groupedRooms.map(r=>{const parts=[...r.surfaces.map(s=>s.surfaceType||'Surface'),...(r.additionalServices||[]).map(svc=>svc.name)];return '<li><strong>'+r.name+'</strong>'+(parts.length?' ('+parts.join(', ')+')':'')+'</li>';}).join('')}</ul>
 ${projectNotes ? '<p style="margin-top:8px">'+projectNotes+'</p>' : ''}
 ${detailsHTML}
-${window._crewMode ? '' : sectionTitle(currentEstimate.jobType.toUpperCase()+' PAINTING CONTRACT TERMS')}
+${window._crewMode ? '' : sectionTitle((_isCombined ? 'PAINTING' : currentEstimate.jobType.toUpperCase()+' PAINTING')+' CONTRACT TERMS')}
 ${window._crewMode ? '' : formattedContract}
 ${window._crewMode ? '' : `<h2>MISCELLANEOUS</h2>
 <ul><li>Please review this proposal thoroughly. Items not explicitly mentioned are not covered.</li>
