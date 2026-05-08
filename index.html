@@ -147,7 +147,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v66</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v67</span>
             </div>
 
             <!-- Global Search -->
@@ -885,7 +885,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v66</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v67</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -10372,8 +10372,6 @@ Generate JSON with these EXACT keys:
                 .report-doc .page {
                     width: 8.5in;
                     height: 11in;
-                    page-break-after: always;
-                    break-after: page;
                     position: relative;
                     overflow: hidden;
                     page-break-inside: avoid;
@@ -10381,7 +10379,19 @@ Generate JSON with these EXACT keys:
                     -webkit-print-color-adjust: exact;
                     print-color-adjust: exact;
                 }
-                .report-doc .page:last-child { page-break-after: auto; break-after: auto; }
+                /* Page breaks happen BETWEEN consecutive .page siblings, not
+                   AFTER each one. page-break-after: always on every .page is
+                   the bug that produced 1:1 doubling (real page → blank →
+                   real page → blank...) for ~3 rebuild attempts: when .page
+                   is shorter than the physical printable area, the "after"
+                   break commits the partial physical page as blank then
+                   breaks to a fresh page for the next sibling. With
+                   break-before on the SECOND-and-later .pages, breaks fire
+                   exactly once per transition and only between content. */
+                .report-doc .page + .page {
+                    page-break-before: always;
+                    break-before: page;
+                }
                 .report-doc .page-cream { background: var(--cream); color: var(--ink); }
                 .report-doc .page-navy  { background: var(--navy);  color: var(--paper); }
                 .report-doc .page-cover { background: var(--navy-deep); color: var(--paper); }
