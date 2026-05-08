@@ -147,7 +147,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v67</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v68</span>
             </div>
 
             <!-- Global Search -->
@@ -885,7 +885,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v67</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v68</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -10435,14 +10435,21 @@ Generate JSON with these EXACT keys:
                         margin: 0 !important;
                         box-shadow: none !important;
                     }
-                    /* Safari (especially iOS) applies a ~0.5in residual
-                       page margin even when @page margin:0 is declared.
-                       Shrink the .page in print so it fits inside that
-                       reduced printable area — otherwise each .page
-                       overflows by ~0.5in and the overflow becomes a
-                       phantom page after every real page (10 → 20). */
+                    /* Safari residual margin compensation. Even with @page
+                       margin:0 AND user headers/footers turned off, Safari
+                       reserves ~1in (0.5in top + 0.5in bottom) for its own
+                       print mechanics. Headless Chrome doesn't — the same
+                       CSS produces 10 pages there but 20 in Safari, because
+                       any .page taller than Safari's printable area
+                       overflows half an inch onto a continuation page that
+                       then break-before kicks the next section past. .page
+                       at 10in (1in shorter than physical paper) fits inside
+                       Safari's true printable area so nothing overflows.
+                       Trade-off: full-bleed pages may show a thin white
+                       strip at the bottom in non-Safari browsers — the
+                       Safari fix takes priority since user prints there. */
                     .report-doc .page {
-                        height: 10.5in !important;
+                        height: 10in !important;
                     }
                 }
             </style>`;
