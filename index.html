@@ -147,7 +147,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v72</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v73</span>
             </div>
 
             <!-- Global Search -->
@@ -885,7 +885,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v72</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v73</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -10427,6 +10427,18 @@ Generate JSON with these EXACT keys:
                         box-shadow: 0 4px 24px rgba(0,0,0,0.18);
                     }
                 }
+                /* Mobile screen scaling. The .page is fixed at 8.5in
+                   (~816 CSS px) but phone viewports are ~375 CSS px,
+                   so a desktop-style report viewer would clip the right
+                   half. zoom: rescales the page so the full layout fits
+                   the phone width and the user can scroll vertically
+                   through real pages instead of horizontally through a
+                   clipped one. Supported in Safari iOS and Chromium. */
+                @media screen and (max-width: 900px) {
+                    #reportContent .report-doc .page {
+                        zoom: calc((100vw - 24px) / 8.5in);
+                    }
+                }
                 /* Hard reset for print — guarantees the screen-only margin
                    above never leaks into the PDF if the print pipeline
                    somehow applies screen styles too. */
@@ -10444,12 +10456,23 @@ Generate JSON with these EXACT keys:
                        overflows half an inch onto a continuation page that
                        then break-before kicks the next section past. .page
                        at 10in (1in shorter than physical paper) fits inside
-                       Safari's true printable area so nothing overflows.
-                       Trade-off: full-bleed pages may show a thin white
-                       strip at the bottom in non-Safari browsers — the
-                       Safari fix takes priority since user prints there. */
+                       Safari's true printable area so nothing overflows. */
                     .report-doc .page {
                         height: 10in !important;
+                    }
+                    /* iOS Safari has an even smaller printable area than
+                       macOS Safari — the URL/page-number footer plus the
+                       Home-indicator zone eat additional vertical space.
+                       At 10in the iOS print pipeline overflows and produces
+                       1:1 doubling (user reported 20 pages at 100% scale,
+                       needs to manually drop to 80% to fit). Mobile
+                       viewport detection via max-width:500px narrows this
+                       override to phone-print only; tablets keep the macOS
+                       desktop behavior. */
+                    @media (max-width: 500px) {
+                        .report-doc .page {
+                            height: 9.5in !important;
+                        }
                     }
                 }
             </style>`;
