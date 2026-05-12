@@ -147,7 +147,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v80</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v81</span>
             </div>
 
             <!-- Global Search -->
@@ -886,7 +886,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v80</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v81</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -6394,16 +6394,23 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 const profileColor = (mapping && typeof mapping === 'object') ? mapping.color : '';
                 const profileCoats = (mapping && typeof mapping === 'object') ? mapping.coats : 2;
 
+                // Industry-standard fallbacks when no profile mapping exists.
+                // Ceiling → Flat / 1 coat; trim-family → Semi-Gloss interior or
+                // Low Luster exterior / 1 coat; most exterior → Low Luster.
+                const ind = window._industryDefaults?.(surfaceType, jobType) || null;
                 if (profileProductId) {
                     document.getElementById('surfaceProduct').value = profileProductId;
                     updateSurfaceSheenDropdown(profileProductId);
-                    document.getElementById('surfaceSheen').value = profileSheen || '';
+                    document.getElementById('surfaceSheen').value = profileSheen || (ind?.sheen || '');
                 } else {
                     document.getElementById('surfaceProduct').value = '';
                     updateSurfaceSheenDropdown('');
+                    if (ind?.sheen) document.getElementById('surfaceSheen').value = ind.sheen;
                 }
                 document.getElementById('surfaceColor').value = profileColor || '';
-                document.getElementById('surfaceCoats').value = profileCoats || 2;
+                document.getElementById('surfaceCoats').value = (typeof profileCoats === 'number' && profileCoats > 0)
+                    ? profileCoats
+                    : (ind?.coats || 2);
                 // Reset primer
                 document.getElementById('usePrimer').checked = false;
                 document.getElementById('primerSection').classList.add('hidden');
@@ -6712,16 +6719,20 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 const profileCoats = (mapping && typeof mapping === 'object') ? mapping.coats : 2;
 
                 document.getElementById('surfaceQuantity').value = '';
+                // Industry-standard fallbacks layered under profile overrides.
+                const ind = window._industryDefaults?.(surfaceType, jobType) || null;
                 if (profileProductId) {
                     document.getElementById('surfaceProduct').value = profileProductId;
                     const product = window.products.find(p => p.id === profileProductId);
-                    document.getElementById('surfaceSheen').value = profileSheen || (product ? product.sheen : '');
+                    document.getElementById('surfaceSheen').value = profileSheen || (product ? product.sheen : '') || (ind?.sheen || '');
                 } else {
                     document.getElementById('surfaceProduct').value = '';
-                    document.getElementById('surfaceSheen').value = '';
+                    document.getElementById('surfaceSheen').value = ind?.sheen || '';
                 }
                 document.getElementById('surfaceColor').value = profileColor || '';
-                document.getElementById('surfaceCoats').value = profileCoats || 2;
+                document.getElementById('surfaceCoats').value = (typeof profileCoats === 'number' && profileCoats > 0)
+                    ? profileCoats
+                    : (ind?.coats || 2);
             }
 
             // Show modal
@@ -9282,21 +9293,58 @@ Rules:
 
         // Build initial colorPalette from the proposal's rooms (so the AI
         // already knows which areas to ask about). One entry per room.
+        // Industry-standard defaults for surface types when the proposal
+        // didn't fill them in (or when adding a brand-new surface in the
+        // estimate). Mirrors the contractor's actual standards:
+        //   Ceiling      → Flat / 1 coat
+        //   Interior trim-family → Semi-Gloss / 1 coat
+        //   Exterior trim-family → Low Luster / 1 coat
+        //   Most other exterior surfaces → Low Luster / 2 coats
+        // Returns {sheen, coats} OR null if no default applies.
+        window._industryDefaults = function(surfaceType, jobType) {
+            const lower = (surfaceType || '').toLowerCase();
+            const isExterior = /exterior/i.test(jobType || '');
+            if (lower === 'ceiling' || /\bceiling\b/.test(lower)) {
+                return { sheen: 'Flat', coats: 1 };
+            }
+            const isTrimFamily = /\btrim\b|baseboard|fascia|soffit|crown|chair[- ]?rail|window[- ]?trim|door[- ]?frame/.test(lower);
+            const isDoor = /\bdoor\b/.test(lower) && !/door[- ]?frame/.test(lower);
+            const isWindow = /\bwindow\b/.test(lower) && !/window[- ]?trim/.test(lower);
+            const isShutter = /shutter/.test(lower);
+            const isRailing = /railing/.test(lower);
+            const isGutter = /gutter/.test(lower);
+            if (isTrimFamily) {
+                return { sheen: isExterior ? 'Low Luster' : 'Semi-Gloss', coats: 1 };
+            }
+            if (isDoor || isWindow || isShutter || isRailing || isGutter) {
+                return { sheen: isExterior ? 'Low Luster' : 'Semi-Gloss', coats: 1 };
+            }
+            if (isExterior) {
+                return { sheen: 'Low Luster', coats: 2 };
+            }
+            return null;
+        };
+
         // Pull the actual painted surfaces off a proposal room and shape them
         // into the palette surface dict. Carries color + sheen + brand through
         // from the estimate so the contractor doesn't have to re-enter them.
-        function _surfacesFromProposalRoom(room) {
+        // When the proposal left a field blank, fill it with the industry-
+        // standard default for that surface type + job type so the report
+        // review starts in a sane place.
+        function _surfacesFromProposalRoom(room, jobType) {
             const surfaces = {};
+            const effectiveJobType = jobType || '';
             (room?.surfaces || []).forEach(s => {
                 if (!s || !s.surfaceType) return;
                 const product = (window.products || []).find(p => p.id === s.productId);
+                const defaults = window._industryDefaults(s.surfaceType, effectiveJobType) || {};
                 surfaces[s.surfaceType] = {
                     color: s.color || '',
                     code: '',
                     brand: product?.brand || '',
                     product: product?.name || '',
-                    finish: s.sheen || '',
-                    coats: s.coats || 2,
+                    finish: s.sheen || defaults.sheen || '',
+                    coats: s.coats || defaults.coats || 2,
                     hex: '',
                     _fromProposal: true,
                 };
@@ -9306,14 +9354,15 @@ Rules:
 
         function _seedColorPaletteFromProposal(proposal) {
             const rooms = (proposal?.rooms || []).filter(r => !r.deleted);
+            const jobType = proposal?.jobType || '';
             return rooms.map(r => ({
                 area: r.name || 'Area',
-                surfaces: _surfacesFromProposalRoom(r),
+                surfaces: _surfacesFromProposalRoom(r, jobType),
                 technique: '',
                 sqft: _computeRoomSqft(r),
                 tip: '',          // AI-generated later
                 completed: false, // operator can mark when done
-                _jobType: proposal?.jobType || '',
+                _jobType: jobType,
                 _sourceProjectId: '',
             }));
         }
@@ -9371,7 +9420,7 @@ Rules:
                         : baseName;
                     out.push({
                         area: finalName,
-                        surfaces: _surfacesFromProposalRoom(r),
+                        surfaces: _surfacesFromProposalRoom(r, jobType),
                         technique: '',
                         sqft: _computeRoomSqft(r),
                         tip: '',
@@ -9729,14 +9778,97 @@ RULES:
             </div>`;
         }
 
+        // Detect surfaces that appear in 2+ areas with identical values —
+        // operator's reality is that siding, soffit, fascia, windows, shutters
+        // are usually one color across the whole house. Returns:
+        //   grouped: { surfKey → {surf, areaIndices, areaNames} }
+        //   perArea: { areaIdx → [surfKey, ...] } — keys NOT in any group
+        function _groupPaletteSurfaces(palette) {
+            const instances = {}; // surfKey → [{areaIdx, surf}]
+            palette.forEach((area, idx) => {
+                Object.keys(area.surfaces || {}).forEach(key => {
+                    if (!instances[key]) instances[key] = [];
+                    instances[key].push({ areaIdx: idx, surf: area.surfaces[key] });
+                });
+            });
+            const grouped = {};
+            const perArea = {};
+            palette.forEach((_, idx) => { perArea[idx] = []; });
+            Object.entries(instances).forEach(([key, list]) => {
+                if (list.length < 2) {
+                    list.forEach(i => perArea[i.areaIdx].push(key));
+                    return;
+                }
+                const first = list[0].surf;
+                const allMatch = list.every(({ surf: s }) =>
+                    (s.color || '') === (first.color || '') &&
+                    (s.brand || '') === (first.brand || '') &&
+                    (s.code || '') === (first.code || '') &&
+                    (s.finish || '') === (first.finish || '') &&
+                    // Split-marker forces per-side rendering when operator
+                    // explicitly chose to set values differently per side.
+                    (s._splitMarker ?? null) === (first._splitMarker ?? null)
+                );
+                if (allMatch) {
+                    grouped[key] = {
+                        surf: first,
+                        areaIndices: list.map(i => i.areaIdx),
+                        areaNames: list.map(i => palette[i.areaIdx].area),
+                    };
+                } else {
+                    list.forEach(i => perArea[i.areaIdx].push(key));
+                }
+            });
+            return { grouped, perArea };
+        }
+
+        function _reviewGroupedSurfaceRow(surfKey, group, totalAreas) {
+            const surf = group.surf;
+            const has = surf && (surf.color || surf.finish || surf.brand);
+            const parts = [surf?.brand, surf?.color, surf?.code, surf?.finish].filter(Boolean);
+            const summary = parts.length ? parts.join(' · ') : '— blank —';
+            const summaryColor = has ? '#1A2B4A' : '#9ca3af';
+            const scopeLabel = group.areaIndices.length === totalAreas
+                ? `All ${totalAreas} ${totalAreas === 1 ? 'side' : 'sides'}`
+                : group.areaNames.join(' · ');
+            return `<div style="display:flex;align-items:center;gap:6px;padding:8px 10px;border:1px solid #c7d2fe;border-radius:6px;margin-bottom:4px;background:#fff;">
+                <div style="flex:1;min-width:0;cursor:pointer;" onclick="reportFlowEditGroupedSurface(${JSON.stringify(surfKey).replace(/"/g, '&quot;')})">
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <span style="font-size:12px;color:#3730a3;font-weight:600;">${_esc(_titleCase(surfKey))}</span>
+                        <span style="font-size:10px;color:#6366f1;background:#eef2ff;padding:1px 6px;border-radius:3px;letter-spacing:0.04em;">${_esc(scopeLabel)}</span>
+                    </div>
+                    <div style="font-size:12px;color:${summaryColor};font-style:${has ? 'normal' : 'italic'};margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_esc(summary)}</div>
+                </div>
+                <button onclick="reportFlowSplitGroupedSurface(${JSON.stringify(surfKey).replace(/"/g, '&quot;')})" title="Different per side" style="background:none;border:none;cursor:pointer;font-size:13px;padding:4px 6px;color:#6b7280;">⇶</button>
+                <button onclick="reportFlowRenameGroupedSurface(${JSON.stringify(surfKey).replace(/"/g, '&quot;')})" title="Rename" style="background:none;border:none;cursor:pointer;font-size:14px;padding:4px 6px;color:#6b7280;">✏️</button>
+                <button onclick="reportFlowRemoveGroupedSurface(${JSON.stringify(surfKey).replace(/"/g, '&quot;')})" title="Remove from all sides" style="background:none;border:none;cursor:pointer;font-size:16px;padding:4px 6px;color:#dc2626;">×</button>
+            </div>`;
+        }
+
         function _reportRenderParseReview() {
             const f = window._reportFlow;
             if (!f) return;
-            const rows = f.palette.map((area, idx) => {
-                const surfKeys = Object.keys(area.surfaces || {});
+            const totalAreas = f.palette.length;
+            const { grouped, perArea } = _groupPaletteSurfaces(f.palette);
+            const groupedKeys = Object.keys(grouped);
+
+            const groupedHTML = groupedKeys.length
+                ? `<div style="padding:12px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;margin-bottom:10px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <strong style="font-size:14px;color:#3730a3;">Same across the house</strong>
+                        <span style="font-size:11px;color:#6366f1;">Edit once, applies to all sides</span>
+                    </div>
+                    ${groupedKeys.map(k => _reviewGroupedSurfaceRow(k, grouped[k], totalAreas)).join('')}
+                </div>`
+                : '';
+
+            const areaRows = f.palette.map((area, idx) => {
+                const surfKeys = perArea[idx] || [];
                 const surfHTML = surfKeys.length
                     ? surfKeys.map(k => _reviewSurfaceRow(idx, k, area.surfaces[k])).join('')
-                    : `<div style="padding:8px 10px;font-size:12px;color:#9ca3af;font-style:italic;text-align:center;background:#fff;border:1px dashed #e5e7eb;border-radius:6px;">No surfaces yet — tap "+ Add surface" below.</div>`;
+                    : (groupedKeys.length
+                        ? '' // nothing per-side for this area; grouped covers it
+                        : `<div style="padding:8px 10px;font-size:12px;color:#9ca3af;font-style:italic;text-align:center;background:#fff;border:1px dashed #e5e7eb;border-radius:6px;">No surfaces yet — tap "+ Add surface" below.</div>`);
                 return `<div style="padding:12px;background:#FAF7F2;border:1px solid #e5e7eb;border-radius:10px;margin-bottom:10px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                         <strong style="font-size:15px;color:#1A2B4A;flex:1;cursor:pointer;" onclick="reportFlowRenameArea(${idx})">${_esc(area.area)}<span style="color:#9ca3af;font-size:11px;font-weight:400;margin-left:6px;">✏️ rename</span></strong>
@@ -9750,6 +9882,7 @@ RULES:
                     ${area.technique ? `<div style="margin-top:6px;padding:6px 8px;background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;font-size:11px;color:#92400e;"><strong>Technique:</strong> ${_esc(area.technique)}</div>` : ''}
                 </div>`;
             }).join('');
+            const rows = groupedHTML + areaRows;
 
             const card = `
                 <div id="reportParseReview" style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin:8px 0;">
@@ -9771,6 +9904,20 @@ RULES:
         }
         window._reportRenderParseReview = _reportRenderParseReview;
 
+        // Resolve "Same as walls/siding/X" → copy values from another surface
+        // in the same area. Returns the source surface OR null if not found.
+        function _resolveMatchKeyword(text, area) {
+            const m = (text || '').match(/^(?:same\s+as|match(?:es)?)\s+(.+)$/i);
+            if (!m) return null;
+            const wanted = m[1].trim().toLowerCase().replace(/[.!?]+$/, '');
+            const keys = Object.keys(area.surfaces || {});
+            const exact = keys.find(k => k.toLowerCase() === wanted);
+            if (exact) return { key: exact, surf: area.surfaces[exact] };
+            const contains = keys.find(k => k.toLowerCase().includes(wanted) || wanted.includes(k.toLowerCase()));
+            if (contains) return { key: contains, surf: area.surfaces[contains] };
+            return null;
+        }
+
         // ── Per-surface inline controls ───────────────────────────────
         window.reportFlowEditSurface = function(areaIdx, surfKey) {
             const f = window._reportFlow;
@@ -9778,15 +9925,25 @@ RULES:
             const area = f.palette[areaIdx];
             if (!area) return;
             const s = area.surfaces[surfKey] || {};
-            // Use AI parse on a single sentence the operator types — same
-            // engine as bulk free-form, just scoped to one surface.
             const current = [s.brand, s.color, s.code, s.finish].filter(Boolean).join(' ') || '(blank)';
-            const desc = prompt(`Edit ${_titleCase(surfKey)} on ${area.area}\n\nCurrent: ${current}\n\nDescribe it (e.g. "BM Hale Navy HC-154 semi-gloss"):`, current === '(blank)' ? '' : current);
+            // Hint at "same as" sources available in this area
+            const otherKeys = Object.keys(area.surfaces).filter(k => k !== surfKey);
+            const sameAsHint = otherKeys.length
+                ? `\n\nQuick: type "same as ${otherKeys[0]}" to copy from another surface.`
+                : '';
+            const desc = prompt(`Edit ${_titleCase(surfKey)} on ${area.area}\n\nCurrent: ${current}${sameAsHint}\n\nDescribe it (e.g. "BM Hale Navy HC-154 semi-gloss"):`, current === '(blank)' ? '' : current);
             if (desc === null) return;
             const text = desc.trim();
             if (!text) {
-                // Clear the surface
-                area.surfaces[surfKey] = { color: '', code: '', brand: '', finish: '', coats: 2, hex: '' };
+                area.surfaces[surfKey] = { color: '', code: '', brand: '', finish: '', coats: s.coats || 2, hex: '' };
+                _reportPersistDraft();
+                _reportRenderParseReview();
+                return;
+            }
+            // "Same as X" → copy from another surface in this area
+            const match = _resolveMatchKeyword(text, area);
+            if (match) {
+                area.surfaces[surfKey] = { ...match.surf, coats: s.coats || match.surf.coats || 2 };
                 _reportPersistDraft();
                 _reportRenderParseReview();
                 return;
@@ -9803,7 +9960,6 @@ RULES:
                 _reportPersistDraft();
                 _reportRenderParseReview();
             }).catch(() => {
-                // Fall back to whatever the regex pulled out.
                 const parsed = _parseColorAnswer(text);
                 area.surfaces[surfKey] = {
                     color: parsed.color || text,
@@ -9816,6 +9972,107 @@ RULES:
                 _reportPersistDraft();
                 _reportRenderParseReview();
             });
+        };
+
+        // ── Whole-house grouped controls ──────────────────────────────
+        // Edit applies to every area that shares the surface. Auto-regroups
+        // because all instances stay identical.
+        window.reportFlowEditGroupedSurface = function(surfKey) {
+            const f = window._reportFlow;
+            if (!f) return;
+            // Find the first area that has this surface for the prompt context
+            const firstIdx = f.palette.findIndex(a => surfKey in (a.surfaces || {}));
+            if (firstIdx < 0) return;
+            const firstArea = f.palette[firstIdx];
+            const s = firstArea.surfaces[surfKey];
+            const current = [s.brand, s.color, s.code, s.finish].filter(Boolean).join(' ') || '(blank)';
+            const desc = prompt(`Edit ${_titleCase(surfKey)} across all sides\n\nCurrent: ${current}\n\nDescribe it (e.g. "BM Cloud White OC-130 low luster"):`, current === '(blank)' ? '' : current);
+            if (desc === null) return;
+            const text = desc.trim();
+            const apply = (updated) => {
+                f.palette.forEach(area => {
+                    if (surfKey in (area.surfaces || {})) {
+                        area.surfaces[surfKey] = { ...updated };
+                    }
+                });
+                _reportPersistDraft();
+                _reportRenderParseReview();
+            };
+            if (!text) {
+                apply({ color: '', code: '', brand: '', finish: '', coats: s.coats || 2, hex: '' });
+                return;
+            }
+            const match = _resolveMatchKeyword(text, firstArea);
+            if (match) {
+                apply({ ...match.surf, coats: s.coats || match.surf.coats || 2 });
+                return;
+            }
+            _aiParseColorAnswer(text, surfKey, f.proposalRef?.jobType || '').then(parsed => {
+                apply({
+                    color: parsed.color || text,
+                    code: parsed.code || '',
+                    brand: parsed.brand || s.brand || '',
+                    finish: parsed.finish || s.finish || '',
+                    coats: s.coats || 2,
+                    hex: '',
+                });
+            }).catch(() => {
+                const parsed = _parseColorAnswer(text);
+                apply({
+                    color: parsed.color || text,
+                    code: parsed.code || '',
+                    brand: parsed.brand || s.brand || '',
+                    finish: parsed.finish || s.finish || '',
+                    coats: s.coats || 2,
+                    hex: '',
+                });
+            });
+        };
+
+        window.reportFlowRenameGroupedSurface = function(surfKey) {
+            const f = window._reportFlow;
+            if (!f) return;
+            const newName = prompt(`Rename "${surfKey}" across all sides to:`, surfKey);
+            if (!newName || newName.trim() === surfKey) return;
+            const key = newName.trim();
+            // Make sure rename doesn't collide on any side
+            const collision = f.palette.find(a => key !== surfKey && key in (a.surfaces || {}));
+            if (collision) { alert(`"${key}" already exists in ${collision.area} — rename it there first or pick a different name.`); return; }
+            f.palette.forEach(area => {
+                if (surfKey in (area.surfaces || {})) {
+                    area.surfaces[key] = area.surfaces[surfKey];
+                    delete area.surfaces[surfKey];
+                }
+            });
+            _reportPersistDraft();
+            _reportRenderParseReview();
+        };
+
+        window.reportFlowRemoveGroupedSurface = function(surfKey) {
+            const f = window._reportFlow;
+            if (!f) return;
+            const sides = f.palette.filter(a => surfKey in (a.surfaces || {})).map(a => a.area);
+            if (!confirm(`Remove "${surfKey}" from all sides (${sides.join(', ')})?`)) return;
+            f.palette.forEach(area => { delete area.surfaces?.[surfKey]; });
+            _reportPersistDraft();
+            _reportRenderParseReview();
+        };
+
+        // Operator wants different values per side — tweak one instance so
+        // values no longer match across the group, and the regroup pass on
+        // next render will fall through to per-side rendering automatically.
+        window.reportFlowSplitGroupedSurface = function(surfKey) {
+            const f = window._reportFlow;
+            if (!f) return;
+            const sides = f.palette.filter(a => surfKey in (a.surfaces || {})).map(a => a.area);
+            if (!confirm(`Set "${surfKey}" differently per side?\n\nAfter splitting, you'll see one row per side (${sides.join(', ')}) and can edit each independently.`)) return;
+            // Tag every instance with a unique marker so they no longer compare equal
+            f.palette.forEach((area, idx) => {
+                if (!(surfKey in (area.surfaces || {}))) return;
+                area.surfaces[surfKey] = { ...area.surfaces[surfKey], _splitMarker: idx };
+            });
+            _reportPersistDraft();
+            _reportRenderParseReview();
         };
 
         window.reportFlowRenameSurface = function(areaIdx, surfKey) {
