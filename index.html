@@ -147,7 +147,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v69</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v70</span>
             </div>
 
             <!-- Global Search -->
@@ -885,7 +885,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v69</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v70</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -11462,22 +11462,10 @@ Generate JSON with these EXACT keys:
         //           "Garcia Home — Exterior Color Story"
         //           "Lee Home — Interior & Exterior Color Story"
         function _buildReportFilename(project) {
-            const customer = (project?.customerName || '').trim() || 'Northern Star';
-            const report = project?.completionReport || {};
-            const palette = report.colorPalette || [];
-            const types = Array.from(new Set(palette.map(a => a._jobType).filter(Boolean)));
-            let typeLabel = '';
-            if (types.length >= 2) typeLabel = 'Interior & Exterior';
-            else if (types.length === 1) typeLabel = types[0];
-            else {
-                const prop = (typeof getEffectiveProposal === 'function')
-                    ? getEffectiveProposal(project) : null;
-                typeLabel = prop?.jobType || '';
-            }
-            const num = report.reportId || project?.jobNumber || '';
-            const middle = typeLabel ? `${typeLabel} Color Story` : 'Color Story';
-            // Strip filesystem-unsafe characters; browsers will handle the rest
-            const raw = `${customer} — ${middle}${num ? ' (' + num + ')' : ''}`;
+            const customer = (project?.customerName || '').trim() || 'Friend';
+            // Customer-facing filename: this is what shows up in their Downloads
+            // or email attachment list. Goal is intrigue, not internal filing.
+            const raw = `Welcome Home, ${customer} — Your Project Keepsake`;
             return raw.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim();
         }
 
