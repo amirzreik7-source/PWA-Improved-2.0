@@ -147,7 +147,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v81</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v82</span>
             </div>
 
             <!-- Global Search -->
@@ -886,7 +886,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v81</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v82</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -9474,21 +9474,14 @@ Rules:
                 return _openReportFlow(projectId, mode, existing);
             }
 
-            // First-time generation on a linked project — ask the operator.
+            // First-time generation on a linked project: default to combined
+            // without prompting. Operator can still flip to single from the
+            // scope toggle on the review card if they want to deliver two
+            // separate reports.
             const linkedIds = (project.linkedProjects || [])
                 .filter(id => projects.find(p => p.id === id));
             if (!mode && linkedIds.length > 0) {
-                const otherNames = linkedIds.map(id => {
-                    const p = projects.find(pr => pr.id === id);
-                    return p ? (p.jobNumber || p.projectName || 'linked') : 'linked';
-                }).join(', ');
-                const combined = confirm(
-                    `This project is linked to: ${otherNames}.\n\n` +
-                    `Generate ONE combined report covering both halves?\n\n` +
-                    `OK = Combined report (recommended — covers all linked halves)\n` +
-                    `Cancel = Just this project (you can do another for the other half later)`
-                );
-                mode = combined ? 'combined' : 'single';
+                mode = 'combined';
             }
 
             // If combined and any scope project already has a report, warn.
@@ -9778,48 +9771,56 @@ RULES:
             </div>`;
         }
 
-        // Detect surfaces that appear in 2+ areas with identical values —
-        // operator's reality is that siding, soffit, fascia, windows, shutters
-        // are usually one color across the whole house. Returns:
-        //   grouped: { surfKey → {surf, areaIndices, areaNames} }
-        //   perArea: { areaIdx → [surfKey, ...] } — keys NOT in any group
+        // Detect surfaces that appear in 2+ areas with identical values
+        // *within the same job type* — operator's reality is that siding,
+        // soffit, fascia, windows, shutters are usually one color across the
+        // whole house; same for walls within an interior. Grouping never
+        // crosses job-type boundaries (an exterior Siding never groups with
+        // anything interior). Returns one entry per job-type bucket:
+        //   buckets: [{ jobType, areaIndices, grouped, perArea }]
         function _groupPaletteSurfaces(palette) {
-            const instances = {}; // surfKey → [{areaIdx, surf}]
+            const byJobType = {};
             palette.forEach((area, idx) => {
-                Object.keys(area.surfaces || {}).forEach(key => {
-                    if (!instances[key]) instances[key] = [];
-                    instances[key].push({ areaIdx: idx, surf: area.surfaces[key] });
+                const jt = area._jobType || '';
+                if (!byJobType[jt]) byJobType[jt] = [];
+                byJobType[jt].push({ idx, area });
+            });
+            return Object.entries(byJobType).map(([jobType, members]) => {
+                const instances = {};
+                members.forEach(({ idx, area }) => {
+                    Object.keys(area.surfaces || {}).forEach(key => {
+                        if (!instances[key]) instances[key] = [];
+                        instances[key].push({ areaIdx: idx, surf: area.surfaces[key] });
+                    });
                 });
+                const grouped = {};
+                const perArea = {};
+                members.forEach(({ idx }) => { perArea[idx] = []; });
+                Object.entries(instances).forEach(([key, list]) => {
+                    if (list.length < 2) {
+                        list.forEach(i => perArea[i.areaIdx].push(key));
+                        return;
+                    }
+                    const first = list[0].surf;
+                    const allMatch = list.every(({ surf: s }) =>
+                        (s.color || '') === (first.color || '') &&
+                        (s.brand || '') === (first.brand || '') &&
+                        (s.code || '') === (first.code || '') &&
+                        (s.finish || '') === (first.finish || '') &&
+                        (s._splitMarker ?? null) === (first._splitMarker ?? null)
+                    );
+                    if (allMatch) {
+                        grouped[key] = {
+                            surf: first,
+                            areaIndices: list.map(i => i.areaIdx),
+                            areaNames: list.map(i => palette[i.areaIdx].area),
+                        };
+                    } else {
+                        list.forEach(i => perArea[i.areaIdx].push(key));
+                    }
+                });
+                return { jobType, areaIndices: members.map(m => m.idx), grouped, perArea };
             });
-            const grouped = {};
-            const perArea = {};
-            palette.forEach((_, idx) => { perArea[idx] = []; });
-            Object.entries(instances).forEach(([key, list]) => {
-                if (list.length < 2) {
-                    list.forEach(i => perArea[i.areaIdx].push(key));
-                    return;
-                }
-                const first = list[0].surf;
-                const allMatch = list.every(({ surf: s }) =>
-                    (s.color || '') === (first.color || '') &&
-                    (s.brand || '') === (first.brand || '') &&
-                    (s.code || '') === (first.code || '') &&
-                    (s.finish || '') === (first.finish || '') &&
-                    // Split-marker forces per-side rendering when operator
-                    // explicitly chose to set values differently per side.
-                    (s._splitMarker ?? null) === (first._splitMarker ?? null)
-                );
-                if (allMatch) {
-                    grouped[key] = {
-                        surf: first,
-                        areaIndices: list.map(i => i.areaIdx),
-                        areaNames: list.map(i => palette[i.areaIdx].area),
-                    };
-                } else {
-                    list.forEach(i => perArea[i.areaIdx].push(key));
-                }
-            });
-            return { grouped, perArea };
         }
 
         function _reviewGroupedSurfaceRow(surfKey, group, totalAreas) {
@@ -9848,26 +9849,20 @@ RULES:
         function _reportRenderParseReview() {
             const f = window._reportFlow;
             if (!f) return;
-            const totalAreas = f.palette.length;
-            const { grouped, perArea } = _groupPaletteSurfaces(f.palette);
-            const groupedKeys = Object.keys(grouped);
+            const buckets = _groupPaletteSurfaces(f.palette);
+            // Sort: Interior first, then Exterior, then unknown — matches the
+            // operator's mental order (do the inside, then the outside).
+            buckets.sort((a, b) => {
+                const order = jt => (/interior/i.test(jt) ? 0 : (/exterior/i.test(jt) ? 1 : 2));
+                return order(a.jobType) - order(b.jobType);
+            });
 
-            const groupedHTML = groupedKeys.length
-                ? `<div style="padding:12px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;margin-bottom:10px;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                        <strong style="font-size:14px;color:#3730a3;">Same across the house</strong>
-                        <span style="font-size:11px;color:#6366f1;">Edit once, applies to all sides</span>
-                    </div>
-                    ${groupedKeys.map(k => _reviewGroupedSurfaceRow(k, grouped[k], totalAreas)).join('')}
-                </div>`
-                : '';
-
-            const areaRows = f.palette.map((area, idx) => {
-                const surfKeys = perArea[idx] || [];
-                const surfHTML = surfKeys.length
-                    ? surfKeys.map(k => _reviewSurfaceRow(idx, k, area.surfaces[k])).join('')
-                    : (groupedKeys.length
-                        ? '' // nothing per-side for this area; grouped covers it
+            const renderArea = (idx, perAreaKeys, hasGroupedAbove) => {
+                const area = f.palette[idx];
+                const surfHTML = perAreaKeys.length
+                    ? perAreaKeys.map(k => _reviewSurfaceRow(idx, k, area.surfaces[k])).join('')
+                    : (hasGroupedAbove
+                        ? '' // grouped above covers everything for this area
                         : `<div style="padding:8px 10px;font-size:12px;color:#9ca3af;font-style:italic;text-align:center;background:#fff;border:1px dashed #e5e7eb;border-radius:6px;">No surfaces yet — tap "+ Add surface" below.</div>`);
                 return `<div style="padding:12px;background:#FAF7F2;border:1px solid #e5e7eb;border-radius:10px;margin-bottom:10px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
@@ -9881,15 +9876,61 @@ RULES:
                     </div>
                     ${area.technique ? `<div style="margin-top:6px;padding:6px 8px;background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;font-size:11px;color:#92400e;"><strong>Technique:</strong> ${_esc(area.technique)}</div>` : ''}
                 </div>`;
-            }).join('');
-            const rows = groupedHTML + areaRows;
+            };
 
+            const bucketHTML = buckets.map(b => {
+                const groupedKeys = Object.keys(b.grouped);
+                const scopeLabel = b.areaIndices.length;
+                const groupedSection = groupedKeys.length
+                    ? `<div style="padding:12px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;margin-bottom:10px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                            <strong style="font-size:14px;color:#3730a3;">Same across ${scopeLabel} ${scopeLabel === 1 ? 'area' : 'areas'}</strong>
+                            <span style="font-size:11px;color:#6366f1;">Edit once, applies to every side</span>
+                        </div>
+                        ${groupedKeys.map(k => _reviewGroupedSurfaceRow(k, b.grouped[k], b.areaIndices.length)).join('')}
+                    </div>`
+                    : '';
+                const areaRows = b.areaIndices.map(idx => renderArea(idx, b.perArea[idx] || [], groupedKeys.length > 0)).join('');
+                const sectionHeader = (buckets.length > 1 && b.jobType)
+                    ? `<div style="display:flex;align-items:center;gap:10px;margin:8px 0 12px;">
+                        <div style="height:1px;flex:1;background:#e5e7eb;"></div>
+                        <strong style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.18em;font-weight:700;">${_esc(b.jobType)}</strong>
+                        <div style="height:1px;flex:1;background:#e5e7eb;"></div>
+                    </div>`
+                    : '';
+                return sectionHeader + groupedSection + areaRows;
+            }).join('');
+
+            const rows = bucketHTML;
+
+            // Build the scope toggle. Only show if the project has linked
+            // siblings — single-project reports don't have a meaningful
+            // "scope" choice.
+            const project = f.projectRef;
+            const linkedIds = (project?.linkedProjects || []).filter(id => projects.find(p => p.id === id));
+            const canCombine = linkedIds.length > 0;
+            let scopeToggleHTML = '';
+            if (canCombine) {
+                const currentlyCombined = f.scope === 'combined';
+                const combinedCount = 1 + linkedIds.length;
+                scopeToggleHTML = `<div style="padding:10px 12px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                    <span style="font-size:12px;color:#6b7280;font-weight:600;">Scope:</span>
+                    <button onclick="reportFlowSetScope('combined')" style="font-size:12px;padding:6px 12px;border-radius:6px;border:1px solid ${currentlyCombined ? '#1A2B4A' : '#d1d5db'};background:${currentlyCombined ? '#1A2B4A' : '#fff'};color:${currentlyCombined ? '#fff' : '#374151'};cursor:pointer;font-weight:${currentlyCombined ? '600' : '400'};">${currentlyCombined ? '✓ ' : ''}Combined (${combinedCount} sides)</button>
+                    <button onclick="reportFlowSetScope('single')" style="font-size:12px;padding:6px 12px;border-radius:6px;border:1px solid ${!currentlyCombined ? '#1A2B4A' : '#d1d5db'};background:${!currentlyCombined ? '#1A2B4A' : '#fff'};color:${!currentlyCombined ? '#fff' : '#374151'};cursor:pointer;font-weight:${!currentlyCombined ? '600' : '400'};">${!currentlyCombined ? '✓ ' : ''}Just this project</button>
+                </div>`;
+            }
+
+            const totalSurfaces = f.palette.reduce((n, a) => n + Object.keys(a.surfaces || {}).length, 0);
             const card = `
                 <div id="reportParseReview" style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin:8px 0;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;">
-                        <strong style="font-size:14px;color:#1A2B4A;">Surfaces & colors</strong>
-                        <button onclick="reportFlowResetFromProposal()" title="Wipe everything and re-pull from the proposal" style="background:none;border:1px solid #d1d5db;border-radius:6px;font-size:11px;padding:4px 10px;color:#6b7280;cursor:pointer;">↻ Re-pull from proposal</button>
+                        <div>
+                            <strong style="font-size:14px;color:#1A2B4A;">Surfaces & colors</strong>
+                            <div style="font-size:11px;color:#9ca3af;margin-top:1px;">${f.palette.length} ${f.palette.length === 1 ? 'area' : 'areas'} · ${totalSurfaces} ${totalSurfaces === 1 ? 'surface' : 'surfaces'}</div>
+                        </div>
+                        <button onclick="reportFlowResetFromProposal()" title="Wipe everything and re-pull from the proposal" style="background:none;border:1px solid #d1d5db;border-radius:6px;font-size:11px;padding:4px 10px;color:#6b7280;cursor:pointer;">↻ Re-pull</button>
                     </div>
+                    ${scopeToggleHTML}
                     ${rows || '<div style="padding:14px;text-align:center;color:#9ca3af;font-style:italic;font-size:13px;">No areas yet.</div>'}
                     <button class="btn btn-secondary btn-small" onclick="reportFlowAddArea()" style="width:100%;margin-top:4px;font-size:12px;">+ Add area</button>
                     <button class="btn btn-success" onclick="reportFlowAcceptParse()" style="width:100%;margin-top:10px;font-size:14px;font-weight:600;padding:12px;">✓ Looks good — add photos →</button>
@@ -10147,6 +10188,15 @@ RULES:
             if (!f) return;
             const name = prompt('Add an area (e.g., "Front Porch", "Garage Interior"):');
             if (!name || !name.trim()) return;
+            // In combined scope, ask which side this area belongs to so it
+            // sorts into the right section and groups correctly.
+            const jobTypesInPalette = [...new Set((f.palette || []).map(a => a._jobType).filter(Boolean))];
+            let jobType = f.proposalRef?.jobType || '';
+            if (f.scope === 'combined' && jobTypesInPalette.length > 1) {
+                const answer = prompt(`Is "${name.trim()}" Interior or Exterior?`, jobType || 'Interior');
+                if (!answer) return;
+                jobType = /ext/i.test(answer) ? 'Exterior' : 'Interior';
+            }
             f.palette.push({
                 area: name.trim(),
                 surfaces: {},
@@ -10154,9 +10204,38 @@ RULES:
                 sqft: 0,
                 tip: '',
                 completed: false,
-                _jobType: f.proposalRef?.jobType || '',
+                _jobType: jobType,
                 _sourceProjectId: '',
             });
+            _reportPersistDraft();
+            _reportRenderParseReview();
+        };
+
+        // Switch the report's scope. Combined pulls in every linked sibling's
+        // proposal data; Single trims back to just the primary's. Confirms
+        // before wiping to make the destructive nature obvious.
+        window.reportFlowSetScope = function(newScope) {
+            const f = window._reportFlow;
+            if (!f) return;
+            if (f.scope === newScope) return;
+            const otherSides = (f.projectRef?.linkedProjects || [])
+                .filter(id => projects.find(p => p.id === id))
+                .map(id => {
+                    const p = projects.find(pr => pr.id === id);
+                    return p?.projectName || p?.jobNumber || 'linked side';
+                });
+            const message = newScope === 'combined'
+                ? `Combine this report with: ${otherSides.join(', ')}?\n\nThis pulls in every linked side's surfaces and creates one keepsake covering the whole job. Any manual edits in the current scope will be lost.`
+                : `Drop the linked sides and make this report cover just this project?\n\nThe other halves' surfaces and any manual edits will be removed from this report. You can still generate a separate report for them.`;
+            if (!confirm(message)) return;
+            f.scope = newScope;
+            f.scopeProjectIds = (newScope === 'combined')
+                ? _resolveScopeIds(f.projectId, 'combined')
+                : [f.projectId];
+            const fresh = (newScope === 'combined')
+                ? _seedColorPaletteFromScope(f.scopeProjectIds)
+                : _seedColorPaletteFromProposal(f.proposalRef);
+            f.palette = fresh;
             _reportPersistDraft();
             _reportRenderParseReview();
         };
@@ -10611,7 +10690,7 @@ RULES:
             const html = `
                 <div style="background:#fff;border:1px solid ${REPORT_PALETTE.line};border-radius:12px;padding:14px;margin:8px 0;">
                     <h3 style="margin:0 0 8px;font-size:16px;color:${REPORT_PALETTE.navy};">📷 Photos</h3>
-                    <p style="font-size:12px;color:#6b7280;margin:0 0 12px;">Before photos are pulled in from your estimate (marked <span style="display:inline-block;background:#3b82f6;color:#fff;font-size:9px;font-weight:600;padding:1px 5px;border-radius:3px;letter-spacing:0.04em;">FROM ESTIMATE</span>). You only need to add the AFTER shot for each area + a cover.</p>
+                    <p style="font-size:12px;color:#6b7280;margin:0 0 12px;">Before photos are pulled in from your estimate (marked <span style="display:inline-block;background:#3b82f6;color:#fff;font-size:9px;font-weight:600;padding:1px 5px;border-radius:3px;letter-spacing:0.04em;">FROM ESTIMATE</span>). Each slot is optional — if you only have an After, that's fine; the report adapts.</p>
 
                     <!-- Cover photo -->
                     <div style="padding:10px;background:#FAF7F2;border-radius:8px;margin-bottom:10px;">
@@ -11476,6 +11555,39 @@ Generate JSON with these EXACT keys:
                         </div>`;
                     }).join('');
 
+                // Adapt the photo block to whichever photos the operator
+                // actually has. No ugly "no photo" placeholders end up in the
+                // customer-facing PDF — when both are missing, the colors
+                // card takes the page. When only one exists, it gets a
+                // wider hero treatment.
+                let photoBlock = '';
+                if (beforeUrl && afterUrl) {
+                    photoBlock = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:32px;">
+                        <div>
+                            <div class="smallcaps" style="color:var(--ink-soft);font-size:10px;margin-bottom:6px;">Before</div>
+                            <div style="height:5px;width:32px;background:var(--gold);margin-bottom:8px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+                            <img src="${beforeUrl}" style="width:100%;height:3.2in;object-fit:cover;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+                        </div>
+                        <div>
+                            <div class="smallcaps" style="font-size:10px;margin-bottom:6px;">After</div>
+                            <div style="height:5px;width:32px;background:var(--gold);margin-bottom:8px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+                            <img src="${afterUrl}" style="width:100%;height:3.2in;object-fit:cover;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+                        </div>
+                    </div>`;
+                } else if (afterUrl) {
+                    photoBlock = `<div style="margin-top:32px;">
+                        <div class="smallcaps" style="font-size:10px;margin-bottom:6px;">The Result</div>
+                        <div style="height:5px;width:32px;background:var(--gold);margin-bottom:8px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+                        <img src="${afterUrl}" style="width:100%;height:3.4in;object-fit:cover;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+                    </div>`;
+                } else if (beforeUrl) {
+                    photoBlock = `<div style="margin-top:32px;">
+                        <div class="smallcaps" style="color:var(--ink-soft);font-size:10px;margin-bottom:6px;">The Starting Point</div>
+                        <div style="height:5px;width:32px;background:var(--gold);margin-bottom:8px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+                        <img src="${beforeUrl}" style="width:100%;height:3.4in;object-fit:cover;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+                    </div>`;
+                }
+
                 return `
             <div class="page page-cream">
                 <div class="page-inner">
@@ -11483,26 +11595,9 @@ Generate JSON with these EXACT keys:
                     <h2 style="font-family:'Playfair Display',serif;font-weight:700;font-size:52pt;color:var(--ink);line-height:1.0;letter-spacing:-0.01em;margin-top:8px;">${area.area}</h2>
                     <div class="gold-rule" style="margin-top:18px;"></div>
 
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:32px;">
-                        <div>
-                            <div class="smallcaps" style="color:var(--ink-soft);font-size:10px;margin-bottom:6px;">Before</div>
-                            <div style="height:5px;width:32px;background:var(--gold);margin-bottom:8px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
-                            ${beforeUrl
-                                ? `<img src="${beforeUrl}" style="width:100%;height:3.2in;object-fit:cover;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.08);">`
-                                : `<div style="width:100%;height:3.2in;background:var(--cream-deep);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-family:'Playfair Display',serif;font-style:italic;font-size:13pt;-webkit-print-color-adjust:exact;print-color-adjust:exact;">no photo</div>`
-                            }
-                        </div>
-                        <div>
-                            <div class="smallcaps" style="font-size:10px;margin-bottom:6px;">After</div>
-                            <div style="height:5px;width:32px;background:var(--gold);margin-bottom:8px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
-                            ${afterUrl
-                                ? `<img src="${afterUrl}" style="width:100%;height:3.2in;object-fit:cover;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.08);">`
-                                : `<div style="width:100%;height:3.2in;background:var(--cream-deep);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-family:'Playfair Display',serif;font-style:italic;font-size:13pt;-webkit-print-color-adjust:exact;print-color-adjust:exact;">no photo</div>`
-                            }
-                        </div>
-                    </div>
+                    ${photoBlock}
 
-                    <div style="background:var(--cream-deep);border-radius:12px;padding:20px 24px;margin-top:32px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+                    <div style="background:var(--cream-deep);border-radius:12px;padding:20px 24px;margin-top:${photoBlock ? '32px' : '40px'};-webkit-print-color-adjust:exact;print-color-adjust:exact;">
                         <div class="smallcaps">Colors Used</div>
                         ${surfaceRows || `<div style="font-family:'Playfair Display',serif;font-style:italic;color:var(--ink-soft);padding:12px 0;">No surface colors recorded.</div>`}
                         ${area.technique ? `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--ink-soft);font-family:'Inter',sans-serif;font-size:11pt;color:var(--ink-soft);"><span class="smallcaps" style="display:inline;font-size:10px;">Technique</span> &nbsp; <span style="color:var(--ink);">${area.technique}</span></div>` : ''}
