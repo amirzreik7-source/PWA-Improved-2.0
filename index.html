@@ -147,7 +147,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v77</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v78</span>
             </div>
 
             <!-- Global Search -->
@@ -886,7 +886,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v77</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v78</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -9520,9 +9520,300 @@ Rules:
             document.getElementById('reportFlowChat').innerHTML = '';
             document.getElementById('reportFlowInput').value = '';
 
-            _reportSay(_greeting(primary, landed, paletteSeed));
-            _reportAskNext();
+            // Default to free-form mode. The old rigid Q&A is still available
+            // via the "Walk me through it" fallback button on the free-form card.
+            window._reportFlow.mode = 'freeform';
+            _reportRenderFreeForm();
         }
+
+        // ── Free-form mode ──────────────────────────────────────────────
+        // Single textarea: contractor describes what was painted in their own
+        // words. AI parses into the structured palette. No surface-by-surface
+        // Q&A. Show estimate context so they don't have to repeat what we
+        // already know from the proposal.
+        function _reportRenderFreeForm() {
+            const f = window._reportFlow;
+            if (!f) return;
+            const project = f.projectRef;
+            const proposal = f.proposalRef;
+            const customerName = project?.customerName || 'this customer';
+            const jobType = proposal?.jobType || 'Painting';
+            const areas = f.palette || [];
+            const surfaceList = f.surfaces || [];
+
+            const areaList = areas.map(a => `<strong>${a.area}</strong>`).join(', ');
+            const surfaceLine = surfaceList.length
+                ? surfaceList.map(s => _titleCase(s)).join(' · ')
+                : 'walls / ceiling / trim';
+
+            const draftFilled = areas.some(a => Object.values(a.surfaces || {}).some(s => s?.color));
+            const draftWarn = draftFilled
+                ? `<div style="margin-top:8px;padding:8px 10px;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;font-size:12px;color:#92400e;">⚠️ You have existing color entries on this draft. Hitting Parse will overwrite them.</div>`
+                : '';
+
+            _reportSetProgress(`Tell me what we painted`);
+            _reportSetQuickReplies([]);
+
+            const intro = `
+                <div style="line-height:1.55;">
+                    <strong>Hi! Let's build the report for ${customerName}.</strong><br>
+                    <span style="color:#6b7280;font-size:13px;">Just tell me what got painted in your own words. No surface-by-surface questions. Say something like:</span>
+                    <div style="margin-top:6px;padding:8px 12px;background:#fff;border-left:3px solid ${REPORT_PALETTE.gold};font-style:italic;color:#374151;font-size:13px;">
+                        "Siding all BM Cloud White satin, trim Iron Mountain semi-gloss, front door black satin."
+                    </div>
+                </div>`;
+            _reportSay(intro);
+
+            const contextCard = `
+                <div id="reportFreeformCard" style="background:#FAF7F2;border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin:8px 0;">
+                    <div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.08em;font-weight:600;margin-bottom:6px;">From your estimate</div>
+                    <div style="font-size:13px;color:#1A2B4A;margin-bottom:4px;"><strong>${jobType}</strong> · ${areas.length} ${areas.length === 1 ? 'area' : 'areas'}: ${areaList || '(none)'}</div>
+                    <div style="font-size:12px;color:#6b7280;">Surfaces to fill per area: ${surfaceLine}</div>
+                    ${draftWarn}
+                    <div style="margin-top:10px;text-align:right;">
+                        <button class="btn btn-secondary btn-small" onclick="reportFlowSwitchToQA()" style="font-size:11px;color:#6b7280;">Walk me through it instead →</button>
+                    </div>
+                </div>`;
+            const wrap = document.createElement('div');
+            wrap.innerHTML = contextCard;
+            document.getElementById('reportFlowChat').appendChild(wrap.firstElementChild);
+
+            // Repurpose the existing big textarea + Send button.
+            const input = document.getElementById('reportFlowInput');
+            if (input) {
+                input.placeholder = `Tell me what we painted. e.g. "Siding all Cloud White satin, trim Iron Mountain semi, front door black."`;
+                input.value = '';
+            }
+            // Hide the "skip this question" button — meaningless in free-form.
+            // Change Send to Parse copy by relabeling the button (visual hint only).
+            const sendBtn = document.querySelector('#reportFlowControls button.btn-success');
+            if (sendBtn) sendBtn.textContent = '✨ Parse →';
+        }
+
+        async function reportFlowParseFreeForm(text) {
+            const f = window._reportFlow;
+            if (!f) return;
+            const proposal = f.proposalRef;
+            const jobType = proposal?.jobType || 'Painting';
+            const surfaceList = f.surfaces || [];
+
+            _reportSay(text, { user: true });
+            const thinking = _reportSay('<em style="color:#9ca3af;">🧠 Parsing your description…</em>', { transient: true });
+            const input = document.getElementById('reportFlowInput');
+            if (input) input.value = '';
+
+            try {
+                const parsed = await _aiParseFreeForm(text, f.palette, surfaceList, jobType);
+                thinking?.remove();
+                _applyFreeFormParse(parsed, f);
+                _reportPersistDraft();
+                _reportRenderParseReview();
+            } catch (e) {
+                thinking?.remove();
+                _reportSay(`Couldn't parse that — try again, or tap "Walk me through it instead" to use the step-by-step flow. (${e?.message || e})`);
+            }
+        }
+        window.reportFlowParseFreeForm = reportFlowParseFreeForm;
+
+        async function _aiParseFreeForm(text, palette, surfaceList, jobType) {
+            const areas = palette.map(a => a.area);
+            const surfaceCSV = surfaceList.join(', ');
+            const isExterior = (jobType || '').toLowerCase().includes('exterior');
+            const defaultFinishes = isExterior
+                ? `exterior siding→Satin · exterior trim→Semi-Gloss · exterior doors→Semi-Gloss`
+                : `interior walls→Eggshell · interior ceiling→Flat · interior trim→Semi-Gloss`;
+
+            const sys = `You extract structured paint info from a contractor's natural description of a completed job.
+
+KNOWN STRUCTURE FROM ESTIMATE:
+- Job type: ${jobType}
+- Areas: ${areas.join(', ')}
+- Surfaces per area: ${surfaceCSV}
+
+Return ONLY this JSON (no markdown, no preamble):
+{
+  "areas": [
+    {
+      "area": "<exact area name from the list above>",
+      "surfaces": {
+        "<surface key from the list>": {
+          "color": "<Title Case color name>" | null,
+          "code": "<brand code like OC-130, SW 7005>" | null,
+          "brand": "Benjamin Moore" | "Sherwin-Williams" | "Behr" | "PPG" | "Valspar" | null,
+          "finish": "Flat" | "Matte" | "Eggshell" | "Satin" | "Semi-Gloss" | "Gloss" | "Pearl" | null
+        }
+      },
+      "technique": "<short description>" | ""
+    }
+  ]
+}
+
+RULES:
+- Include EVERY area listed above, in order.
+- Include EVERY surface listed above for each area, even if not mentioned.
+- "siding all Cloud White" → that color+brand applies to siding on every area.
+- "trim BM iron mountain semi" → applies to trim everywhere.
+- "front door black" → applies only to doors on Front.
+- Recognize standard codes: Cloud White=OC-130, White Dove=OC-17, Decorator's White=OC-149, Simply White=OC-117, Pure White=SW 7005, Alabaster=SW 7008, Iron Mountain=2134-30, Hale Navy=HC-154.
+- Fix typos and Title-Case (e.g. "cload wite"→"Cloud White", "egshell"→Eggshell).
+- Default finish when contractor didn't say: ${defaultFinishes}.
+- Use null for fields you genuinely can't determine.
+- Output ONLY the JSON object.`;
+
+            const res = await fetch('https://damp-moon-203c.amirzreik7.workers.dev', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: 'claude-sonnet-4-20250514',
+                    max_tokens: 2000,
+                    temperature: 0,
+                    system: sys,
+                    messages: [{ role: 'user', content: `Contractor said: "${text}"` }],
+                }),
+            });
+            if (!res.ok) throw new Error('AI parse failed (HTTP ' + res.status + ')');
+            const data = await res.json();
+            const raw = (data.content?.[0]?.text || '').trim();
+            const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+            return JSON.parse(cleaned);
+        }
+
+        function _applyFreeFormParse(parsed, f) {
+            const byName = {};
+            (parsed?.areas || []).forEach(a => { byName[a.area] = a; });
+            f.palette.forEach(area => {
+                const incoming = byName[area.area];
+                if (!incoming) return;
+                area.surfaces = area.surfaces || {};
+                (f.surfaces || []).forEach(surfKey => {
+                    const v = incoming.surfaces?.[surfKey];
+                    if (!v) return;
+                    if (!v.color && !v.brand && !v.code && !v.finish) return;
+                    area.surfaces[surfKey] = {
+                        color: v.color || '',
+                        code: v.code || '',
+                        brand: v.brand || '',
+                        finish: v.finish || '',
+                        coats: 2,
+                        hex: '',
+                    };
+                });
+                if (incoming.technique) area.technique = incoming.technique;
+            });
+        }
+
+        function _reportRenderParseReview() {
+            const f = window._reportFlow;
+            if (!f) return;
+            const rows = f.palette.map((area, idx) => {
+                const surfHTML = (f.surfaces || []).map(surfKey => {
+                    const s = area.surfaces?.[surfKey];
+                    if (!s || !s.color) {
+                        return `<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:#9ca3af;">
+                            <span>${_titleCase(surfKey)}</span><span style="font-style:italic;">— not filled —</span>
+                        </div>`;
+                    }
+                    const summary = [s.brand, s.color, s.code, s.finish].filter(Boolean).join(' · ');
+                    return `<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;">
+                        <span style="color:#6b7280;">${_titleCase(surfKey)}</span>
+                        <span style="color:#1A2B4A;text-align:right;max-width:60%;">${summary}</span>
+                    </div>`;
+                }).join('');
+                return `<div style="padding:10px 12px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                        <strong style="font-size:14px;color:#1A2B4A;">${area.area}</strong>
+                        <button class="btn btn-secondary btn-small" onclick="reportFlowEditArea(${idx})" style="font-size:11px;padding:4px 8px;">✏️ Edit</button>
+                    </div>
+                    ${surfHTML}
+                    ${area.technique ? `<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #e5e7eb;font-size:11px;color:#92400e;"><strong>Technique:</strong> ${area.technique}</div>` : ''}
+                </div>`;
+            }).join('');
+
+            const card = `
+                <div id="reportParseReview" style="background:#FAF7F2;border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin:8px 0;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                        <strong style="font-size:14px;color:#1A2B4A;">Here's what I heard</strong>
+                        <span style="font-size:11px;color:#9ca3af;">Tap ✏️ to fix any row</span>
+                    </div>
+                    ${rows}
+                    <div style="display:flex;gap:8px;margin-top:10px;">
+                        <button class="btn btn-success" onclick="reportFlowAcceptParse()" style="flex:1;font-size:14px;font-weight:600;">✓ Looks good — add photos</button>
+                    </div>
+                </div>`;
+            // Replace existing review card if present
+            const existing = document.getElementById('reportParseReview');
+            const wrap = document.createElement('div');
+            wrap.innerHTML = card;
+            const chat = document.getElementById('reportFlowChat');
+            if (existing) existing.replaceWith(wrap.firstElementChild);
+            else chat.appendChild(wrap.firstElementChild);
+            chat.scrollTop = chat.scrollHeight;
+        }
+        window._reportRenderParseReview = _reportRenderParseReview;
+
+        window.reportFlowAcceptParse = function() {
+            const f = window._reportFlow;
+            if (!f) return;
+            // Advance past the Q&A state machine so it doesn't re-ask anything.
+            f.currentAreaIdx = f.palette.length;
+            f.mode = 'photos';
+            f.askedPhotos = true;
+            _reportSetProgress(`${f.palette.length}/${f.palette.length} areas captured`);
+            _reportSay(`Beautiful — colors are captured. Now let's add some photos. ` +
+                       `<button class="btn btn-info btn-small" onclick="reportFlowOpenPhotos()" style="margin-top:8px;">📷 Upload before / after photos</button> ` +
+                       `<br><br>Or skip photos and generate the report anyway.`);
+            // Restore the Send button label since we're past free-form
+            const sendBtn = document.querySelector('#reportFlowControls button.btn-success');
+            if (sendBtn) sendBtn.textContent = 'Send →';
+            const input = document.getElementById('reportFlowInput');
+            if (input) input.placeholder = 'Type a message…';
+        };
+
+        window.reportFlowEditArea = async function(idx) {
+            const f = window._reportFlow;
+            if (!f) return;
+            const area = f.palette[idx];
+            if (!area) return;
+            // Re-parse just this area. Prompt the user with the current state as
+            // a hint, accept a one-line redescription, run it through the same
+            // AI parser scoped to a single area, then refresh the review.
+            const surfaceList = f.surfaces || [];
+            const current = surfaceList.map(s => {
+                const v = area.surfaces?.[s];
+                if (!v || !v.color) return `${_titleCase(s)}: —`;
+                return `${_titleCase(s)}: ${[v.brand, v.color, v.code, v.finish].filter(Boolean).join(' ')}`;
+            }).join('; ');
+            const newDesc = prompt(`Re-describe ${area.area} (current: ${current})`, '');
+            if (!newDesc || !newDesc.trim()) return;
+            _reportSay(`Edit ${area.area}: ${newDesc}`, { user: true });
+            const thinking = _reportSay('<em style="color:#9ca3af;">🧠 Updating…</em>', { transient: true });
+            try {
+                const parsed = await _aiParseFreeForm(newDesc, [area], surfaceList, f.proposalRef?.jobType || '');
+                thinking?.remove();
+                _applyFreeFormParse(parsed, { palette: [area], surfaces: surfaceList });
+                _reportPersistDraft();
+                _reportRenderParseReview();
+            } catch (e) {
+                thinking?.remove();
+                alert('Update failed: ' + (e?.message || e));
+            }
+        };
+
+        window.reportFlowSwitchToQA = function() {
+            const f = window._reportFlow;
+            if (!f) return;
+            f.mode = 'qa';
+            f.currentAreaIdx = 0;
+            f.currentSurfaceIdx = 0;
+            // Remove the free-form context card
+            document.getElementById('reportFreeformCard')?.remove();
+            const sendBtn = document.querySelector('#reportFlowControls button.btn-success');
+            if (sendBtn) sendBtn.textContent = 'Send →';
+            const input = document.getElementById('reportFlowInput');
+            if (input) input.placeholder = `Type your answer here — typos are fine, AI cleans them up.`;
+            _reportSay(`OK — switching to step-by-step. I'll ask one surface at a time.`);
+            _reportAskNext();
+        };
 
         function _greeting(project, proposal, palette) {
             const name = project.customerName || 'this customer';
@@ -9652,6 +9943,10 @@ Rules:
             const input = document.getElementById('reportFlowInput');
             const text = (input?.value || '').trim();
             if (!text) return;
+            // Free-form mode: route the whole textarea to the AI parser.
+            if (window._reportFlow?.mode === 'freeform') {
+                return reportFlowParseFreeForm(text);
+            }
             _reportHandleAnswer(text);
             input.value = '';
         };
