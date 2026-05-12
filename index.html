@@ -147,7 +147,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v78</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v79</span>
             </div>
 
             <!-- Global Search -->
@@ -886,7 +886,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v78</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v79</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -9282,11 +9282,33 @@ Rules:
 
         // Build initial colorPalette from the proposal's rooms (so the AI
         // already knows which areas to ask about). One entry per room.
+        // Pull the actual painted surfaces off a proposal room and shape them
+        // into the palette surface dict. Carries color + sheen + brand through
+        // from the estimate so the contractor doesn't have to re-enter them.
+        function _surfacesFromProposalRoom(room) {
+            const surfaces = {};
+            (room?.surfaces || []).forEach(s => {
+                if (!s || !s.surfaceType) return;
+                const product = (window.products || []).find(p => p.id === s.productId);
+                surfaces[s.surfaceType] = {
+                    color: s.color || '',
+                    code: '',
+                    brand: product?.brand || '',
+                    product: product?.name || '',
+                    finish: s.sheen || '',
+                    coats: s.coats || 2,
+                    hex: '',
+                    _fromProposal: true,
+                };
+            });
+            return surfaces;
+        }
+
         function _seedColorPaletteFromProposal(proposal) {
             const rooms = (proposal?.rooms || []).filter(r => !r.deleted);
             return rooms.map(r => ({
                 area: r.name || 'Area',
-                surfaces: {},     // populated by the conversation
+                surfaces: _surfacesFromProposalRoom(r),
                 technique: '',
                 sqft: _computeRoomSqft(r),
                 tip: '',          // AI-generated later
@@ -9349,7 +9371,7 @@ Rules:
                         : baseName;
                     out.push({
                         area: finalName,
-                        surfaces: {},
+                        surfaces: _surfacesFromProposalRoom(r),
                         technique: '',
                         sqft: _computeRoomSqft(r),
                         tip: '',
@@ -9456,7 +9478,14 @@ Rules:
             window._reportProject = primary;
             window._reportProposal = landed;
 
-            const paletteSeed = (existing?.colorPalette?.length > 0)
+            // Use existing palette only if it already has user-edited surface
+            // values. An old draft from before the proposal-seeding fix would
+            // have empty surfaces; we'd rather re-seed from the proposal data
+            // than leave the user staring at empty rows.
+            const existingFilled = existing?.colorPalette?.some(a =>
+                Object.values(a.surfaces || {}).some(s => s?.color)
+            );
+            const paletteSeed = existingFilled
                 ? existing.colorPalette
                 : (mode === 'combined'
                     ? _seedColorPaletteFromScope(scopeIds)
@@ -9526,68 +9555,40 @@ Rules:
             _reportRenderFreeForm();
         }
 
-        // ── Free-form mode ──────────────────────────────────────────────
-        // Single textarea: contractor describes what was painted in their own
-        // words. AI parses into the structured palette. No surface-by-surface
-        // Q&A. Show estimate context so they don't have to repeat what we
-        // already know from the proposal.
+        // ── Review-first mode ────────────────────────────────────────────
+        // Open the report and immediately show the palette pre-filled from
+        // the proposal. The operator reviews and edits inline; nothing has
+        // to be re-typed. Free-form textarea remains as an optional bulk-
+        // update tool for when many things changed since the estimate.
         function _reportRenderFreeForm() {
             const f = window._reportFlow;
             if (!f) return;
             const project = f.projectRef;
-            const proposal = f.proposalRef;
             const customerName = project?.customerName || 'this customer';
-            const jobType = proposal?.jobType || 'Painting';
-            const areas = f.palette || [];
-            const surfaceList = f.surfaces || [];
+            const totalSurfaces = f.palette.reduce((n, a) => n + Object.keys(a.surfaces || {}).length, 0);
 
-            const areaList = areas.map(a => `<strong>${a.area}</strong>`).join(', ');
-            const surfaceLine = surfaceList.length
-                ? surfaceList.map(s => _titleCase(s)).join(' · ')
-                : 'walls / ceiling / trim';
-
-            const draftFilled = areas.some(a => Object.values(a.surfaces || {}).some(s => s?.color));
-            const draftWarn = draftFilled
-                ? `<div style="margin-top:8px;padding:8px 10px;background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;font-size:12px;color:#92400e;">⚠️ You have existing color entries on this draft. Hitting Parse will overwrite them.</div>`
-                : '';
-
-            _reportSetProgress(`Tell me what we painted`);
+            _reportSetProgress(`Review your report`);
             _reportSetQuickReplies([]);
 
             const intro = `
                 <div style="line-height:1.55;">
-                    <strong>Hi! Let's build the report for ${customerName}.</strong><br>
-                    <span style="color:#6b7280;font-size:13px;">Just tell me what got painted in your own words. No surface-by-surface questions. Say something like:</span>
-                    <div style="margin-top:6px;padding:8px 12px;background:#fff;border-left:3px solid ${REPORT_PALETTE.gold};font-style:italic;color:#374151;font-size:13px;">
-                        "Siding all BM Cloud White satin, trim Iron Mountain semi-gloss, front door black satin."
-                    </div>
+                    <strong>Report for ${customerName}.</strong><br>
+                    <span style="color:#6b7280;font-size:13px;">I've pulled in every surface from your estimate (${f.palette.length} ${f.palette.length === 1 ? 'area' : 'areas'} · ${totalSurfaces} ${totalSurfaces === 1 ? 'surface' : 'surfaces'}). Tap any row to edit, rename, or remove. When everything looks right, continue to photos.</span>
                 </div>`;
             _reportSay(intro);
 
-            const contextCard = `
-                <div id="reportFreeformCard" style="background:#FAF7F2;border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin:8px 0;">
-                    <div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.08em;font-weight:600;margin-bottom:6px;">From your estimate</div>
-                    <div style="font-size:13px;color:#1A2B4A;margin-bottom:4px;"><strong>${jobType}</strong> · ${areas.length} ${areas.length === 1 ? 'area' : 'areas'}: ${areaList || '(none)'}</div>
-                    <div style="font-size:12px;color:#6b7280;">Surfaces to fill per area: ${surfaceLine}</div>
-                    ${draftWarn}
-                    <div style="margin-top:10px;text-align:right;">
-                        <button class="btn btn-secondary btn-small" onclick="reportFlowSwitchToQA()" style="font-size:11px;color:#6b7280;">Walk me through it instead →</button>
-                    </div>
-                </div>`;
-            const wrap = document.createElement('div');
-            wrap.innerHTML = contextCard;
-            document.getElementById('reportFlowChat').appendChild(wrap.firstElementChild);
+            // Render the review card immediately.
+            _reportRenderParseReview();
 
-            // Repurpose the existing big textarea + Send button.
+            // Repurpose the existing big textarea as the OPTIONAL bulk-edit
+            // path. Hidden behind a chevron — the common case is no typing.
             const input = document.getElementById('reportFlowInput');
             if (input) {
-                input.placeholder = `Tell me what we painted. e.g. "Siding all Cloud White satin, trim Iron Mountain semi, front door black."`;
+                input.placeholder = `Optional: describe any changes from the estimate. e.g. "Front door changed to Hale Navy, soffit Cloud White satin."`;
                 input.value = '';
             }
-            // Hide the "skip this question" button — meaningless in free-form.
-            // Change Send to Parse copy by relabeling the button (visual hint only).
             const sendBtn = document.querySelector('#reportFlowControls button.btn-success');
-            if (sendBtn) sendBtn.textContent = '✨ Parse →';
+            if (sendBtn) sendBtn.textContent = '✨ Apply changes →';
         }
 
         async function reportFlowParseFreeForm(text) {
@@ -9615,20 +9616,21 @@ Rules:
         }
         window.reportFlowParseFreeForm = reportFlowParseFreeForm;
 
-        async function _aiParseFreeForm(text, palette, surfaceList, jobType) {
-            const areas = palette.map(a => a.area);
-            const surfaceCSV = surfaceList.join(', ');
-            const isExterior = (jobType || '').toLowerCase().includes('exterior');
-            const defaultFinishes = isExterior
-                ? `exterior siding→Satin · exterior trim→Semi-Gloss · exterior doors→Semi-Gloss`
-                : `interior walls→Eggshell · interior ceiling→Flat · interior trim→Semi-Gloss`;
+        async function _aiParseFreeForm(text, palette, _surfaceList, jobType) {
+            // Build a per-area structure block so the AI knows exactly which
+            // surfaces live in each area (proposals model surfaces per area,
+            // not as a flat global list).
+            const structure = palette.map(a => {
+                const keys = Object.keys(a.surfaces || {});
+                return `  • ${a.area}: ${keys.length ? keys.join(', ') : '(no surfaces yet)'}`;
+            }).join('\n');
 
             const sys = `You extract structured paint info from a contractor's natural description of a completed job.
 
 KNOWN STRUCTURE FROM ESTIMATE:
 - Job type: ${jobType}
-- Areas: ${areas.join(', ')}
-- Surfaces per area: ${surfaceCSV}
+- Areas and their surfaces:
+${structure}
 
 Return ONLY this JSON (no markdown, no preamble):
 {
@@ -9636,7 +9638,7 @@ Return ONLY this JSON (no markdown, no preamble):
     {
       "area": "<exact area name from the list above>",
       "surfaces": {
-        "<surface key from the list>": {
+        "<exact surface name as listed for this area>": {
           "color": "<Title Case color name>" | null,
           "code": "<brand code like OC-130, SW 7005>" | null,
           "brand": "Benjamin Moore" | "Sherwin-Williams" | "Behr" | "PPG" | "Valspar" | null,
@@ -9649,14 +9651,14 @@ Return ONLY this JSON (no markdown, no preamble):
 }
 
 RULES:
-- Include EVERY area listed above, in order.
-- Include EVERY surface listed above for each area, even if not mentioned.
-- "siding all Cloud White" → that color+brand applies to siding on every area.
-- "trim BM iron mountain semi" → applies to trim everywhere.
-- "front door black" → applies only to doors on Front.
+- Include only the areas the contractor mentioned (omit untouched areas).
+- For each mentioned area, only include the surfaces the contractor mentioned.
+- "siding all Cloud White" → apply that to the Siding surface on every area that has one.
+- "trim BM iron mountain semi" → apply to whichever trim-like surfaces exist (Trim, Fascia, Soffit, Window Trim — only those that are listed for each area).
+- "front door black" → only the Front Door surface on Front (or wherever Front Door is listed).
+- Use the EXACT surface names from the structure above. Don't invent new ones.
 - Recognize standard codes: Cloud White=OC-130, White Dove=OC-17, Decorator's White=OC-149, Simply White=OC-117, Pure White=SW 7005, Alabaster=SW 7008, Iron Mountain=2134-30, Hale Navy=HC-154.
 - Fix typos and Title-Case (e.g. "cload wite"→"Cloud White", "egshell"→Eggshell).
-- Default finish when contractor didn't say: ${defaultFinishes}.
 - Use null for fields you genuinely can't determine.
 - Output ONLY the JSON object.`;
 
@@ -9685,62 +9687,80 @@ RULES:
                 const incoming = byName[area.area];
                 if (!incoming) return;
                 area.surfaces = area.surfaces || {};
-                (f.surfaces || []).forEach(surfKey => {
-                    const v = incoming.surfaces?.[surfKey];
+                // Walk the surface keys the AI returned (per-area, not a global
+                // list). Only update fields the AI provided; never wipe an
+                // existing field by sending null. Preserves data unrelated to
+                // what the contractor just said.
+                Object.keys(incoming.surfaces || {}).forEach(surfKey => {
+                    const v = incoming.surfaces[surfKey];
                     if (!v) return;
                     if (!v.color && !v.brand && !v.code && !v.finish) return;
+                    const existing = area.surfaces[surfKey] || { coats: 2 };
                     area.surfaces[surfKey] = {
-                        color: v.color || '',
-                        code: v.code || '',
-                        brand: v.brand || '',
-                        finish: v.finish || '',
-                        coats: 2,
-                        hex: '',
+                        color: v.color || existing.color || '',
+                        code: v.code || existing.code || '',
+                        brand: v.brand || existing.brand || '',
+                        finish: v.finish || existing.finish || '',
+                        coats: existing.coats || 2,
+                        hex: existing.hex || '',
                     };
                 });
                 if (incoming.technique) area.technique = incoming.technique;
             });
         }
 
+        function _esc(s) {
+            return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        // Render one surface row inside the review card.
+        function _reviewSurfaceRow(areaIdx, surfKey, surface) {
+            const has = surface && (surface.color || surface.finish || surface.brand);
+            const parts = [surface?.brand, surface?.color, surface?.code, surface?.finish].filter(Boolean);
+            const summary = parts.length ? parts.join(' · ') : '— blank —';
+            const summaryColor = has ? '#1A2B4A' : '#9ca3af';
+            return `<div style="display:flex;align-items:center;gap:6px;padding:8px 10px;border:1px solid #f1f5f9;border-radius:6px;margin-bottom:4px;background:#fff;">
+                <div style="flex:1;min-width:0;cursor:pointer;" onclick="reportFlowEditSurface(${areaIdx}, ${JSON.stringify(surfKey).replace(/"/g, '&quot;')})">
+                    <div style="font-size:12px;color:#6b7280;font-weight:600;">${_esc(_titleCase(surfKey))}</div>
+                    <div style="font-size:12px;color:${summaryColor};font-style:${has ? 'normal' : 'italic'};margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_esc(summary)}</div>
+                </div>
+                <button onclick="reportFlowRenameSurface(${areaIdx}, ${JSON.stringify(surfKey).replace(/"/g, '&quot;')})" title="Rename" style="background:none;border:none;cursor:pointer;font-size:14px;padding:4px 6px;color:#6b7280;">✏️</button>
+                <button onclick="reportFlowRemoveSurface(${areaIdx}, ${JSON.stringify(surfKey).replace(/"/g, '&quot;')})" title="Remove" style="background:none;border:none;cursor:pointer;font-size:16px;padding:4px 6px;color:#dc2626;">×</button>
+            </div>`;
+        }
+
         function _reportRenderParseReview() {
             const f = window._reportFlow;
             if (!f) return;
             const rows = f.palette.map((area, idx) => {
-                const surfHTML = (f.surfaces || []).map(surfKey => {
-                    const s = area.surfaces?.[surfKey];
-                    if (!s || !s.color) {
-                        return `<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:#9ca3af;">
-                            <span>${_titleCase(surfKey)}</span><span style="font-style:italic;">— not filled —</span>
-                        </div>`;
-                    }
-                    const summary = [s.brand, s.color, s.code, s.finish].filter(Boolean).join(' · ');
-                    return `<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;">
-                        <span style="color:#6b7280;">${_titleCase(surfKey)}</span>
-                        <span style="color:#1A2B4A;text-align:right;max-width:60%;">${summary}</span>
-                    </div>`;
-                }).join('');
-                return `<div style="padding:10px 12px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                        <strong style="font-size:14px;color:#1A2B4A;">${area.area}</strong>
-                        <button class="btn btn-secondary btn-small" onclick="reportFlowEditArea(${idx})" style="font-size:11px;padding:4px 8px;">✏️ Edit</button>
+                const surfKeys = Object.keys(area.surfaces || {});
+                const surfHTML = surfKeys.length
+                    ? surfKeys.map(k => _reviewSurfaceRow(idx, k, area.surfaces[k])).join('')
+                    : `<div style="padding:8px 10px;font-size:12px;color:#9ca3af;font-style:italic;text-align:center;background:#fff;border:1px dashed #e5e7eb;border-radius:6px;">No surfaces yet — tap "+ Add surface" below.</div>`;
+                return `<div style="padding:12px;background:#FAF7F2;border:1px solid #e5e7eb;border-radius:10px;margin-bottom:10px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <strong style="font-size:15px;color:#1A2B4A;flex:1;cursor:pointer;" onclick="reportFlowRenameArea(${idx})">${_esc(area.area)}<span style="color:#9ca3af;font-size:11px;font-weight:400;margin-left:6px;">✏️ rename</span></strong>
+                        <button onclick="reportFlowRemoveArea(${idx})" title="Remove area" style="background:none;border:none;cursor:pointer;font-size:18px;padding:4px 8px;color:#dc2626;">×</button>
                     </div>
                     ${surfHTML}
-                    ${area.technique ? `<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #e5e7eb;font-size:11px;color:#92400e;"><strong>Technique:</strong> ${area.technique}</div>` : ''}
+                    <div style="margin-top:8px;display:flex;gap:6px;">
+                        <button class="btn btn-secondary btn-small" onclick="reportFlowAddSurface(${idx})" style="flex:1;font-size:12px;padding:6px 8px;">+ Add surface</button>
+                        <button class="btn btn-secondary btn-small" onclick="reportFlowEditAreaTechnique(${idx})" style="flex:1;font-size:12px;padding:6px 8px;">${area.technique ? '✏️ Technique' : '+ Technique'}</button>
+                    </div>
+                    ${area.technique ? `<div style="margin-top:6px;padding:6px 8px;background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;font-size:11px;color:#92400e;"><strong>Technique:</strong> ${_esc(area.technique)}</div>` : ''}
                 </div>`;
             }).join('');
 
             const card = `
-                <div id="reportParseReview" style="background:#FAF7F2;border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin:8px 0;">
+                <div id="reportParseReview" style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin:8px 0;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-                        <strong style="font-size:14px;color:#1A2B4A;">Here's what I heard</strong>
-                        <span style="font-size:11px;color:#9ca3af;">Tap ✏️ to fix any row</span>
+                        <strong style="font-size:14px;color:#1A2B4A;">Surfaces & colors</strong>
+                        <span style="font-size:11px;color:#9ca3af;">From your proposal</span>
                     </div>
-                    ${rows}
-                    <div style="display:flex;gap:8px;margin-top:10px;">
-                        <button class="btn btn-success" onclick="reportFlowAcceptParse()" style="flex:1;font-size:14px;font-weight:600;">✓ Looks good — add photos</button>
-                    </div>
+                    ${rows || '<div style="padding:14px;text-align:center;color:#9ca3af;font-style:italic;font-size:13px;">No areas yet.</div>'}
+                    <button class="btn btn-secondary btn-small" onclick="reportFlowAddArea()" style="width:100%;margin-top:4px;font-size:12px;">+ Add area</button>
+                    <button class="btn btn-success" onclick="reportFlowAcceptParse()" style="width:100%;margin-top:10px;font-size:14px;font-weight:600;padding:12px;">✓ Looks good — add photos →</button>
                 </div>`;
-            // Replace existing review card if present
             const existing = document.getElementById('reportParseReview');
             const wrap = document.createElement('div');
             wrap.innerHTML = card;
@@ -9750,6 +9770,151 @@ RULES:
             chat.scrollTop = chat.scrollHeight;
         }
         window._reportRenderParseReview = _reportRenderParseReview;
+
+        // ── Per-surface inline controls ───────────────────────────────
+        window.reportFlowEditSurface = function(areaIdx, surfKey) {
+            const f = window._reportFlow;
+            if (!f) return;
+            const area = f.palette[areaIdx];
+            if (!area) return;
+            const s = area.surfaces[surfKey] || {};
+            // Use AI parse on a single sentence the operator types — same
+            // engine as bulk free-form, just scoped to one surface.
+            const current = [s.brand, s.color, s.code, s.finish].filter(Boolean).join(' ') || '(blank)';
+            const desc = prompt(`Edit ${_titleCase(surfKey)} on ${area.area}\n\nCurrent: ${current}\n\nDescribe it (e.g. "BM Hale Navy HC-154 semi-gloss"):`, current === '(blank)' ? '' : current);
+            if (desc === null) return;
+            const text = desc.trim();
+            if (!text) {
+                // Clear the surface
+                area.surfaces[surfKey] = { color: '', code: '', brand: '', finish: '', coats: 2, hex: '' };
+                _reportPersistDraft();
+                _reportRenderParseReview();
+                return;
+            }
+            _aiParseColorAnswer(text, surfKey, f.proposalRef?.jobType || '').then(parsed => {
+                area.surfaces[surfKey] = {
+                    color: parsed.color || text,
+                    code: parsed.code || '',
+                    brand: parsed.brand || s.brand || '',
+                    finish: parsed.finish || s.finish || '',
+                    coats: s.coats || 2,
+                    hex: '',
+                };
+                _reportPersistDraft();
+                _reportRenderParseReview();
+            }).catch(() => {
+                // Fall back to whatever the regex pulled out.
+                const parsed = _parseColorAnswer(text);
+                area.surfaces[surfKey] = {
+                    color: parsed.color || text,
+                    code: parsed.code || '',
+                    brand: parsed.brand || s.brand || '',
+                    finish: parsed.finish || s.finish || '',
+                    coats: s.coats || 2,
+                    hex: '',
+                };
+                _reportPersistDraft();
+                _reportRenderParseReview();
+            });
+        };
+
+        window.reportFlowRenameSurface = function(areaIdx, surfKey) {
+            const f = window._reportFlow;
+            if (!f) return;
+            const area = f.palette[areaIdx];
+            if (!area) return;
+            const newName = prompt(`Rename "${surfKey}" to:`, surfKey);
+            if (!newName || newName.trim() === surfKey) return;
+            const key = newName.trim();
+            if (key in area.surfaces) { alert(`"${key}" already exists in this area.`); return; }
+            area.surfaces[key] = area.surfaces[surfKey];
+            delete area.surfaces[surfKey];
+            _reportPersistDraft();
+            _reportRenderParseReview();
+        };
+
+        window.reportFlowRemoveSurface = function(areaIdx, surfKey) {
+            const f = window._reportFlow;
+            if (!f) return;
+            const area = f.palette[areaIdx];
+            if (!area) return;
+            if (!confirm(`Remove "${surfKey}" from "${area.area}"?`)) return;
+            delete area.surfaces[surfKey];
+            _reportPersistDraft();
+            _reportRenderParseReview();
+        };
+
+        window.reportFlowAddSurface = function(areaIdx) {
+            const f = window._reportFlow;
+            if (!f) return;
+            const area = f.palette[areaIdx];
+            if (!area) return;
+            const name = prompt(`Add a surface to ${area.area} (e.g., Shutters, Gutters, Railings):`);
+            if (!name || !name.trim()) return;
+            const key = name.trim();
+            if (!area.surfaces) area.surfaces = {};
+            if (key in area.surfaces) { alert(`"${key}" already exists.`); return; }
+            area.surfaces[key] = { color: '', code: '', brand: '', finish: '', coats: 2, hex: '' };
+            _reportPersistDraft();
+            _reportRenderParseReview();
+            // Open the edit prompt for the new surface so they can fill it.
+            setTimeout(() => reportFlowEditSurface(areaIdx, key), 50);
+        };
+
+        // ── Per-area controls ─────────────────────────────────────────
+        window.reportFlowRenameArea = function(areaIdx) {
+            const f = window._reportFlow;
+            if (!f) return;
+            const area = f.palette[areaIdx];
+            if (!area) return;
+            const newName = prompt(`Rename area "${area.area}" to:`, area.area);
+            if (!newName || !newName.trim()) return;
+            area.area = newName.trim();
+            _reportPersistDraft();
+            _reportRenderParseReview();
+        };
+
+        window.reportFlowRemoveArea = function(areaIdx) {
+            const f = window._reportFlow;
+            if (!f) return;
+            const area = f.palette[areaIdx];
+            if (!area) return;
+            if (!confirm(`Remove area "${area.area}" from the report entirely?`)) return;
+            f.palette.splice(areaIdx, 1);
+            _reportPersistDraft();
+            _reportRenderParseReview();
+        };
+
+        window.reportFlowAddArea = function() {
+            const f = window._reportFlow;
+            if (!f) return;
+            const name = prompt('Add an area (e.g., "Front Porch", "Garage Interior"):');
+            if (!name || !name.trim()) return;
+            f.palette.push({
+                area: name.trim(),
+                surfaces: {},
+                technique: '',
+                sqft: 0,
+                tip: '',
+                completed: false,
+                _jobType: f.proposalRef?.jobType || '',
+                _sourceProjectId: '',
+            });
+            _reportPersistDraft();
+            _reportRenderParseReview();
+        };
+
+        window.reportFlowEditAreaTechnique = function(areaIdx) {
+            const f = window._reportFlow;
+            if (!f) return;
+            const area = f.palette[areaIdx];
+            if (!area) return;
+            const v = prompt(`Any special technique on ${area.area}? (accent wall, color wash, faux finish, etc — leave blank for none)`, area.technique || '');
+            if (v === null) return;
+            area.technique = v.trim();
+            _reportPersistDraft();
+            _reportRenderParseReview();
+        };
 
         window.reportFlowAcceptParse = function() {
             const f = window._reportFlow;
