@@ -149,7 +149,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v84</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v85</span>
             </div>
 
             <!-- Global Search -->
@@ -888,7 +888,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v84</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v85</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -9928,11 +9928,17 @@ RULES:
 
             const renderArea = (idx, perAreaKeys, hasGroupedAbove) => {
                 const area = f.palette[idx];
+                const isEmpty = Object.keys(area.surfaces || {}).length === 0;
                 const surfHTML = perAreaKeys.length
                     ? perAreaKeys.map(k => _reviewSurfaceRow(idx, k, area.surfaces[k])).join('')
                     : (hasGroupedAbove
                         ? '' // grouped above covers everything for this area
-                        : `<div style="padding:8px 10px;font-size:12px;color:#9ca3af;font-style:italic;text-align:center;background:#fff;border:1px dashed #e5e7eb;border-radius:6px;">No surfaces yet — tap "+ Add surface" below.</div>`);
+                        : (isEmpty
+                            ? `<div style="padding:10px;text-align:center;background:#fff;border:1px dashed #e5e7eb;border-radius:6px;">
+                                <div style="font-size:12px;color:#6b7280;font-style:italic;margin-bottom:8px;">No surfaces yet</div>
+                                <button onclick="reportFlowApplyTypicalSurfaces(${idx})" style="font-size:12px;background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe;border-radius:6px;padding:6px 12px;cursor:pointer;font-weight:600;">✨ Apply typical surfaces for this area</button>
+                            </div>`
+                            : `<div style="padding:8px 10px;font-size:12px;color:#9ca3af;font-style:italic;text-align:center;background:#fff;border:1px dashed #e5e7eb;border-radius:6px;">All surfaces in this area are shown in the "Same across" block above.</div>`));
                 return `<div style="padding:12px;background:#FAF7F2;border:1px solid #e5e7eb;border-radius:10px;margin-bottom:10px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                         <strong style="font-size:15px;color:#1A2B4A;flex:1;cursor:pointer;" onclick="reportFlowRenameArea(${idx})">${_esc(area.area)}<span style="color:#9ca3af;font-size:11px;font-weight:400;margin-left:6px;">✏️ rename</span></strong>
@@ -10210,7 +10216,22 @@ RULES:
                 close();
             });
             document.getElementById('surfaceEditSave').addEventListener('click', () => {
-                opts.onSave(captureFromInputs());
+                const captured = captureFromInputs();
+                // Smart finish auto-fill: if operator filled a color but left
+                // finish blank, apply the industry default for this surface
+                // type so the report never ships with "Cloud White · ø finish".
+                if (captured.color && !captured.finish && opts.surfKey) {
+                    const jt = opts.area?._jobType || (window._reportFlow?.proposalRef?.jobType) || '';
+                    const ind = window._industryDefaults?.(opts.surfKey, jt) || null;
+                    if (ind?.sheen) captured.finish = ind.sheen;
+                }
+                // Brand normalization — operator typed "BM" or "SW"
+                if (captured.brand) {
+                    const lower = captured.brand.toLowerCase();
+                    if (/^bm\b|benjamin/.test(lower)) captured.brand = 'Benjamin Moore';
+                    else if (/^sw\b|sherwin/.test(lower)) captured.brand = 'Sherwin-Williams';
+                }
+                opts.onSave(captured);
                 close();
             });
         }
@@ -10566,6 +10587,53 @@ RULES:
             _reportPersistDraft();
             _reportRenderParseReview();
             _reportToast('Re-pulled from proposal', 'success', 1800);
+        };
+
+        // Quick-add common surfaces for an empty area. Heuristic on the area
+        // name + jobType to pick a sensible default set. Each surface gets
+        // industry-default sheen + coats (color stays blank — the operator
+        // fills it in via the edit sheet). No-op if the area already has
+        // surfaces (we don't want to overwrite anything).
+        window.reportFlowApplyTypicalSurfaces = function(areaIdx) {
+            const f = window._reportFlow;
+            if (!f) return;
+            const area = f.palette[areaIdx];
+            if (!area) return;
+            if (Object.keys(area.surfaces || {}).length > 0) return;
+            const isExterior = /exterior/i.test(area._jobType);
+            const name = (area.area || '').toLowerCase();
+            let surfaces;
+            if (isExterior) {
+                const isFrontish = /front|entry|main/.test(name);
+                const isGarage = /garage/.test(name);
+                surfaces = [
+                    'Siding', 'Soffit', 'Fascia', 'Trim', 'Windows',
+                    ...(isFrontish ? ['Front Door', 'Front Door Frame'] : []),
+                    ...(isGarage ? ['Garage Door', 'Garage Door Frame'] : []),
+                ];
+            } else {
+                const isBathroom = /bath|powder|wc/.test(name);
+                const isKitchen = /kitchen/.test(name);
+                surfaces = [
+                    'Walls', 'Ceiling', 'Trim',
+                    ...(isBathroom ? [] : ['Doors', 'Windows']),
+                    ...(isKitchen ? [] : []),
+                ];
+            }
+            area.surfaces = area.surfaces || {};
+            surfaces.forEach(name => {
+                if (name in area.surfaces) return;
+                const ind = window._industryDefaults?.(name, area._jobType) || {};
+                area.surfaces[name] = {
+                    color: '', code: '', brand: '',
+                    finish: ind.sheen || '',
+                    coats: ind.coats || 2,
+                    hex: '',
+                };
+            });
+            _reportPersistDraft();
+            _reportRenderParseReview();
+            _reportToast(`Added ${surfaces.length} surfaces — fill in colors`, 'success', 1800);
         };
 
         window.reportFlowEditAreaTechnique = function(areaIdx) {
@@ -11076,16 +11144,42 @@ RULES:
             const f = window._reportFlow;
             if (!f) return;
             const chat = document.getElementById('reportFlowChat');
+
+            // Collect all after photos across areas so the operator can pick
+            // one as the cover instead of uploading a separate image. Cover
+            // also accepts a direct upload for cases where the best shot
+            // wasn't an "after" of a specific area.
+            const afterPhotos = [];
+            Object.entries(f.photos.rooms || {}).forEach(([area, slots]) => {
+                if (slots?.after?.url) afterPhotos.push({ area, photo: slots.after });
+            });
+            const coverUrl = f.photos.cover?.url || '';
+            const coverPickerHTML = afterPhotos.length
+                ? `<div style="margin-top:8px;">
+                    <div style="font-size:11px;color:#6b7280;font-weight:600;margin-bottom:6px;">Or pick one of your After shots:</div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:6px;">
+                        ${afterPhotos.map(({ area, photo }) => {
+                            const selected = photo.url === coverUrl;
+                            return `<button onclick="reportFlowSetCoverFromAfter(${JSON.stringify(area).replace(/"/g, '&quot;')})" title="Use ${_esc(area)} after photo" style="position:relative;height:72px;border:2px solid ${selected ? REPORT_PALETTE.gold : 'transparent'};border-radius:6px;background-image:url('${photo.url}');background-size:cover;background-position:center;cursor:pointer;padding:0;${selected ? 'box-shadow:0 0 0 2px #fff inset;' : ''}">
+                                ${selected ? `<div style="position:absolute;top:2px;right:2px;background:${REPORT_PALETTE.gold};color:#1A2B4A;font-size:10px;font-weight:700;padding:2px 5px;border-radius:3px;">★</div>` : ''}
+                                <div style="position:absolute;bottom:0;left:0;right:0;padding:2px 4px;background:rgba(20,34,58,0.7);color:#fff;font-size:9px;font-weight:600;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;">${_esc(area)}</div>
+                            </button>`;
+                        }).join('')}
+                    </div>
+                </div>`
+                : '';
+
             const html = `
                 <div style="background:#fff;border:1px solid ${REPORT_PALETTE.line};border-radius:12px;padding:14px;margin:8px 0;">
                     <h3 style="margin:0 0 8px;font-size:16px;color:${REPORT_PALETTE.navy};">📷 Photos</h3>
                     <p style="font-size:12px;color:#6b7280;margin:0 0 12px;">Before photos are pulled in from your estimate (marked <span style="display:inline-block;background:#3b82f6;color:#fff;font-size:9px;font-weight:600;padding:1px 5px;border-radius:3px;letter-spacing:0.04em;">FROM ESTIMATE</span>). Each slot is optional — if you only have an After, that's fine; the report adapts.</p>
 
                     <!-- Cover photo -->
-                    <div style="padding:10px;background:#FAF7F2;border-radius:8px;margin-bottom:10px;">
+                    <div style="padding:12px;background:#FAF7F2;border-radius:8px;margin-bottom:10px;">
                         <strong style="font-size:13px;color:${REPORT_PALETTE.navy};">Cover Photo</strong>
                         <p style="font-size:11px;color:#6b7280;margin:2px 0 6px;">The hero image for the report's first page. Pick your best "after" shot.</p>
                         ${_photoSlotHTML('cover', null, f.photos.cover)}
+                        ${coverPickerHTML}
                     </div>
 
                     <!-- Per-area slots -->
@@ -11173,6 +11267,20 @@ RULES:
             }
         };
 
+        // Pick a cover photo from one of the already-uploaded after photos —
+        // no double-upload. Stores a fresh {url, path} reference so deleting
+        // the area's after photo doesn't orphan the cover.
+        window.reportFlowSetCoverFromAfter = async function(area) {
+            const f = window._reportFlow;
+            if (!f) return;
+            const after = f.photos.rooms?.[area]?.after;
+            if (!after?.url) return;
+            f.photos.cover = { url: after.url, path: after.path };
+            await _reportPersistDraft();
+            _renderPhotoSheet();
+            _reportToast(`Cover set from ${area}`, 'success', 1400);
+        };
+
         window.reportFlowDeletePhoto = async function(kind, area) {
             const f = window._reportFlow;
             if (!f) return;
@@ -11185,7 +11293,7 @@ RULES:
                 }
                 await _reportPersistDraft();
                 _renderPhotoSheet();
-            } catch (e) { alert('Delete failed: ' + e.message); }
+            } catch (e) { _reportToast(`Delete failed — ${e?.message || 'try again'}`, 'error', 3000); }
         };
 
         window.reportFlowFinishPhotos = function() {
@@ -11297,9 +11405,13 @@ RULES:
                     }
                 }
             } catch (e) {
-                alert('Save failed: ' + e.message);
+                _reportToast(`Save failed — ${e?.message || 'try again'}`, 'error', 4000);
                 return;
             }
+
+            // Success moment — let the operator see "Ready" before transitioning
+            _reportToast('✨ Report is ready', 'success', 1200);
+            await new Promise(r => setTimeout(r, 700));
 
             window._reportFlow = null;
             viewCompletionReport(f.projectId);
