@@ -149,7 +149,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v83</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v84</span>
             </div>
 
             <!-- Global Search -->
@@ -888,7 +888,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v83</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v84</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -9960,11 +9960,13 @@ RULES:
                     </div>`
                     : '';
                 const areaRows = b.areaIndices.map(idx => renderArea(idx, b.perArea[idx] || [], groupedKeys.length > 0)).join('');
+                const sectionIcon = /interior/i.test(b.jobType) ? '🏠' : (/exterior/i.test(b.jobType) ? '🏡' : '✦');
+                const sectionTint = /interior/i.test(b.jobType) ? '#1A2B4A' : (/exterior/i.test(b.jobType) ? '#0e7490' : '#1A2B4A');
                 const sectionHeader = (buckets.length > 1 && b.jobType)
-                    ? `<div style="display:flex;align-items:center;gap:10px;margin:8px 0 12px;">
-                        <div style="height:1px;flex:1;background:#e5e7eb;"></div>
-                        <strong style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.18em;font-weight:700;">${_esc(b.jobType)}</strong>
-                        <div style="height:1px;flex:1;background:#e5e7eb;"></div>
+                    ? `<div style="display:flex;align-items:center;gap:10px;margin:14px 0 12px;padding:8px 12px;background:${sectionTint}08;border-left:3px solid ${sectionTint};border-radius:4px;">
+                        <span style="font-size:16px;">${sectionIcon}</span>
+                        <strong style="font-size:12px;color:${sectionTint};text-transform:uppercase;letter-spacing:0.18em;font-weight:700;flex:1;">${_esc(b.jobType)}</strong>
+                        <span style="font-size:11px;color:#9ca3af;font-weight:500;">${b.areaIndices.length} ${b.areaIndices.length === 1 ? 'area' : 'areas'}</span>
                     </div>`
                     : '';
                 return sectionHeader + groupedSection + areaRows;
@@ -10034,7 +10036,10 @@ RULES:
                     ${barHTML}
                     ${validationHTML}
                     ${rows || '<div style="padding:14px;text-align:center;color:#9ca3af;font-style:italic;font-size:13px;">No areas yet. Tap "+ Add area" below or hit "↻ Re-pull" to pull surfaces from the proposal.</div>'}
-                    <button class="btn btn-secondary btn-small" onclick="reportFlowAddArea()" style="width:100%;margin-top:4px;font-size:13px;padding:10px;">+ Add area</button>
+                    <div style="display:flex;gap:6px;margin-top:4px;">
+                        <button class="btn btn-secondary btn-small" onclick="reportFlowAddArea()" style="flex:1;font-size:13px;padding:10px;">+ Add area</button>
+                        <button class="btn btn-secondary btn-small" onclick="reportFlowPreview()" style="flex:1;font-size:13px;padding:10px;" title="See exactly how the keepsake will look">👁 Preview</button>
+                    </div>
                     <button class="btn btn-success" onclick="reportFlowAcceptParse()" ${errors.length ? 'disabled style="width:100%;margin-top:10px;font-size:14px;font-weight:600;padding:12px;opacity:0.55;cursor:not-allowed;"' : 'style="width:100%;margin-top:10px;font-size:14px;font-weight:600;padding:12px;"'}>✓ Looks good — add photos →</button>
                 </div>`;
             const existing = document.getElementById('reportParseReview');
@@ -10062,113 +10067,212 @@ RULES:
         }
 
         // ── Per-surface inline controls ───────────────────────────────
+        // Surface-edit bottom sheet. Apple-style modal with explicit fields,
+        // smart quick-actions, AI-assisted "describe it" input, and Match
+        // shortcuts to copy values from another surface in the same area.
+        // Replaces the previous JS prompt() flow which was hostile on mobile.
+        const REPORT_BRAND_OPTIONS = ['Benjamin Moore', 'Sherwin-Williams', 'Behr', 'PPG', 'Valspar'];
+        const REPORT_FINISH_OPTIONS = ['Flat', 'Matte', 'Eggshell', 'Satin', 'Low Luster', 'Semi-Gloss', 'Gloss', 'Pearl'];
+
+        function _openSurfaceEditSheet(opts) {
+            // opts: { title, subtitle, surface, area (for match-quick-actions),
+            //         allowMatch, onSave (newSurface) => void, onClear() }
+            const existing = document.getElementById('surfaceEditOverlay');
+            if (existing) existing.remove();
+            const s = opts.surface || {};
+            const matchOptions = (opts.allowMatch && opts.area)
+                ? Object.keys(opts.area.surfaces).filter(k => k !== opts.surfKey).slice(0, 6)
+                : [];
+            const matchChips = matchOptions.length
+                ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">
+                    ${matchOptions.map(k => `<button data-match="${_esc(k)}" style="background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe;border-radius:14px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;">Same as ${_esc(_titleCase(k))}</button>`).join('')}
+                </div>`
+                : '';
+            const brandOpts = REPORT_BRAND_OPTIONS.map(b =>
+                `<option value="${_esc(b)}" ${b === s.brand ? 'selected' : ''}>${_esc(b)}</option>`
+            ).join('');
+            const finishOpts = REPORT_FINISH_OPTIONS.map(fi =>
+                `<option value="${_esc(fi)}" ${fi === s.finish ? 'selected' : ''}>${_esc(fi)}</option>`
+            ).join('');
+            const overlay = document.createElement('div');
+            overlay.id = 'surfaceEditOverlay';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:99998;display:flex;align-items:flex-end;justify-content:center;animation:reportFadeIn 0.18s ease;';
+            overlay.innerHTML = `
+                <div id="surfaceEditSheet" style="background:#fff;width:100%;max-width:520px;border-radius:18px 18px 0 0;padding:20px 18px 24px;max-height:90vh;overflow-y:auto;animation:reportFadeIn 0.22s ease;box-shadow:0 -10px 30px rgba(0,0,0,0.18);">
+                    <div style="width:36px;height:4px;background:#e5e7eb;border-radius:2px;margin:0 auto 14px;"></div>
+                    <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:#1A2B4A;line-height:1.15;">${_esc(opts.title || 'Edit surface')}</div>
+                    ${opts.subtitle ? `<div style="font-size:12px;color:#6b7280;margin-top:4px;">${_esc(opts.subtitle)}</div>` : ''}
+                    <div style="margin-top:14px;">
+                        ${matchChips}
+                        <label style="display:block;font-size:11px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Describe in plain language (AI cleans it up)</label>
+                        <textarea id="surfaceEditDescribe" rows="2" placeholder='e.g. "BM Hale Navy HC-154 semi-gloss"' style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;line-height:1.4;font-family:inherit;resize:vertical;box-sizing:border-box;"></textarea>
+                        <button id="surfaceEditAI" style="margin-top:8px;width:100%;padding:10px;background:#1A2B4A;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">✨ Parse description →</button>
+                        <div style="margin:18px 0 14px;display:flex;align-items:center;gap:10px;">
+                            <div style="flex:1;height:1px;background:#e5e7eb;"></div>
+                            <span style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.1em;">or fill manually</span>
+                            <div style="flex:1;height:1px;background:#e5e7eb;"></div>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                            <div>
+                                <label style="display:block;font-size:11px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Color name</label>
+                                <input id="surfaceEditColor" type="text" value="${_esc(s.color || '')}" placeholder="Cloud White" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;">
+                            </div>
+                            <div>
+                                <label style="display:block;font-size:11px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Code</label>
+                                <input id="surfaceEditCode" type="text" value="${_esc(s.code || '')}" placeholder="OC-130" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;">
+                            </div>
+                            <div>
+                                <label style="display:block;font-size:11px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Brand</label>
+                                <select id="surfaceEditBrand" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;background:#fff;box-sizing:border-box;">
+                                    <option value="">—</option>${brandOpts}
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display:block;font-size:11px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Finish</label>
+                                <select id="surfaceEditFinish" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;background:#fff;box-sizing:border-box;">
+                                    <option value="">—</option>${finishOpts}
+                                </select>
+                            </div>
+                            <div style="grid-column:1/-1;">
+                                <label style="display:block;font-size:11px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Coats</label>
+                                <input id="surfaceEditCoats" type="number" min="1" max="5" value="${s.coats || 2}" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;">
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:8px;margin-top:18px;">
+                        <button id="surfaceEditCancel" style="flex:1;padding:12px;background:#fff;border:1px solid #d1d5db;border-radius:10px;font-size:14px;color:#374151;cursor:pointer;font-weight:500;">Cancel</button>
+                        <button id="surfaceEditClear" style="flex:1;padding:12px;background:#fff;border:1px solid #fecaca;border-radius:10px;font-size:13px;color:#dc2626;cursor:pointer;font-weight:500;">Clear values</button>
+                        <button id="surfaceEditSave" style="flex:2;padding:12px;background:#10b981;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;">Save</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(overlay);
+
+            const close = () => overlay.remove();
+            const captureFromInputs = () => ({
+                color: document.getElementById('surfaceEditColor').value.trim(),
+                code: document.getElementById('surfaceEditCode').value.trim(),
+                brand: document.getElementById('surfaceEditBrand').value,
+                finish: document.getElementById('surfaceEditFinish').value,
+                coats: parseInt(document.getElementById('surfaceEditCoats').value, 10) || (s.coats || 2),
+                hex: s.hex || '',
+            });
+
+            // Match chips
+            overlay.querySelectorAll('[data-match]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const key = btn.getAttribute('data-match');
+                    const source = opts.area?.surfaces?.[key];
+                    if (!source) return;
+                    document.getElementById('surfaceEditColor').value = source.color || '';
+                    document.getElementById('surfaceEditCode').value = source.code || '';
+                    document.getElementById('surfaceEditBrand').value = source.brand || '';
+                    document.getElementById('surfaceEditFinish').value = source.finish || '';
+                    document.getElementById('surfaceEditCoats').value = source.coats || 2;
+                });
+            });
+
+            // AI parse from describe input
+            document.getElementById('surfaceEditAI').addEventListener('click', async () => {
+                const text = document.getElementById('surfaceEditDescribe').value.trim();
+                if (!text) { _reportToast('Type a description first', 'warning'); return; }
+                const aiBtn = document.getElementById('surfaceEditAI');
+                aiBtn.textContent = '🧠 Parsing…'; aiBtn.disabled = true;
+                try {
+                    const f = window._reportFlow;
+                    const matched = opts.area && _resolveMatchKeyword(text, opts.area);
+                    if (matched) {
+                        document.getElementById('surfaceEditColor').value = matched.surf.color || '';
+                        document.getElementById('surfaceEditCode').value = matched.surf.code || '';
+                        document.getElementById('surfaceEditBrand').value = matched.surf.brand || '';
+                        document.getElementById('surfaceEditFinish').value = matched.surf.finish || '';
+                        document.getElementById('surfaceEditCoats').value = matched.surf.coats || 2;
+                    } else {
+                        let parsed;
+                        try {
+                            parsed = await _aiParseColorAnswer(text, opts.surfKey || 'surface', f?.proposalRef?.jobType || '');
+                        } catch (e) {
+                            parsed = _parseColorAnswer(text);
+                        }
+                        document.getElementById('surfaceEditColor').value = parsed.color || text;
+                        document.getElementById('surfaceEditCode').value = parsed.code || '';
+                        document.getElementById('surfaceEditBrand').value = parsed.brand || s.brand || '';
+                        document.getElementById('surfaceEditFinish').value = parsed.finish || s.finish || '';
+                    }
+                } finally {
+                    aiBtn.textContent = '✨ Parse description →'; aiBtn.disabled = false;
+                }
+            });
+
+            document.getElementById('surfaceEditCancel').addEventListener('click', close);
+            overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+            document.getElementById('surfaceEditClear').addEventListener('click', () => {
+                if (opts.onClear) opts.onClear();
+                close();
+            });
+            document.getElementById('surfaceEditSave').addEventListener('click', () => {
+                opts.onSave(captureFromInputs());
+                close();
+            });
+        }
+
         window.reportFlowEditSurface = function(areaIdx, surfKey) {
             const f = window._reportFlow;
             if (!f) return;
             const area = f.palette[areaIdx];
             if (!area) return;
-            const s = area.surfaces[surfKey] || {};
-            const current = [s.brand, s.color, s.code, s.finish].filter(Boolean).join(' ') || '(blank)';
-            // Hint at "same as" sources available in this area
-            const otherKeys = Object.keys(area.surfaces).filter(k => k !== surfKey);
-            const sameAsHint = otherKeys.length
-                ? `\n\nQuick: type "same as ${otherKeys[0]}" to copy from another surface.`
-                : '';
-            const desc = prompt(`Edit ${_titleCase(surfKey)} on ${area.area}\n\nCurrent: ${current}${sameAsHint}\n\nDescribe it (e.g. "BM Hale Navy HC-154 semi-gloss"):`, current === '(blank)' ? '' : current);
-            if (desc === null) return;
-            const text = desc.trim();
-            if (!text) {
-                area.surfaces[surfKey] = { color: '', code: '', brand: '', finish: '', coats: s.coats || 2, hex: '' };
-                _reportPersistDraft();
-                _reportRenderParseReview();
-                return;
-            }
-            // "Same as X" → copy from another surface in this area
-            const match = _resolveMatchKeyword(text, area);
-            if (match) {
-                area.surfaces[surfKey] = { ...match.surf, coats: s.coats || match.surf.coats || 2 };
-                _reportPersistDraft();
-                _reportRenderParseReview();
-                return;
-            }
-            _aiParseColorAnswer(text, surfKey, f.proposalRef?.jobType || '').then(parsed => {
-                area.surfaces[surfKey] = {
-                    color: parsed.color || text,
-                    code: parsed.code || '',
-                    brand: parsed.brand || s.brand || '',
-                    finish: parsed.finish || s.finish || '',
-                    coats: s.coats || 2,
-                    hex: '',
-                };
-                _reportPersistDraft();
-                _reportRenderParseReview();
-            }).catch(() => {
-                const parsed = _parseColorAnswer(text);
-                area.surfaces[surfKey] = {
-                    color: parsed.color || text,
-                    code: parsed.code || '',
-                    brand: parsed.brand || s.brand || '',
-                    finish: parsed.finish || s.finish || '',
-                    coats: s.coats || 2,
-                    hex: '',
-                };
-                _reportPersistDraft();
-                _reportRenderParseReview();
+            const s = area.surfaces[surfKey] || { coats: 2 };
+            _openSurfaceEditSheet({
+                title: _titleCase(surfKey),
+                subtitle: area.area,
+                surface: s,
+                area,
+                surfKey,
+                allowMatch: true,
+                onSave: (updated) => {
+                    area.surfaces[surfKey] = { ...s, ...updated };
+                    _reportPersistDraft();
+                    _reportRenderParseReview();
+                    _reportToast('Saved', 'success', 1200);
+                },
+                onClear: () => {
+                    area.surfaces[surfKey] = { color: '', code: '', brand: '', finish: '', coats: s.coats || 2, hex: '' };
+                    _reportPersistDraft();
+                    _reportRenderParseReview();
+                    _reportToast('Cleared', 'success', 1200);
+                },
             });
         };
 
         // ── Whole-house grouped controls ──────────────────────────────
         // Edit applies to every area that shares the surface. Auto-regroups
-        // because all instances stay identical.
+        // because all instances stay identical after save.
         window.reportFlowEditGroupedSurface = function(surfKey) {
             const f = window._reportFlow;
             if (!f) return;
-            // Find the first area that has this surface for the prompt context
             const firstIdx = f.palette.findIndex(a => surfKey in (a.surfaces || {}));
             if (firstIdx < 0) return;
             const firstArea = f.palette[firstIdx];
-            const s = firstArea.surfaces[surfKey];
-            const current = [s.brand, s.color, s.code, s.finish].filter(Boolean).join(' ') || '(blank)';
-            const desc = prompt(`Edit ${_titleCase(surfKey)} across all sides\n\nCurrent: ${current}\n\nDescribe it (e.g. "BM Cloud White OC-130 low luster"):`, current === '(blank)' ? '' : current);
-            if (desc === null) return;
-            const text = desc.trim();
-            const apply = (updated) => {
+            const s = firstArea.surfaces[surfKey] || { coats: 2 };
+            const sideCount = f.palette.filter(a => surfKey in (a.surfaces || {})).length;
+            const subtitle = sideCount > 1 ? `Across ${sideCount} sides — saves to all` : firstArea.area;
+            const applyToAll = (updated) => {
                 f.palette.forEach(area => {
                     if (surfKey in (area.surfaces || {})) {
-                        area.surfaces[surfKey] = { ...updated };
+                        area.surfaces[surfKey] = { ...area.surfaces[surfKey], ...updated };
                     }
                 });
                 _reportPersistDraft();
                 _reportRenderParseReview();
             };
-            if (!text) {
-                apply({ color: '', code: '', brand: '', finish: '', coats: s.coats || 2, hex: '' });
-                return;
-            }
-            const match = _resolveMatchKeyword(text, firstArea);
-            if (match) {
-                apply({ ...match.surf, coats: s.coats || match.surf.coats || 2 });
-                return;
-            }
-            _aiParseColorAnswer(text, surfKey, f.proposalRef?.jobType || '').then(parsed => {
-                apply({
-                    color: parsed.color || text,
-                    code: parsed.code || '',
-                    brand: parsed.brand || s.brand || '',
-                    finish: parsed.finish || s.finish || '',
-                    coats: s.coats || 2,
-                    hex: '',
-                });
-            }).catch(() => {
-                const parsed = _parseColorAnswer(text);
-                apply({
-                    color: parsed.color || text,
-                    code: parsed.code || '',
-                    brand: parsed.brand || s.brand || '',
-                    finish: parsed.finish || s.finish || '',
-                    coats: s.coats || 2,
-                    hex: '',
-                });
+            _openSurfaceEditSheet({
+                title: _titleCase(surfKey),
+                subtitle,
+                surface: s,
+                area: firstArea,
+                surfKey,
+                allowMatch: true,
+                onSave: applyToAll,
+                onClear: () => applyToAll({ color: '', code: '', brand: '', finish: '', coats: s.coats || 2, hex: '' }),
             });
         };
 
@@ -10250,15 +10354,25 @@ RULES:
             const area = f.palette[areaIdx];
             if (!area) return;
             const name = prompt(`Add a surface to ${area.area} (e.g., Shutters, Gutters, Railings):`);
-            if (!name || !name.trim()) return;
-            const key = name.trim();
+            if (name === null) return;
+            const key = (name || '').trim();
+            if (!key) return;
             if (!area.surfaces) area.surfaces = {};
-            if (key in area.surfaces) { alert(`"${key}" already exists.`); return; }
-            area.surfaces[key] = { color: '', code: '', brand: '', finish: '', coats: 2, hex: '' };
+            if (key in area.surfaces) { _reportToast(`"${key}" already exists in this area`, 'error'); return; }
+            // Apply industry defaults so the new surface starts with sensible
+            // finish + coats instead of empty.
+            const ind = window._industryDefaults?.(key, area._jobType) || {};
+            area.surfaces[key] = {
+                color: '', code: '', brand: '',
+                finish: ind.sheen || '',
+                coats: ind.coats || 2,
+                hex: '',
+            };
             _reportPersistDraft();
             _reportRenderParseReview();
-            // Open the edit prompt for the new surface so they can fill it.
-            setTimeout(() => reportFlowEditSurface(areaIdx, key), 50);
+            _reportToast(`Added "${key}"`, 'success', 1200);
+            // Open the inline sheet so operator fills in color
+            setTimeout(() => reportFlowEditSurface(areaIdx, key), 60);
         };
 
         // ── Per-area controls ─────────────────────────────────────────
@@ -10464,6 +10578,83 @@ RULES:
             area.technique = v.trim();
             _reportPersistDraft();
             _reportRenderParseReview();
+        };
+
+        // Live preview — render the in-progress report into a fullscreen
+        // overlay so the operator can see exactly how the keepsake is
+        // shaping up without finishing the build. Reuses _renderReportHTML
+        // by synthesizing a temp report doc from current f state. AI
+        // narrative will be empty (it hasn't been generated yet) — we
+        // surface that explicitly in the placeholder text.
+        window.reportFlowPreview = function() {
+            const f = window._reportFlow;
+            if (!f) return;
+            const project = f.projectRef;
+            if (!project) return;
+            const tempReport = {
+                reportId: project.completionReport?.reportId || ('PREVIEW-' + (project.jobNumber || '')),
+                status: 'preview',
+                createdAt: project.completionReport?.createdAt || new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                colorPalette: f.palette,
+                photos: f.photos,
+                stats: project.completionReport?.stats || _aggregateScopeStats(f.scopeProjectIds || [f.projectId]) || {},
+                aiContent: project.completionReport?.aiContent || {
+                    introduction: `<em style="color:#9ca3af;">[Preview — your custom welcome note will be generated when you publish.]</em>`,
+                    colorStory: `<em style="color:#9ca3af;">[Preview — color story will be generated on publish.]</em>`,
+                    proTips: {},
+                    closingMessage: `<em style="color:#9ca3af;">[Preview — closing message will be generated on publish.]</em>`,
+                },
+                scope: f.scope,
+                scopeProjectIds: f.scopeProjectIds,
+                primaryProjectId: f.primaryProjectId,
+            };
+            let html;
+            try {
+                html = _renderReportHTML(project, tempReport);
+            } catch (e) {
+                _reportToast('Preview render failed: ' + (e?.message || e), 'error', 3000);
+                return;
+            }
+            const existing = document.getElementById('reportPreviewOverlay');
+            if (existing) existing.remove();
+            const overlay = document.createElement('div');
+            overlay.id = 'reportPreviewOverlay';
+            overlay.style.cssText = 'position:fixed;inset:0;background:#1A2B4A;z-index:99997;display:flex;flex-direction:column;animation:reportFadeIn 0.2s ease;';
+            overlay.innerHTML = `
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:rgba(0,0,0,0.3);color:#fff;flex-shrink:0;">
+                    <div>
+                        <div style="font-size:12px;color:#C9A961;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;">Preview</div>
+                        <div style="font-size:13px;margin-top:2px;">${_esc(project.customerName || 'Customer')} — what the keepsake will look like</div>
+                    </div>
+                    <button id="reportPreviewClose" style="background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;">✕ Close</button>
+                </div>
+                <div id="reportPreviewBody" style="flex:1;overflow-y:auto;overflow-x:hidden;background:#0f172a;padding:20px 0;">
+                    <div style="margin:0 auto;background:#fff;transform-origin:top center;" id="reportPreviewInner">${html}</div>
+                </div>`;
+            document.body.appendChild(overlay);
+
+            // Scale the rendered report (8.5in wide ~ 816px) to fit the
+            // overlay's viewport. Use transform:scale so layout is preserved.
+            const inner = overlay.querySelector('#reportPreviewInner');
+            const fit = () => {
+                const body = overlay.querySelector('#reportPreviewBody');
+                if (!body || !inner) return;
+                const targetWidth = Math.min(816, body.clientWidth - 40);
+                const scale = targetWidth / 816;
+                inner.style.width = '816px';
+                inner.style.transform = `scale(${scale})`;
+                inner.style.transformOrigin = 'top center';
+                // Compensate height since scale doesn't change layout space
+                inner.style.marginBottom = `${-(816 * (1 - scale))}px`;
+            };
+            fit();
+            window.addEventListener('resize', fit);
+
+            document.getElementById('reportPreviewClose').addEventListener('click', () => {
+                window.removeEventListener('resize', fit);
+                overlay.remove();
+            });
         };
 
         window.reportFlowAcceptParse = function() {
