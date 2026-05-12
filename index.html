@@ -147,7 +147,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v76</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v77</span>
             </div>
 
             <!-- Global Search -->
@@ -886,7 +886,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v76</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v77</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -9482,6 +9482,39 @@ Rules:
                 askedPhotos: false,
             };
 
+            // Auto-import BEFORE photos from the estimate. Operator already
+            // shot these during the walkthrough — re-asking for the same
+            // image is friction. We reference the existing {url, path} (same
+            // Firebase Storage object, no re-upload) and tag fromEstimate
+            // so the UI can show a badge. Only on first-time open
+            // (existing?.photos is falsy); re-opens preserve user edits.
+            if (!existing?.photos) {
+                const sources = (mode === 'combined')
+                    ? scopeIds.map(id => {
+                        const proj = projects.find(p => p.id === id);
+                        return jobs.find(j => j.id === proj?.landedProposalId);
+                      }).filter(Boolean)
+                    : (landed ? [landed] : []);
+                const f = window._reportFlow;
+                sources.forEach(src => {
+                    (src.rooms || []).filter(r => !r.deleted).forEach(room => {
+                        const photos = (room.photos || []).filter(p => p && typeof p === 'object' && p.url && p.path);
+                        if (photos.length === 0) return;
+                        const match = f.palette.find(a => a.area === room.name)
+                                   || f.palette.find(a => a.area.endsWith('— ' + room.name));
+                        if (!match) return;
+                        if (!f.photos.rooms[match.area]) f.photos.rooms[match.area] = {};
+                        if (!f.photos.rooms[match.area].before) {
+                            f.photos.rooms[match.area].before = {
+                                url: photos[0].url,
+                                path: photos[0].path,
+                                fromEstimate: true,
+                            };
+                        }
+                    });
+                });
+            }
+
             _ensureReportFonts();
             showScreen('reportFlowScreen');
             document.getElementById('reportFlowChat').innerHTML = '';
@@ -9845,7 +9878,7 @@ Rules:
             const html = `
                 <div style="background:#fff;border:1px solid ${REPORT_PALETTE.line};border-radius:12px;padding:14px;margin:8px 0;">
                     <h3 style="margin:0 0 8px;font-size:16px;color:${REPORT_PALETTE.navy};">📷 Photos</h3>
-                    <p style="font-size:12px;color:#6b7280;margin:0 0 12px;">Upload before + after for each area. Tip: take "after" from the same angle as "before" for a dramatic comparison.</p>
+                    <p style="font-size:12px;color:#6b7280;margin:0 0 12px;">Before photos are pulled in from your estimate (marked <span style="display:inline-block;background:#3b82f6;color:#fff;font-size:9px;font-weight:600;padding:1px 5px;border-radius:3px;letter-spacing:0.04em;">FROM ESTIMATE</span>). You only need to add the AFTER shot for each area + a cover.</p>
 
                     <!-- Cover photo -->
                     <div style="padding:10px;background:#FAF7F2;border-radius:8px;margin-bottom:10px;">
@@ -9879,12 +9912,17 @@ Rules:
         }
 
         function _photoSlotHTML(kind, area, photo) {
-            const label = photo ? '✓ Uploaded' : 'Tap to upload';
+            const emptyLabel = kind === 'after' ? 'Tap to add after' : 'Tap to upload';
             const bg = photo ? `url('${photo.url}')` : 'transparent';
             const inputId = `photoInput_${kind}_${(area || 'cover').replace(/\W/g, '_')}`;
+            const borderColor = photo ? (photo.fromEstimate ? '#3b82f6' : REPORT_PALETTE.gold) : '#d1d5db';
+            const badge = photo?.fromEstimate
+                ? `<div style="position:absolute;bottom:4px;left:4px;background:#3b82f6;color:#fff;font-size:9px;font-weight:600;padding:2px 6px;border-radius:4px;letter-spacing:0.04em;">FROM ESTIMATE</div>`
+                : '';
             return `
-                <label for="${inputId}" style="display:block;cursor:pointer;height:90px;border:2px dashed ${photo ? REPORT_PALETTE.gold : '#d1d5db'};border-radius:8px;background-image:${bg};background-size:cover;background-position:center;position:relative;">
-                    ${!photo ? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:11px;">${label}</div>` : ''}
+                <label for="${inputId}" style="display:block;cursor:pointer;height:90px;border:2px dashed ${borderColor};border-radius:8px;background-image:${bg};background-size:cover;background-position:center;position:relative;">
+                    ${!photo ? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:11px;">${emptyLabel}</div>` : ''}
+                    ${badge}
                     ${photo ? `<button onclick="event.preventDefault();reportFlowDeletePhoto('${kind}', ${JSON.stringify(area || '').replace(/"/g, '&quot;')})" style="position:absolute;top:4px;right:4px;background:rgba(220,38,38,0.85);color:#fff;border:none;width:22px;height:22px;border-radius:11px;font-size:14px;cursor:pointer;">×</button>` : ''}
                 </label>
                 <input type="file" id="${inputId}" accept="image/*" style="display:none;" onchange="reportFlowUploadPhoto('${kind}', ${JSON.stringify(area || '').replace(/"/g, '&quot;')}, event)">`;
