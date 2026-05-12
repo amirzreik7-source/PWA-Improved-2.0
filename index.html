@@ -149,7 +149,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v85</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v86</span>
             </div>
 
             <!-- Global Search -->
@@ -888,7 +888,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v85</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v86</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -11853,10 +11853,11 @@ Generate JSON with these EXACT keys:
                        needs to manually drop to 80% to fit). Mobile
                        viewport detection via max-width:500px narrows this
                        override to phone-print only; tablets keep the macOS
-                       desktop behavior. */
+                       desktop behavior. 9in observed to fit at 100% scale
+                       on iOS Safari when URL/page-number headers are on. */
                     @media (max-width: 500px) {
                         .report-doc .page {
-                            height: 9.5in !important;
+                            height: 9in !important;
                         }
                     }
                 }
@@ -12900,6 +12901,10 @@ Generate JSON with these EXACT keys:
             };
             setBtn('Preparing…', true);
 
+            // We override mobile-only CSS that html2canvas can't interpret
+            // (CSS `zoom`) and force full 8.5×11 page boxes during render so
+            // each .page captures correctly. Restored in `finally`.
+            let overrideStyle = null;
             try {
                 if (typeof html2pdf === 'undefined') {
                     await new Promise((resolve, reject) => {
@@ -12926,6 +12931,28 @@ Generate JSON with these EXACT keys:
                 const reportEl = document.querySelector('#reportContent .report-doc');
                 if (!reportEl) throw new Error('Report content not found');
 
+                // Force full letter-size pages and disable the mobile zoom +
+                // screen margins. !important to beat the @media screen rules
+                // inside the report's own scoped style block.
+                overrideStyle = document.createElement('style');
+                overrideStyle.id = '_pdfRenderOverride';
+                overrideStyle.textContent = `
+                    #reportContent { padding: 0 !important; }
+                    #reportContent .report-doc { width: 8.5in !important; margin: 0 !important; }
+                    #reportContent .report-doc .page {
+                        zoom: 1 !important;
+                        width: 8.5in !important;
+                        height: 11in !important;
+                        margin: 0 !important;
+                        box-shadow: none !important;
+                    }`;
+                document.head.appendChild(overrideStyle);
+
+                // Wait two animation frames for the override to take effect
+                // and the browser to repaint with the new sizes before the
+                // html2canvas snapshot.
+                await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
                 setBtn('Rendering…', true);
 
                 await html2pdf().set({
@@ -12938,15 +12965,25 @@ Generate JSON with these EXACT keys:
                         allowTaint: true,
                         backgroundColor: '#ffffff',
                         logging: false,
-                        windowWidth: 816,  // 8.5in * 96dpi — force desktop-width layout even on phone
+                        // 8.5in × 96dpi = 816px. Force the canvas to render at
+                        // letter width regardless of the phone's actual viewport.
+                        width: 816,
+                        windowWidth: 816,
                     },
                     jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait', compress: true },
-                    pagebreak: { mode: ['css', 'legacy'], before: '.page + .page' },
+                    // Break BEFORE each .page sibling. The renderer already
+                    // emits .page-break-before on .page + .page; this just
+                    // tells html2pdf to honor it.
+                    pagebreak: { mode: ['css', 'legacy'], before: '.report-doc .page' },
                 }).from(reportEl).save();
+                _reportToast?.('PDF saved', 'success', 1400);
             } catch (e) {
                 console.error('Save PDF failed:', e);
-                alert('PDF generation failed: ' + e.message);
+                const msg = `PDF render failed: ${e?.message || e}. Tap "Print" instead and Save as PDF from there.`;
+                if (typeof _reportToast === 'function') _reportToast(msg, 'error', 5000);
+                else alert(msg);
             } finally {
+                if (overrideStyle) overrideStyle.remove();
                 setBtn('📥 Save PDF', false);
             }
         };
