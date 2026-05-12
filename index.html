@@ -58,6 +58,8 @@
         .login-box { background: white; padding: 40px; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); max-width: 400px; width: 100%; }
         .login-box h2 { color: #1e3c72; margin-bottom: 30px; text-align: center; }
         .loading { text-align: center; padding: 40px; color: #666; }
+        @keyframes reportSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes reportFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
         .photo-preview { max-width: 150px; max-height: 150px; border-radius: 8px; margin-top: 10px; display: block; }
         /* Print: hide everything except proposal view content */
         @media print {
@@ -147,7 +149,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v82</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v83</span>
             </div>
 
             <!-- Global Search -->
@@ -886,7 +888,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v82</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v83</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -9293,6 +9295,65 @@ Rules:
 
         // Build initial colorPalette from the proposal's rooms (so the AI
         // already knows which areas to ask about). One entry per room.
+        // Non-blocking toast notification — replaces alert() for in-flow
+        // feedback. Stack vertically; auto-dismiss on a timer. Used for
+        // save indicators, errors, etc. so the operator never has to tap
+        // OK to dismiss a system dialog mid-flow.
+        window._reportToast = function(text, type, ms) {
+            type = type || 'info';
+            ms = ms || 2400;
+            let stack = document.getElementById('reportToastStack');
+            if (!stack) {
+                stack = document.createElement('div');
+                stack.id = 'reportToastStack';
+                stack.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:99999;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;';
+                document.body.appendChild(stack);
+            }
+            const colors = {
+                info:    { bg: '#1A2B4A', fg: '#fff' },
+                success: { bg: '#10b981', fg: '#fff' },
+                warning: { bg: '#f59e0b', fg: '#fff' },
+                error:   { bg: '#dc2626', fg: '#fff' },
+            };
+            const c = colors[type] || colors.info;
+            const toast = document.createElement('div');
+            toast.style.cssText = `background:${c.bg};color:${c.fg};padding:10px 16px;border-radius:8px;font-size:13px;font-weight:500;box-shadow:0 4px 14px rgba(0,0,0,0.18);max-width:88vw;text-align:center;opacity:0;transform:translateY(8px);transition:opacity 0.2s ease, transform 0.2s ease;pointer-events:auto;`;
+            toast.textContent = text;
+            stack.appendChild(toast);
+            requestAnimationFrame(() => { toast.style.opacity = '1'; toast.style.transform = 'translateY(0)'; });
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(8px)';
+                setTimeout(() => toast.remove(), 220);
+            }, ms);
+        };
+
+        // Audit the working palette for things the operator might want to fix
+        // before publishing. Surfaced as a non-blocking warning banner on the
+        // review card — operator can still proceed; the banner just informs.
+        function _validateReportPalette(palette) {
+            const errors = [];
+            const warnings = [];
+            if (!palette || palette.length === 0) {
+                errors.push('No areas in this report yet — tap "+ Add area" or "↻ Re-pull from proposal".');
+                return { errors, warnings };
+            }
+            palette.forEach(a => {
+                const keys = Object.keys(a.surfaces || {});
+                if (keys.length === 0) {
+                    warnings.push(`<strong>${a.area}</strong> has no surfaces yet.`);
+                    return;
+                }
+                const blank = keys.filter(k => !a.surfaces[k]?.color);
+                if (blank.length === keys.length) {
+                    warnings.push(`<strong>${a.area}</strong> — no colors filled in yet.`);
+                } else if (blank.length > 0) {
+                    warnings.push(`<strong>${a.area}</strong> — ${blank.length} blank: ${blank.map(k => _titleCase(k)).join(', ')}`);
+                }
+            });
+            return { errors, warnings };
+        }
+
         // Industry-standard defaults for surface types when the proposal
         // didn't fill them in (or when adding a brand-new surface in the
         // estimate). Mirrors the contractor's actual standards:
@@ -9660,17 +9721,25 @@ Rules:
 
         async function _aiParseFreeForm(text, palette, _surfaceList, jobType) {
             // Build a per-area structure block so the AI knows exactly which
-            // surfaces live in each area (proposals model surfaces per area,
-            // not as a flat global list).
+            // surfaces live in each area, AND its job type. Combined reports
+            // mix Interior + Exterior areas, so per-area tagging prevents
+            // the AI from conflating an Interior "Walls" with anything
+            // exterior. Tagging also helps when contractor says "all the
+            // exterior X" — AI can scope correctly.
+            const jobTypesInPalette = [...new Set(palette.map(a => a._jobType).filter(Boolean))];
+            const reportType = jobTypesInPalette.length > 1
+                ? `Combined: ${jobTypesInPalette.join(' + ')}`
+                : (jobTypesInPalette[0] || jobType || 'Painting');
             const structure = palette.map(a => {
                 const keys = Object.keys(a.surfaces || {});
-                return `  • ${a.area}: ${keys.length ? keys.join(', ') : '(no surfaces yet)'}`;
+                const tag = a._jobType ? `[${a._jobType}] ` : '';
+                return `  • ${tag}${a.area}: ${keys.length ? keys.join(', ') : '(no surfaces yet)'}`;
             }).join('\n');
 
             const sys = `You extract structured paint info from a contractor's natural description of a completed job.
 
 KNOWN STRUCTURE FROM ESTIMATE:
-- Job type: ${jobType}
+- Job type: ${reportType}
 - Areas and their surfaces:
 ${structure}
 
@@ -9921,6 +9990,37 @@ RULES:
             }
 
             const totalSurfaces = f.palette.reduce((n, a) => n + Object.keys(a.surfaces || {}).length, 0);
+            const filledSurfaces = f.palette.reduce((n, a) => n + Object.values(a.surfaces || {}).filter(s => s?.color).length, 0);
+            const completeness = totalSurfaces > 0 ? Math.round((filledSurfaces / totalSurfaces) * 100) : 0;
+
+            // Non-blocking validation banner. Errors block continue button;
+            // warnings inform but don't block.
+            const { errors, warnings } = _validateReportPalette(f.palette);
+            let validationHTML = '';
+            if (errors.length) {
+                validationHTML = `<div style="padding:10px 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;margin-bottom:10px;font-size:12px;color:#991b1b;">
+                    <strong>Heads up:</strong> ${errors.join(' ')}
+                </div>`;
+            } else if (warnings.length) {
+                validationHTML = `<div style="padding:10px 12px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;margin-bottom:10px;font-size:12px;color:#92400e;">
+                    <div style="font-weight:600;margin-bottom:4px;">A few rows still need attention — you can publish without them (they'll be skipped on the keepsake):</div>
+                    <ul style="margin:0;padding-left:18px;">${warnings.slice(0, 6).map(w => `<li style="margin-top:2px;">${w}</li>`).join('')}${warnings.length > 6 ? `<li style="margin-top:2px;font-style:italic;">…and ${warnings.length - 6} more</li>` : ''}</ul>
+                </div>`;
+            }
+
+            // Completeness bar — gives the operator at-a-glance progress
+            const barHTML = totalSurfaces > 0
+                ? `<div style="margin-bottom:10px;">
+                    <div style="display:flex;justify-content:space-between;font-size:11px;color:#6b7280;margin-bottom:4px;">
+                        <span>${filledSurfaces} of ${totalSurfaces} surfaces filled</span>
+                        <span>${completeness}%</span>
+                    </div>
+                    <div style="height:4px;background:#f3f4f6;border-radius:2px;overflow:hidden;">
+                        <div style="height:100%;width:${completeness}%;background:${completeness === 100 ? '#10b981' : (completeness >= 50 ? '#3b82f6' : '#f59e0b')};border-radius:2px;transition:width 0.3s ease;"></div>
+                    </div>
+                </div>`
+                : '';
+
             const card = `
                 <div id="reportParseReview" style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin:8px 0;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;">
@@ -9928,12 +10028,14 @@ RULES:
                             <strong style="font-size:14px;color:#1A2B4A;">Surfaces & colors</strong>
                             <div style="font-size:11px;color:#9ca3af;margin-top:1px;">${f.palette.length} ${f.palette.length === 1 ? 'area' : 'areas'} · ${totalSurfaces} ${totalSurfaces === 1 ? 'surface' : 'surfaces'}</div>
                         </div>
-                        <button onclick="reportFlowResetFromProposal()" title="Wipe everything and re-pull from the proposal" style="background:none;border:1px solid #d1d5db;border-radius:6px;font-size:11px;padding:4px 10px;color:#6b7280;cursor:pointer;">↻ Re-pull</button>
+                        <button onclick="reportFlowResetFromProposal()" title="Wipe everything and re-pull from the proposal" style="background:none;border:1px solid #d1d5db;border-radius:6px;font-size:11px;padding:6px 12px;color:#6b7280;cursor:pointer;">↻ Re-pull</button>
                     </div>
                     ${scopeToggleHTML}
-                    ${rows || '<div style="padding:14px;text-align:center;color:#9ca3af;font-style:italic;font-size:13px;">No areas yet.</div>'}
-                    <button class="btn btn-secondary btn-small" onclick="reportFlowAddArea()" style="width:100%;margin-top:4px;font-size:12px;">+ Add area</button>
-                    <button class="btn btn-success" onclick="reportFlowAcceptParse()" style="width:100%;margin-top:10px;font-size:14px;font-weight:600;padding:12px;">✓ Looks good — add photos →</button>
+                    ${barHTML}
+                    ${validationHTML}
+                    ${rows || '<div style="padding:14px;text-align:center;color:#9ca3af;font-style:italic;font-size:13px;">No areas yet. Tap "+ Add area" below or hit "↻ Re-pull" to pull surfaces from the proposal.</div>'}
+                    <button class="btn btn-secondary btn-small" onclick="reportFlowAddArea()" style="width:100%;margin-top:4px;font-size:13px;padding:10px;">+ Add area</button>
+                    <button class="btn btn-success" onclick="reportFlowAcceptParse()" ${errors.length ? 'disabled style="width:100%;margin-top:10px;font-size:14px;font-weight:600;padding:12px;opacity:0.55;cursor:not-allowed;"' : 'style="width:100%;margin-top:10px;font-size:14px;font-weight:600;padding:12px;"'}>✓ Looks good — add photos →</button>
                 </div>`;
             const existing = document.getElementById('reportParseReview');
             const wrap = document.createElement('div');
@@ -10166,10 +10268,21 @@ RULES:
             const area = f.palette[areaIdx];
             if (!area) return;
             const newName = prompt(`Rename area "${area.area}" to:`, area.area);
-            if (!newName || !newName.trim()) return;
-            area.area = newName.trim();
+            if (newName === null) return;
+            const trimmed = (newName || '').trim();
+            if (!trimmed) return;
+            if (trimmed === area.area) return;
+            // Collision check — guard against duplicate area names which
+            // would confuse the renderer and the customer.
+            const collision = f.palette.findIndex((a, i) => i !== areaIdx && (a.area || '').toLowerCase() === trimmed.toLowerCase());
+            if (collision >= 0) {
+                _reportToast(`"${trimmed}" already exists. Pick a different name.`, 'error');
+                return;
+            }
+            area.area = trimmed;
             _reportPersistDraft();
             _reportRenderParseReview();
+            _reportToast('Renamed', 'success', 1400);
         };
 
         window.reportFlowRemoveArea = function(areaIdx) {
@@ -10186,19 +10299,29 @@ RULES:
         window.reportFlowAddArea = function() {
             const f = window._reportFlow;
             if (!f) return;
-            const name = prompt('Add an area (e.g., "Front Porch", "Garage Interior"):');
-            if (!name || !name.trim()) return;
-            // In combined scope, ask which side this area belongs to so it
-            // sorts into the right section and groups correctly.
-            const jobTypesInPalette = [...new Set((f.palette || []).map(a => a._jobType).filter(Boolean))];
+            const name = prompt('Add an area (e.g., "Front Porch", "Garage Interior", "Master Bedroom"):');
+            if (name === null) return;
+            const trimmed = (name || '').trim();
+            if (!trimmed) return;
+            // Collision check on add too.
+            const collision = f.palette.findIndex(a => (a.area || '').toLowerCase() === trimmed.toLowerCase());
+            if (collision >= 0) {
+                _reportToast(`"${trimmed}" already exists. Pick a different name.`, 'error');
+                return;
+            }
+            // Determine jobType. In combined scope always ask so the area
+            // sorts into the right section. In single, infer from proposal.
             let jobType = f.proposalRef?.jobType || '';
-            if (f.scope === 'combined' && jobTypesInPalette.length > 1) {
-                const answer = prompt(`Is "${name.trim()}" Interior or Exterior?`, jobType || 'Interior');
-                if (!answer) return;
-                jobType = /ext/i.test(answer) ? 'Exterior' : 'Interior';
+            if (f.scope === 'combined') {
+                const guess = /bedroom|bath|kitchen|living|dining|family|office|hallway|foyer|stair|laundry|closet|nursery/i.test(trimmed) ? 'Interior'
+                            : /front|back|left|right|side|porch|deck|exterior|siding|garage exterior/i.test(trimmed) ? 'Exterior'
+                            : (jobType || 'Interior');
+                const answer = prompt(`Interior or Exterior?\n\n"${trimmed}" — best guess is ${guess}.\n\nType "I" for Interior, "E" for Exterior:`, guess);
+                if (answer === null) return;
+                jobType = /^e/i.test(answer.trim()) ? 'Exterior' : 'Interior';
             }
             f.palette.push({
-                area: name.trim(),
+                area: trimmed,
                 surfaces: {},
                 technique: '',
                 sqft: 0,
@@ -10209,11 +10332,14 @@ RULES:
             });
             _reportPersistDraft();
             _reportRenderParseReview();
+            _reportToast(`Added "${trimmed}"`, 'success', 1400);
         };
 
         // Switch the report's scope. Combined pulls in every linked sibling's
         // proposal data; Single trims back to just the primary's. Confirms
-        // before wiping to make the destructive nature obvious.
+        // before wiping to make the destructive nature obvious. Re-imports
+        // BEFORE photos for the new scope; preserves any AFTER photos and
+        // cover the operator uploaded that still apply.
         window.reportFlowSetScope = function(newScope) {
             const f = window._reportFlow;
             if (!f) return;
@@ -10236,24 +10362,96 @@ RULES:
                 ? _seedColorPaletteFromScope(f.scopeProjectIds)
                 : _seedColorPaletteFromProposal(f.proposalRef);
             f.palette = fresh;
+            // Re-import BEFORE photos for new scope; keep cover + afters
+            const keepCover = f.photos?.cover || null;
+            const keepAfters = {};
+            Object.entries(f.photos?.rooms || {}).forEach(([area, slots]) => {
+                if (slots?.after) keepAfters[area] = slots.after;
+            });
+            f.photos = { cover: keepCover, rooms: {} };
+            const sources = (newScope === 'combined')
+                ? f.scopeProjectIds.map(id => {
+                    const proj = projects.find(p => p.id === id);
+                    return jobs.find(j => j.id === proj?.landedProposalId);
+                  }).filter(Boolean)
+                : (f.proposalRef ? [f.proposalRef] : []);
+            sources.forEach(src => {
+                (src.rooms || []).filter(r => !r.deleted).forEach(room => {
+                    const photos = (room.photos || []).filter(p => p && typeof p === 'object' && p.url && p.path);
+                    if (photos.length === 0) return;
+                    const match = f.palette.find(a => a.area === room.name)
+                               || f.palette.find(a => a.area.endsWith('— ' + room.name));
+                    if (!match) return;
+                    if (!f.photos.rooms[match.area]) f.photos.rooms[match.area] = {};
+                    f.photos.rooms[match.area].before = {
+                        url: photos[0].url,
+                        path: photos[0].path,
+                        fromEstimate: true,
+                    };
+                });
+            });
+            Object.entries(keepAfters).forEach(([area, afterPhoto]) => {
+                if (!f.palette.find(a => a.area === area)) return;
+                if (!f.photos.rooms[area]) f.photos.rooms[area] = {};
+                f.photos.rooms[area].after = afterPhoto;
+            });
             _reportPersistDraft();
             _reportRenderParseReview();
+            _reportToast(newScope === 'combined' ? 'Combined scope · pulled in linked sides' : 'Switched to single-project scope', 'success', 2000);
         };
 
         // Wipe the working palette and re-seed it from the latest proposal
-        // data. Useful when an in-progress draft was started before surfaces
-        // were pulled from the proposal, or when the operator has edited the
-        // proposal after starting the report.
+        // data. Also re-imports BEFORE photos so the operator gets the full
+        // "fresh from estimate" state. Useful when an in-progress draft was
+        // started before surfaces/photos were pulled from the proposal, or
+        // when the operator has edited the proposal after starting the
+        // report.
         window.reportFlowResetFromProposal = function() {
             const f = window._reportFlow;
             if (!f) return;
-            if (!confirm('Wipe the current report data and re-pull every surface from the proposal? Any manual edits, renames, and added surfaces in this report will be lost.')) return;
+            if (!confirm('Wipe the current report data and re-pull every surface + before-photo from the proposal? Any manual edits, renames, and added surfaces in this report will be lost.')) return;
             const fresh = (f.scope === 'combined')
                 ? _seedColorPaletteFromScope(f.scopeProjectIds || [f.projectId])
                 : _seedColorPaletteFromProposal(f.proposalRef);
             f.palette = fresh;
+            // Re-import BEFORE photos for the new palette. Keep any AFTER
+            // photos and the cover the operator already uploaded.
+            const keepCover = f.photos?.cover || null;
+            const keepAfters = {};
+            Object.entries(f.photos?.rooms || {}).forEach(([area, slots]) => {
+                if (slots?.after) keepAfters[area] = slots.after;
+            });
+            f.photos = { cover: keepCover, rooms: {} };
+            const sources = (f.scope === 'combined')
+                ? (f.scopeProjectIds || []).map(id => {
+                    const proj = projects.find(p => p.id === id);
+                    return jobs.find(j => j.id === proj?.landedProposalId);
+                  }).filter(Boolean)
+                : (f.proposalRef ? [f.proposalRef] : []);
+            sources.forEach(src => {
+                (src.rooms || []).filter(r => !r.deleted).forEach(room => {
+                    const photos = (room.photos || []).filter(p => p && typeof p === 'object' && p.url && p.path);
+                    if (photos.length === 0) return;
+                    const match = f.palette.find(a => a.area === room.name)
+                               || f.palette.find(a => a.area.endsWith('— ' + room.name));
+                    if (!match) return;
+                    if (!f.photos.rooms[match.area]) f.photos.rooms[match.area] = {};
+                    f.photos.rooms[match.area].before = {
+                        url: photos[0].url,
+                        path: photos[0].path,
+                        fromEstimate: true,
+                    };
+                });
+            });
+            // Restore previously-uploaded AFTER photos onto matching areas
+            Object.entries(keepAfters).forEach(([area, afterPhoto]) => {
+                if (!f.palette.find(a => a.area === area)) return;
+                if (!f.photos.rooms[area]) f.photos.rooms[area] = {};
+                f.photos.rooms[area].after = afterPhoto;
+            });
             _reportPersistDraft();
             _reportRenderParseReview();
+            _reportToast('Re-pulled from proposal', 'success', 1800);
         };
 
         window.reportFlowEditAreaTechnique = function(areaIdx) {
@@ -10724,6 +10922,9 @@ RULES:
         }
 
         function _photoSlotHTML(kind, area, photo) {
+            const f = window._reportFlow;
+            const slotKey = `${kind}_${area || 'cover'}`;
+            const isLoading = f?.photos?._loading?.[slotKey];
             const emptyLabel = kind === 'after' ? 'Tap to add after' : 'Tap to upload';
             const bg = photo ? `url('${photo.url}')` : 'transparent';
             const inputId = `photoInput_${kind}_${(area || 'cover').replace(/\W/g, '_')}`;
@@ -10731,11 +10932,20 @@ RULES:
             const badge = photo?.fromEstimate
                 ? `<div style="position:absolute;bottom:4px;left:4px;background:#3b82f6;color:#fff;font-size:9px;font-weight:600;padding:2px 6px;border-radius:4px;letter-spacing:0.04em;">FROM ESTIMATE</div>`
                 : '';
+            const loadingOverlay = isLoading
+                ? `<div style="position:absolute;inset:0;background:rgba(255,255,255,0.85);display:flex;align-items:center;justify-content:center;border-radius:6px;">
+                    <div style="display:flex;align-items:center;gap:8px;color:#1A2B4A;font-size:12px;font-weight:600;">
+                        <div style="width:14px;height:14px;border:2px solid #1A2B4A;border-right-color:transparent;border-radius:50%;animation:reportSpin 0.8s linear infinite;"></div>
+                        Uploading…
+                    </div>
+                </div>`
+                : '';
             return `
                 <label for="${inputId}" style="display:block;cursor:pointer;height:90px;border:2px dashed ${borderColor};border-radius:8px;background-image:${bg};background-size:cover;background-position:center;position:relative;">
-                    ${!photo ? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:11px;">${emptyLabel}</div>` : ''}
+                    ${!photo && !isLoading ? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9ca3af;font-size:11px;">${emptyLabel}</div>` : ''}
                     ${badge}
-                    ${photo ? `<button onclick="event.preventDefault();reportFlowDeletePhoto('${kind}', ${JSON.stringify(area || '').replace(/"/g, '&quot;')})" style="position:absolute;top:4px;right:4px;background:rgba(220,38,38,0.85);color:#fff;border:none;width:22px;height:22px;border-radius:11px;font-size:14px;cursor:pointer;">×</button>` : ''}
+                    ${photo && !isLoading ? `<button onclick="event.preventDefault();reportFlowDeletePhoto('${kind}', ${JSON.stringify(area || '').replace(/"/g, '&quot;')})" style="position:absolute;top:4px;right:4px;background:rgba(220,38,38,0.85);color:#fff;border:none;width:22px;height:22px;border-radius:11px;font-size:14px;cursor:pointer;">×</button>` : ''}
+                    ${loadingOverlay}
                 </label>
                 <input type="file" id="${inputId}" accept="image/*" style="display:none;" onchange="reportFlowUploadPhoto('${kind}', ${JSON.stringify(area || '').replace(/"/g, '&quot;')}, event)">`;
         }
@@ -10745,6 +10955,10 @@ RULES:
             if (!file) return;
             const f = window._reportFlow;
             if (!f) return;
+            const slotKey = `${kind}_${area || 'cover'}`;
+            if (!f.photos._loading) f.photos._loading = {};
+            f.photos._loading[slotKey] = true;
+            _renderPhotoSheet();
             try {
                 const compressed = await compressImage(file, 1400, 0.82);
                 const path = `completion-reports/${f.projectId}/${kind}_${(area || 'cover').replace(/\W/g, '_')}_${Date.now()}.jpg`;
@@ -10757,10 +10971,14 @@ RULES:
                     if (!f.photos.rooms[area]) f.photos.rooms[area] = {};
                     f.photos.rooms[area][kind] = { url, path };
                 }
+                delete f.photos._loading[slotKey];
                 await _reportPersistDraft();
                 _renderPhotoSheet();
+                _reportToast('Photo added', 'success', 1400);
             } catch (e) {
-                alert('Upload failed: ' + e.message);
+                delete f.photos._loading[slotKey];
+                _renderPhotoSheet();
+                _reportToast(`Upload failed — ${e?.message || 'try again'}`, 'error', 3600);
             }
         };
 
