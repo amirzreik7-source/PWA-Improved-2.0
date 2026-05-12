@@ -147,7 +147,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v71</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v72</span>
             </div>
 
             <!-- Global Search -->
@@ -885,7 +885,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v71</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v72</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -10524,23 +10524,29 @@ Generate JSON with these EXACT keys:
             const sc = (text) => `<div class="smallcaps">${text}</div>`;
 
             // ─── PAGE 1 — COVER ─────────────────────────────────────────────
+            // Cover gradient note: Safari's save-to-PDF pipeline collapses
+            // full-page rgba linear-gradients to a near-opaque solid fill,
+            // which hides the hero entirely. Two solid-rgba bands (top +
+            // bottom) render reliably in PDF and give the text its contrast
+            // without obscuring the middle of the photo.
             const coverPage = `
             <div class="page page-cover"${heroPhotoUrl ? ` style="background-image:url('${heroPhotoUrl}');background-size:cover;background-position:center;background-repeat:no-repeat;-webkit-print-color-adjust:exact;print-color-adjust:exact;"` : ''}>
                 ${heroPhotoUrl ? `<img src="${heroPhotoUrl}" alt="" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:0;display:block;">` : ''}
-                <div style="position:absolute;top:0;left:0;right:0;bottom:0;background:linear-gradient(180deg,rgba(20,34,58,0.35) 0%,rgba(20,34,58,0.78) 100%);z-index:1;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+                <div style="position:absolute;top:0;left:0;right:0;height:1.8in;background:rgba(20,34,58,0.45);z-index:1;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
+                <div style="position:absolute;left:0;right:0;bottom:0;height:5.5in;background:rgba(20,34,58,0.62);z-index:1;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
                 <div class="page-inner" style="text-align:center;">
                     <div>
                         <div style="width:60px;height:2px;background:var(--gold);margin:0 auto 14px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></div>
-                        <div style="font-family:'Inter',sans-serif;font-weight:600;font-size:12px;letter-spacing:0.32em;text-transform:uppercase;color:var(--gold);">${companyName}</div>
+                        <div style="font-family:'Inter',sans-serif;font-weight:600;font-size:12px;letter-spacing:0.32em;text-transform:uppercase;color:var(--gold);text-shadow:0 1px 3px rgba(0,0,0,0.4);">${companyName}</div>
                     </div>
                     <div style="flex:1;"></div>
                     <div>
-                        <div style="font-family:'Inter',sans-serif;font-weight:500;font-size:11px;letter-spacing:0.32em;text-transform:uppercase;color:var(--paper);">A Project Completion Report for</div>
-                        <h1 style="font-family:'Playfair Display',serif;font-weight:700;font-size:84pt;line-height:0.95;letter-spacing:-0.02em;margin:24px 0 0;color:var(--paper);">${customerName}</h1>
-                        ${customerAddress ? `<div style="font-family:'Playfair Display',serif;font-style:italic;font-weight:400;font-size:22pt;color:var(--paper-soft);margin-top:18px;">${customerAddress}</div>` : ''}
+                        <div style="font-family:'Inter',sans-serif;font-weight:500;font-size:11px;letter-spacing:0.32em;text-transform:uppercase;color:var(--paper);text-shadow:0 1px 3px rgba(0,0,0,0.5);">A Project Completion Report for</div>
+                        <h1 style="font-family:'Playfair Display',serif;font-weight:700;font-size:84pt;line-height:0.95;letter-spacing:-0.02em;margin:24px 0 0;color:var(--paper);text-shadow:0 2px 8px rgba(0,0,0,0.5);">${customerName}</h1>
+                        ${customerAddress ? `<div style="font-family:'Playfair Display',serif;font-style:italic;font-weight:400;font-size:22pt;color:var(--paper-soft);margin-top:18px;text-shadow:0 1px 4px rgba(0,0,0,0.4);">${customerAddress}</div>` : ''}
                     </div>
                     <div style="flex:1;"></div>
-                    <div style="font-family:'Inter',sans-serif;font-weight:600;font-size:11px;letter-spacing:0.32em;text-transform:uppercase;color:var(--gold);">${completedAtStr}</div>
+                    <div style="font-family:'Inter',sans-serif;font-weight:600;font-size:11px;letter-spacing:0.32em;text-transform:uppercase;color:var(--gold);text-shadow:0 1px 3px rgba(0,0,0,0.4);">${completedAtStr}</div>
                 </div>
             </div>`;
 
