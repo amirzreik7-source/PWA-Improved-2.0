@@ -147,7 +147,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v79</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v80</span>
             </div>
 
             <!-- Global Search -->
@@ -886,7 +886,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v79</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v80</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -9753,9 +9753,9 @@ RULES:
 
             const card = `
                 <div id="reportParseReview" style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin:8px 0;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;">
                         <strong style="font-size:14px;color:#1A2B4A;">Surfaces & colors</strong>
-                        <span style="font-size:11px;color:#9ca3af;">From your proposal</span>
+                        <button onclick="reportFlowResetFromProposal()" title="Wipe everything and re-pull from the proposal" style="background:none;border:1px solid #d1d5db;border-radius:6px;font-size:11px;padding:4px 10px;color:#6b7280;cursor:pointer;">↻ Re-pull from proposal</button>
                     </div>
                     ${rows || '<div style="padding:14px;text-align:center;color:#9ca3af;font-style:italic;font-size:13px;">No areas yet.</div>'}
                     <button class="btn btn-secondary btn-small" onclick="reportFlowAddArea()" style="width:100%;margin-top:4px;font-size:12px;">+ Add area</button>
@@ -9900,6 +9900,22 @@ RULES:
                 _jobType: f.proposalRef?.jobType || '',
                 _sourceProjectId: '',
             });
+            _reportPersistDraft();
+            _reportRenderParseReview();
+        };
+
+        // Wipe the working palette and re-seed it from the latest proposal
+        // data. Useful when an in-progress draft was started before surfaces
+        // were pulled from the proposal, or when the operator has edited the
+        // proposal after starting the report.
+        window.reportFlowResetFromProposal = function() {
+            const f = window._reportFlow;
+            if (!f) return;
+            if (!confirm('Wipe the current report data and re-pull every surface from the proposal? Any manual edits, renames, and added surfaces in this report will be lost.')) return;
+            const fresh = (f.scope === 'combined')
+                ? _seedColorPaletteFromScope(f.scopeProjectIds || [f.projectId])
+                : _seedColorPaletteFromProposal(f.proposalRef);
+            f.palette = fresh;
             _reportPersistDraft();
             _reportRenderParseReview();
         };
