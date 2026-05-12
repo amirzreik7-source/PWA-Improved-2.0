@@ -147,7 +147,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v74</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v75</span>
             </div>
 
             <!-- Global Search -->
@@ -886,7 +886,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v74</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v75</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -8020,8 +8020,20 @@ Only return JSON, no other text.`;
 
         // Open actuals from project level
         window.openProjectActuals = function(projectId) {
+            try {
+                return _openProjectActualsImpl(projectId);
+            } catch (e) {
+                console.error('openProjectActuals failed:', e);
+                alert('Could not open actuals: ' + (e?.message || e) + '\n\nLine: ' + (e?.stack?.split('\n')[1] || '?'));
+            }
+        };
+
+        function _openProjectActualsImpl(projectId) {
             const project = projects.find(p => p.id === projectId);
-            if (!project) return;
+            if (!project) {
+                alert('Project not found: ' + projectId);
+                return;
+            }
 
             // Legacy redirect: only when this side has no actuals and a linked
             // sibling does — so the user sees the existing data. New saves
@@ -8166,7 +8178,7 @@ Only return JSON, no other text.`;
 
             calculateProfit();
             showScreen('profitTrackingScreen');
-        };
+        }
 
         // Legacy support — old "Log Actuals" button on Step 6
         window.openProfitTracking = function() {
