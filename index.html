@@ -147,7 +147,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v73</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v74</span>
             </div>
 
             <!-- Global Search -->
@@ -880,12 +880,13 @@
         <div id="reportViewScreen" class="screen">
             <div class="no-print" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
                 <button class="btn btn-back" onclick="exitReportView()" style="flex:0 0 auto;">← Back</button>
-                <button id="reportPrintBtn" class="btn btn-success" onclick="printReport()" style="flex:1;min-width:140px;">🖨️ Print / Save PDF</button>
+                <button id="reportSavePdfBtn" class="btn btn-success" onclick="saveReportAsPdf()" style="flex:1;min-width:140px;" title="Generate a clean customer-facing PDF (no browser URL footer)">📥 Save PDF</button>
+                <button id="reportPrintBtn" class="btn btn-secondary btn-small" onclick="printReport()" style="flex:0 0 auto;" title="Use the browser print dialog (may include URL footer on phone)">🖨️ Print</button>
                 <button class="btn btn-info btn-small" onclick="reportShareLink()" style="flex:0 0 auto;">🔗 Share</button>
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v73</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v74</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -11487,10 +11488,71 @@ Generate JSON with these EXACT keys:
             }).catch(() => restore());
         };
 
+        // Generate a customer-facing PDF directly from the report HTML using
+        // html2pdf.js. This bypasses Safari's print dialog entirely, so the
+        // saved file never carries the URL/page-number footer that iOS adds
+        // when "Print Headers and Footers" is on. Output is rasterized
+        // (text isn't selectable) but visually matches the screen view.
+        window.saveReportAsPdf = async function() {
+            const btn = document.getElementById('reportSavePdfBtn');
+            const setBtn = (text, disabled) => {
+                if (btn) { btn.textContent = text; btn.disabled = disabled; }
+            };
+            setBtn('Preparing…', true);
+
+            try {
+                if (typeof html2pdf === 'undefined') {
+                    await new Promise((resolve, reject) => {
+                        const script = document.createElement('script');
+                        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+                        script.onload = resolve;
+                        script.onerror = () => reject(new Error('Could not load PDF library'));
+                        document.head.appendChild(script);
+                    });
+                }
+
+                const imgs = document.querySelectorAll('#reportContent img');
+                await Promise.all([...imgs].map(img => img.complete && img.naturalWidth > 0
+                    ? Promise.resolve()
+                    : new Promise(resolve => { img.onload = resolve; img.onerror = resolve; })));
+
+                if (document.fonts && document.fonts.ready) {
+                    await document.fonts.ready;
+                }
+
+                const projectId = window._reportProjectId;
+                const project = projects.find(p => p.id === projectId);
+                const filename = _buildReportFilename(project) + '.pdf';
+                const reportEl = document.querySelector('#reportContent .report-doc');
+                if (!reportEl) throw new Error('Report content not found');
+
+                setBtn('Rendering…', true);
+
+                await html2pdf().set({
+                    margin: 0,
+                    filename: filename,
+                    image: { type: 'jpeg', quality: 0.95 },
+                    html2canvas: {
+                        scale: 2,
+                        useCORS: true,
+                        allowTaint: true,
+                        backgroundColor: '#ffffff',
+                        logging: false,
+                        windowWidth: 816,  // 8.5in * 96dpi — force desktop-width layout even on phone
+                    },
+                    jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait', compress: true },
+                    pagebreak: { mode: ['css', 'legacy'], before: '.page + .page' },
+                }).from(reportEl).save();
+            } catch (e) {
+                console.error('Save PDF failed:', e);
+                alert('PDF generation failed: ' + e.message);
+            } finally {
+                setBtn('📥 Save PDF', false);
+            }
+        };
+
         // Build a customer-facing PDF filename — one they'd actually open.
-        // Examples: "Smith Family — Interior Color Story (NSP-2026-014)"
-        //           "Garcia Home — Exterior Color Story"
-        //           "Lee Home — Interior & Exterior Color Story"
+        // Examples: "Welcome Home, Smith Family — Your Project Keepsake"
         function _buildReportFilename(project) {
             const customer = (project?.customerName || '').trim() || 'Friend';
             // Customer-facing filename: this is what shows up in their Downloads
