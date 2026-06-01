@@ -149,7 +149,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v91</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v92</span>
             </div>
 
             <!-- Global Search -->
@@ -950,7 +950,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v91</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v92</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -14390,8 +14390,19 @@ Generate JSON with these EXACT keys:
         window.saveProposalAsPdf = async function() {
             const btn = document.getElementById('proposalSavePdfBtn');
             const setBtn = (text, disabled) => { if (btn) { btn.textContent = text; btn.disabled = disabled; } };
-            setBtn('Preparing…', true);
 
+            // Open a tab SYNCHRONOUSLY inside the click gesture. iOS Safari
+            // ignores programmatic <a download> (the old .save() did nothing),
+            // but it will show a PDF opened in a tab — where the native share
+            // sheet lets the user Save to Files / email it, with NO URL footer.
+            // Reserving the tab now avoids the popup blocker after awaits.
+            let pdfTab = null;
+            try {
+                pdfTab = window.open('about:blank', '_blank');
+                if (pdfTab) pdfTab.document.write('<title>Generating PDF…</title><body style="font-family:-apple-system,Arial;padding:40px;color:#333;font-size:18px">Generating your proposal PDF… one moment.</body>');
+            } catch (_) {}
+
+            setBtn('Preparing…', true);
             let overrideStyle = null;
             try {
                 if (typeof html2pdf === 'undefined') {
@@ -14413,8 +14424,7 @@ Generate JSON with these EXACT keys:
                 const proposalEl = document.querySelector('#proposalContent .proposal-doc') || document.getElementById('proposalContent');
                 if (!proposalEl) throw new Error('Proposal content not found');
 
-                // Pin the document to true letter width (8.5in = 816px @96dpi)
-                // so output is identical regardless of the phone's viewport.
+                // Pin the document to true letter width (8.5in = 816px @96dpi).
                 overrideStyle = document.createElement('style');
                 overrideStyle.id = '_proposalPdfOverride';
                 overrideStyle.textContent = `
@@ -14425,28 +14435,43 @@ Generate JSON with these EXACT keys:
 
                 setBtn('Rendering…', true);
 
-                await html2pdf().set({
-                    // Top/bottom page margins so flowing content clears the
-                    // sheet edges; horizontal padding comes from .page-content.
+                // html2pdf renders the WHOLE element to a single canvas, then
+                // slices it into pages. iOS Safari caps canvas area (~16.7M px),
+                // so a tall proposal at scale 2 silently produces a blank/empty
+                // PDF. Scale down dynamically to stay safely under the cap.
+                const docHeightPx = proposalEl.scrollHeight || 1056;
+                const MAX_CANVAS_AREA = 12000000; // conservative vs iOS limit
+                let scale = Math.min(2, Math.sqrt(MAX_CANVAS_AREA / (816 * docHeightPx)));
+                if (!isFinite(scale) || scale < 0.7) scale = 0.7;
+
+                const worker = html2pdf().set({
                     margin: [0.4, 0, 0.4, 0],
                     filename: _buildProposalFilename() + '.pdf',
                     image: { type: 'jpeg', quality: 0.95 },
-                    html2canvas: {
-                        scale: 2,
-                        useCORS: true,
-                        allowTaint: true,
-                        backgroundColor: '#ffffff',
-                        logging: false,
-                        width: 816,
-                        windowWidth: 816,
-                    },
+                    html2canvas: { scale, useCORS: true, allowTaint: true, backgroundColor: '#ffffff', logging: false, width: 816, windowWidth: 816 },
                     jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait', compress: true },
-                    // Honor the page-break-inside:avoid already on rows/tables.
                     pagebreak: { mode: ['css', 'legacy'] },
-                }).from(proposalEl).save();
+                }).from(proposalEl);
+
+                // Get a Blob (works cross-browser); open/download it ourselves.
+                const blob = await worker.outputPdf('blob');
+                const url = URL.createObjectURL(blob);
+
+                if (pdfTab && !pdfTab.closed) {
+                    // iOS + desktop: show the PDF in the reserved tab.
+                    pdfTab.location.href = url;
+                } else {
+                    // Popup blocked — fall back to a direct download (desktop) /
+                    // navigation (which still beats the URL-footer print path).
+                    const a = document.createElement('a');
+                    a.href = url; a.download = _buildProposalFilename() + '.pdf';
+                    document.body.appendChild(a); a.click(); a.remove();
+                }
+                setTimeout(() => URL.revokeObjectURL(url), 120000);
             } catch (e) {
                 console.error('Save proposal PDF failed:', e);
-                alert(`PDF render failed: ${e?.message || e}. Tap "Print" instead and Save as PDF from there.`);
+                if (pdfTab && !pdfTab.closed) { try { pdfTab.close(); } catch (_) {} }
+                alert(`Couldn't generate the PDF: ${e?.message || e}. Tap "Print" and choose Save to Files.`);
             } finally {
                 if (overrideStyle) overrideStyle.remove();
                 setBtn('📥 Save PDF', false);
