@@ -149,7 +149,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v90</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v91</span>
             </div>
 
             <!-- Global Search -->
@@ -343,7 +343,10 @@
                 <h3>Additional Services</h3>
                 <p style="color:#666;margin-bottom:10px;">Add extras like wallpaper removal, drywall repair, etc.</p>
                 <div id="additionalServicesList"></div>
-                <button class="btn btn-info btn-small" onclick="openAddServiceModal()" style="margin-top:10px;">+ Add Service</button>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+                    <button class="btn btn-info btn-small" onclick="openAddServiceModal()">+ Add Service</button>
+                    <button class="btn btn-info btn-small" onclick="openCabinetModal()" style="background:#7c3aed;">🚪 Cabinets &amp; Built-Ins</button>
+                </div>
             </div>
 
             <div class="room-card">
@@ -598,6 +601,55 @@
                 </div>
             </div>
             <button class="btn btn-success btn-large" onclick="saveService()">Save Service</button>
+        </div>
+
+        <!-- CABINETS & BUILT-INS MODAL -->
+        <div id="cabinetModal" class="screen">
+            <button class="btn btn-back" onclick="closeCabinetModal()">← Back to Room</button>
+            <h2 class="screen-title" id="cabinetModalTitle">Cabinets & Built-Ins</h2>
+            <div class="room-card">
+                <div class="form-group">
+                    <label>Type</label>
+                    <select id="cabinetType" onchange="onCabinetTypeChange()">
+                        <option value="Kitchen">Kitchen Cabinets (doors &amp; drawers removed · ~3 days)</option>
+                        <option value="Built-In">Built-In (sprayed in place · per section)</option>
+                        <option value="Vanity">Vanity (sprayed in place · doors &amp; drawers)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Label (optional)</label>
+                    <input type="text" id="cabinetLabel" placeholder="e.g. Kitchen, Master Bath Vanity, Living Room Built-Ins">
+                </div>
+                <div id="cabinetCountsDoorsDrawers" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                    <div class="form-group">
+                        <label># Doors</label>
+                        <input type="number" id="cabinetDoors" min="0" step="1" value="0" oninput="updateCabinetPreview()">
+                    </div>
+                    <div class="form-group">
+                        <label># Drawers</label>
+                        <input type="number" id="cabinetDrawers" min="0" step="1" value="0" oninput="updateCabinetPreview()">
+                    </div>
+                </div>
+                <div id="cabinetCountsSections" class="form-group hidden">
+                    <label># Sections</label>
+                    <input type="number" id="cabinetSections" min="0" step="1" value="0" oninput="updateCabinetPreview()">
+                </div>
+                <div class="form-group">
+                    <label>Finish (Benjamin Moore Advance)</label>
+                    <select id="cabinetSheen">
+                        <option value="Satin">Satin (standard)</option>
+                        <option value="Semi-Gloss">Semi-Gloss</option>
+                        <option value="Matte">Matte</option>
+                        <option value="High Gloss">High Gloss</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Price override (optional)</label>
+                    <input type="number" id="cabinetPriceOverride" step="0.01" min="0" placeholder="Leave blank to auto-calculate" oninput="updateCabinetPreview()">
+                </div>
+                <div id="cabinetPricePreview" style="padding:12px;background:#f3f0ff;border:1px solid #c4b5fd;border-radius:8px;font-size:14px;color:#5b21b6;"></div>
+            </div>
+            <button class="btn btn-success btn-large" onclick="saveCabinet()">Save</button>
         </div>
 
         <!-- BULK CHANGE MODAL -->
@@ -898,7 +950,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v90</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v91</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -7118,19 +7170,184 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 container.innerHTML = '<p style="color:#999;font-size:13px;">No additional services added.</p>';
                 return;
             }
-            container.innerHTML = services.map((svc, i) => `
-                <div style="padding:12px;margin-bottom:8px;border-radius:8px;background:#d4edda;border:2px solid #28a745;position:relative;cursor:pointer;" onclick="editService(${i})">
+            container.innerHTML = services.map((svc, i) => {
+                const isCab = !!svc.cabinet;
+                const edit = isCab ? `editCabinet(${i})` : `editService(${i})`;
+                const icon = isCab ? '🚪' : '✓';
+                return `
+                <div style="padding:12px;margin-bottom:8px;border-radius:8px;background:${isCab ? '#f3f0ff' : '#d4edda'};border:2px solid ${isCab ? '#7c3aed' : '#28a745'};position:relative;cursor:pointer;" onclick="${edit}">
                     <div style="padding-right:30px;">
-                        <h4 style="margin:0 0 4px 0;color:#155724;">✓ ${svc.name}</h4>
-                        ${svc.description ? '<p style="margin:2px 0;font-size:10pt;color:#155724;">' + svc.description + '</p>' : ''}
-                        <p style="margin:2px 0;font-size:10pt;color:#155724;">${svc.qty > 1 ? svc.qty + ' × ' : ''}$${svc.price.toFixed(2)}</p>
-                        <p style="margin:2px 0;font-weight:bold;color:#155724;">$${svc.total.toFixed(2)}</p>
+                        <h4 style="margin:0 0 4px 0;color:${isCab ? '#5b21b6' : '#155724'};">${icon} ${svc.name}</h4>
+                        ${svc.description ? '<p style="margin:2px 0;font-size:10pt;color:' + (isCab ? '#5b21b6' : '#155724') + ';">' + svc.description + '</p>' : ''}
+                        ${!isCab && svc.qty > 1 ? '<p style="margin:2px 0;font-size:10pt;color:#155724;">' + svc.qty + ' × $' + svc.price.toFixed(2) + '</p>' : ''}
+                        <p style="margin:2px 0;font-weight:bold;color:${isCab ? '#5b21b6' : '#155724'};">$${(svc.total ?? svc.price).toFixed(2)}</p>
                     </div>
                     <button class="btn btn-danger" onclick="event.stopPropagation();deleteService(${i})" style="position:absolute;top:10px;right:10px;width:24px;height:24px;padding:0;font-size:14px;line-height:24px;border-radius:4px;">×</button>
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
         }
-        
+
+        // ═══════════════════════════════════════
+        // CABINETS & BUILT-INS (factory finish)
+        // ═══════════════════════════════════════
+        window._editingCabinetIndex = -1;
+
+        function _cabinetRates() {
+            return {
+                door: PRICING.CabinetDoorPrice || 180,
+                drawer: PRICING.CabinetDrawerPrice || 80,
+                section: PRICING.CabinetSectionPrice || 65
+            };
+        }
+
+        function computeCabinetTotal(meta) {
+            const r = _cabinetRates();
+            if (meta.type === 'Built-In') return (meta.sections || 0) * r.section;
+            return (meta.doors || 0) * r.door + (meta.drawers || 0) * r.drawer;
+        }
+
+        // One-line summary shown on the room card and as the proposal sub-line.
+        function _cabinetSummary(meta) {
+            if (meta.type === 'Built-In') return `Factory finish — ${meta.sections||0} section(s) · ${meta.sheen}`;
+            return `Factory finish — ${meta.doors||0} door(s), ${meta.drawers||0} drawer(s) · ${meta.sheen}`;
+        }
+
+        // Rich, customer-facing scope HTML that auto-fills on the proposal.
+        function _cabinetScopeHtml(meta) {
+            const sheen = meta.sheen || 'Satin';
+            const inPlaceNote = `<p style="margin:6px 0 0;font-size:8.5pt;color:#555;"><em>In-place note: because this unit is finished in place, any areas the sprayer can't safely reach — tight corners, edges against walls or counters, and recessed spots — are carefully hand-brushed or rolled for full, even coverage. A slight difference in texture in these limited areas is normal with in-place refinishing.</em></p>`;
+            if (meta.type === 'Kitchen') {
+                return `<strong>Northern Star Factory Finish — Kitchen Cabinets</strong> (${meta.doors||0} doors, ${meta.drawers||0} drawer fronts)
+                <p style="margin:4px 0;">A sprayed finish, applied the way new custom cabinetry is finished — no brush marks, no roller texture.</p>
+                <ol style="margin:4px 0;padding-left:18px;">
+                <li><strong>Contain the space.</strong> Mask and seal countertops, backsplash, appliances, floors, and doorways; set up containment so dust and overspray stay out of the rest of the home.</li>
+                <li><strong>Remove &amp; label.</strong> Every door and drawer front is numbered and removed; hinges and hardware are bagged and labeled to return to their exact openings.</li>
+                <li><strong>Clean &amp; degrease.</strong> All surfaces are washed to cut years of cooking grease and oils that stop finishes from bonding.</li>
+                <li><strong>Sand.</strong> Machine-sand the flat faces, hand-sand the profiles, edges, and detail work, then vacuum and tack-wipe clean.</li>
+                <li><strong>Fill &amp; repair.</strong> Dents, chips, and worn edges are filled and sanded back smooth.</li>
+                <li><strong>Prime.</strong> Spray one full coat of Benjamin Moore STIX bonding primer, then hand-sand smooth.</li>
+                <li><strong>Finish.</strong> Spray two coats of Benjamin Moore Advance — a waterborne alkyd that levels glass-smooth and cures hard. <strong>${sheen}</strong> finish.</li>
+                <li><strong>Reassemble &amp; align.</strong> Doors and drawers are rehung, every door aligned and adjusted, hardware reinstalled, and the kitchen walked through with you.</li>
+                </ol>
+                <p style="margin:4px 0;font-size:8.5pt;color:#555;"><em>Boxes are sprayed in place; doors and drawer fronts are finished in a dust-free area. Roughly a 3-day process — cabinets are emptied by the homeowner before we begin.</em></p>`;
+            }
+            if (meta.type === 'Vanity') {
+                return `<strong>Northern Star Factory Finish — Vanity</strong> (${meta.doors||0} doors, ${meta.drawers||0} drawers · sprayed in place)
+                <p style="margin:4px 0;">The same sprayed finish as our cabinets, done right in place:</p>
+                <ol style="margin:4px 0;padding-left:18px;">
+                <li><strong>Contain &amp; protect</strong> the surrounding floor, walls, countertop, and fixtures.</li>
+                <li><strong>Clean &amp; degrease</strong> every surface to cut soap, toothpaste, and moisture residue.</li>
+                <li><strong>Sand</strong> the faces and profiles; vacuum and tack-wipe.</li>
+                <li><strong>Fill &amp; repair</strong> dents, chips, and worn edges.</li>
+                <li><strong>Prime</strong> with one sprayed coat of Benjamin Moore STIX bonding primer, hand-sanded smooth.</li>
+                <li><strong>Finish</strong> with two sprayed coats of Benjamin Moore Advance — <strong>${sheen}</strong>.</li>
+                <li><strong>Detail.</strong> Remove masking, reinstall hardware, inspect every surface.</li>
+                </ol>${inPlaceNote}`;
+            }
+            // Built-In
+            return `<strong>Northern Star Factory Finish — Built-Ins</strong> (${meta.sections||0} section(s) · sprayed in place)
+            <p style="margin:4px 0;">The same sprayed finish, done right in your home since the unit stays anchored to the wall:</p>
+            <ol style="margin:4px 0;padding-left:18px;">
+            <li><strong>Contain &amp; protect.</strong> Mask and seal surrounding walls, floors, furnishings, and electronics into a clean spray zone.</li>
+            <li><strong>Clean &amp; degrease</strong> every surface so the finish bonds properly.</li>
+            <li><strong>Sand</strong> the whole unit — faces, shelves, edges, and trim — then vacuum and tack-wipe.</li>
+            <li><strong>Fill &amp; repair</strong> any dents, gaps, or worn spots.</li>
+            <li><strong>Prime.</strong> One sprayed coat of Benjamin Moore STIX bonding primer, hand-sanded smooth.</li>
+            <li><strong>Finish.</strong> Two sprayed coats of Benjamin Moore Advance — <strong>${sheen}</strong>.</li>
+            <li><strong>Detail.</strong> Remove masking, reinstall hardware, inspect and detail every surface.</li>
+            </ol>${inPlaceNote}`;
+        }
+
+        window.onCabinetTypeChange = function() {
+            const type = document.getElementById('cabinetType').value;
+            const isBuiltIn = type === 'Built-In';
+            document.getElementById('cabinetCountsDoorsDrawers').classList.toggle('hidden', isBuiltIn);
+            document.getElementById('cabinetCountsSections').classList.toggle('hidden', !isBuiltIn);
+            updateCabinetPreview();
+        };
+
+        function _readCabinetForm() {
+            const type = document.getElementById('cabinetType').value;
+            return {
+                type,
+                label: document.getElementById('cabinetLabel').value.trim(),
+                doors: parseInt(document.getElementById('cabinetDoors').value) || 0,
+                drawers: parseInt(document.getElementById('cabinetDrawers').value) || 0,
+                sections: parseInt(document.getElementById('cabinetSections').value) || 0,
+                sheen: document.getElementById('cabinetSheen').value || 'Satin'
+            };
+        }
+
+        window.updateCabinetPreview = function() {
+            const meta = _readCabinetForm();
+            const r = _cabinetRates();
+            const auto = computeCabinetTotal(meta);
+            const override = parseFloat(document.getElementById('cabinetPriceOverride').value);
+            const total = (override > 0) ? override : auto;
+            let breakdown;
+            if (meta.type === 'Built-In') {
+                breakdown = `${meta.sections||0} section(s) × $${r.section.toFixed(2)}`;
+            } else {
+                breakdown = `${meta.doors||0} door(s) × $${r.door.toFixed(2)} + ${meta.drawers||0} drawer(s) × $${r.drawer.toFixed(2)}`;
+            }
+            document.getElementById('cabinetPricePreview').innerHTML =
+                `<div>${breakdown}</div><div style="font-weight:700;font-size:16px;margin-top:4px;">Total: $${total.toFixed(2)}${override > 0 ? ' (override)' : ''}</div>`;
+        };
+
+        window.openCabinetModal = function(editIndex) {
+            window._editingCabinetIndex = (typeof editIndex === 'number') ? editIndex : -1;
+            const editing = window._editingCabinetIndex >= 0;
+            const svc = editing ? window.currentRoom.additionalServices[window._editingCabinetIndex] : null;
+            const meta = svc?.cabinet || { type: 'Kitchen', label: '', doors: 0, drawers: 0, sections: 0, sheen: 'Satin' };
+            document.getElementById('cabinetModalTitle').textContent = editing ? 'Edit Cabinets / Built-In' : 'Cabinets & Built-Ins';
+            document.getElementById('cabinetType').value = meta.type;
+            document.getElementById('cabinetLabel').value = meta.label || '';
+            document.getElementById('cabinetDoors').value = meta.doors || 0;
+            document.getElementById('cabinetDrawers').value = meta.drawers || 0;
+            document.getElementById('cabinetSections').value = meta.sections || 0;
+            document.getElementById('cabinetSheen').value = meta.sheen || 'Satin';
+            document.getElementById('cabinetPriceOverride').value = (editing && svc.cabinet?.priceOverride) ? svc.cabinet.priceOverride : '';
+            onCabinetTypeChange();
+            showScreen('cabinetModal');
+        };
+
+        window.editCabinet = function(index) { openCabinetModal(index); };
+
+        window.closeCabinetModal = function() {
+            displayRoomDetail();
+            showScreen('roomDetailScreen');
+        };
+
+        window.saveCabinet = function() {
+            markUnsaved();
+            const meta = _readCabinetForm();
+            if (meta.type === 'Built-In' && meta.sections <= 0) { alert('Enter the number of sections'); return; }
+            if (meta.type !== 'Built-In' && meta.doors <= 0 && meta.drawers <= 0) { alert('Enter doors and/or drawers'); return; }
+
+            const r = _cabinetRates();
+            meta.rateDoor = r.door; meta.rateDrawer = r.drawer; meta.rateSection = r.section;
+            const override = parseFloat(document.getElementById('cabinetPriceOverride').value);
+            if (override > 0) meta.priceOverride = override;
+            meta.scopeHtml = _cabinetScopeHtml(meta);
+
+            const total = (override > 0) ? override : computeCabinetTotal(meta);
+            const baseName = meta.type === 'Kitchen' ? 'Kitchen Cabinet Refinishing'
+                : meta.type === 'Vanity' ? 'Vanity Refinishing' : 'Built-In Refinishing';
+            const name = meta.label ? `${baseName} — ${meta.label}` : baseName;
+
+            const svc = { name, description: _cabinetSummary(meta), price: total, qty: 1, total, cabinet: meta };
+
+            if (!window.currentRoom.additionalServices) window.currentRoom.additionalServices = [];
+            if (window._editingCabinetIndex >= 0) {
+                window.currentRoom.additionalServices[window._editingCabinetIndex] = svc;
+            } else {
+                window.currentRoom.additionalServices.push(svc);
+            }
+            window._editingCabinetIndex = -1;
+            displayRoomDetail();
+            showScreen('roomDetailScreen');
+        };
+
         // === BULK CHANGE ===
         window._bulkSurfaceType = '';
         window._bulkSelectedRooms = [];
@@ -14368,7 +14585,13 @@ Generate JSON with these EXACT keys:
                     const brands = [...new Set(room.surfaces.map(s=>{const p=products.find(pr=>pr.id===s.productId);return p?p.brand:'Brand'}))].join(', ');
                     rows += `<tr><td colspan="5" style="padding:3px 6px;font-size:8.5pt;color:#666">Brands: ${brands}</td></tr>`;
                     if (room.additionalServices?.length > 0) {
-                        room.additionalServices.forEach(svc => { rows += `<tr><td style="padding:4px 4px 4px 14px;font-size:9pt">${svc.name}</td><td colspan="3" style="font-size:9pt">${svc.description||''}</td><td style="padding:4px;font-size:9pt"></td></tr>`; });
+                        room.additionalServices.forEach(svc => {
+                            if (svc.cabinet && svc.cabinet.scopeHtml) {
+                                rows += `<tr><td colspan="5" style="padding:8px 10px;font-size:9pt;background-color:#faf8ff;border-left:3px solid #7c3aed;${pca}"><div style="font-weight:700;color:#5b21b6;margin-bottom:2px">${svc.name}</div>${svc.cabinet.scopeHtml}</td></tr>`;
+                            } else {
+                                rows += `<tr><td style="padding:4px 4px 4px 14px;font-size:9pt">${svc.name}</td><td colspan="3" style="font-size:9pt">${svc.description||''}</td><td style="padding:4px;font-size:9pt"></td></tr>`;
+                            }
+                        });
                     }
                     if (room.notes) rows += `<tr><td colspan="5" style="padding:4px 6px;font-style:italic;color:#666;font-size:9pt">Note: ${room.notes}</td></tr>`;
                 });
