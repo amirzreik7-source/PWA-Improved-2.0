@@ -149,7 +149,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v88</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v89</span>
             </div>
 
             <!-- Global Search -->
@@ -382,6 +382,15 @@
                     <label>Product</label>
                     <select id="surfaceProduct"></select>
                     <p style="margin-top:6px;"><a href="#" onclick="event.preventDefault();quickAddProduct()" style="color:#667eea;font-size:13px;">+ Product not listed? Add new</a></p>
+                </div>
+                <div class="form-group">
+                    <label>Finish type</label>
+                    <select id="surfaceFinishType" onchange="onSurfaceFinishTypeChange()">
+                        <option value="Paint">Paint</option>
+                        <option value="Stain">Stain</option>
+                        <option value="Primer">Primer / Sealer</option>
+                    </select>
+                    <p style="margin-top:5px;color:#888;font-size:12px;">Auto-set from the product. Switch to Stain to get stain finishes.</p>
                 </div>
                 <div class="form-group">
                     <label>Sheen / Finish</label>
@@ -889,7 +898,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v88</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v89</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -1016,7 +1025,7 @@
                 <div class="form-group"><label>Sheen / Finish *</label><select id="productSheen" required>
                     <option value="">-- Select --</option>
                 </select></div>
-                <div class="form-group"><label>Type *</label><select id="productType" required>
+                <div class="form-group"><label>Type *</label><select id="productType" required onchange="updateProductSheenOptions()">
                     <option value="">-- Select Type --</option>
                     <option value="Exterior">Exterior</option>
                     <option value="Interior">Interior</option>
@@ -4953,9 +4962,8 @@ Based on the journal entries, calculate and return this JSON (no other text):
             document.getElementById('productName').value = product.name;
             document.getElementById('productBrand').value = product.brand;
             document.getElementById('productCategory').value = product.category || 'Paint';
-            updateProductSheenOptions();
-            document.getElementById('productSheen').value = product.sheen;
-            document.getElementById('productType').value = product.type;
+            document.getElementById('productType').value = product.type || '';
+            updateProductSheenOptions(product.sheen);
             showScreen('newProductScreen');
         };
 
@@ -4967,21 +4975,39 @@ Based on the journal entries, calculate and return this JSON (no other text):
             } catch(e) { alert('Error deleting product: ' + e.message); }
         };
 
-        // Sheen options by product category
+        // Finish/sheen options. Paint finishes differ for interior vs exterior;
+        // stain and primer finishes are the same either way. The SHEEN_OPTIONS
+        // map holds the supersets used for category DETECTION (which list a
+        // saved finish belongs to); getSheenOptions() returns the right list to
+        // SHOW based on category + interior/exterior.
+        const PAINT_SHEENS_INTERIOR = ['Flat', 'Matte', 'Eggshell', 'Satin', 'Pearl', 'Semi-Gloss', 'Gloss'];
+        const PAINT_SHEENS_EXTERIOR = ['Flat', 'Low Luster', 'Satin', 'Soft Gloss', 'Semi-Gloss', 'Gloss'];
+        const STAIN_SHEENS = ['Solid', 'Semi-Solid', 'Semi-Transparent', 'Transparent', 'Clear'];
+        const PRIMER_SHEENS = ['Flat', 'Matte'];
         const SHEEN_OPTIONS = {
-            Paint: ['Flat', 'Matte', 'Eggshell', 'Satin', 'Semi-Gloss', 'Soft Gloss', 'Gloss'],
-            Stain: ['Solid', 'Semi-Solid', 'Semi-Transparent', 'Transparent', 'Clear'],
-            Primer: ['Flat', 'Matte']
+            // Paint superset = interior ∪ exterior, for detection only.
+            Paint: ['Flat', 'Matte', 'Eggshell', 'Satin', 'Pearl', 'Low Luster', 'Soft Gloss', 'Semi-Gloss', 'Gloss'],
+            Stain: STAIN_SHEENS,
+            Primer: PRIMER_SHEENS
         };
 
-        window.updateProductSheenOptions = function() {
+        // The finishes to actually show, given a category and the job type.
+        function getSheenOptions(category, jobType) {
+            if (category === 'Stain') return STAIN_SHEENS;
+            if (category === 'Primer') return PRIMER_SHEENS;
+            return /exterior/i.test(jobType || '') ? PAINT_SHEENS_EXTERIOR : PAINT_SHEENS_INTERIOR;
+        }
+
+        window.updateProductSheenOptions = function(desiredSheen) {
             const cat = document.getElementById('productCategory')?.value || 'Paint';
+            const type = document.getElementById('productType')?.value || '';
             const sheenEl = document.getElementById('productSheen');
             if (!sheenEl) return;
-            const current = sheenEl.value;
-            const options = SHEEN_OPTIONS[cat] || SHEEN_OPTIONS.Paint;
+            const want = desiredSheen || sheenEl.value;
+            const options = getSheenOptions(cat, type).slice();
+            if (want && !options.includes(want)) options.unshift(want);
             sheenEl.innerHTML = '<option value="">-- Select --</option>' + options.map(s => `<option value="${s}">${s}</option>`).join('');
-            if (options.includes(current)) sheenEl.value = current;
+            if (want && options.includes(want)) sheenEl.value = want;
         };
         // Init on load
         setTimeout(() => updateProductSheenOptions(), 100);
@@ -5017,24 +5043,46 @@ Based on the journal entries, calculate and return this JSON (no other text):
             return fromProductSheen || 'Paint';
         }
 
-        // Update surface sheen dropdown based on selected product.
-        // preferredSheen lets callers force-select a saved finish (e.g. when
-        // editing an existing surface) — it is always added to the option list
-        // so a stain finish is never silently dropped against a paint list.
+        // Fill the #surfaceSheen dropdown for a given finish category, honoring
+        // the job's interior/exterior context. `want` is force-included and
+        // selected so a stain finish is never dropped against a paint list.
+        function _fillSurfaceSheenOptions(category, want) {
+            const sheenEl = document.getElementById('surfaceSheen');
+            if (!sheenEl) return;
+            const jobType = (typeof currentEstimate !== 'undefined' && currentEstimate) ? currentEstimate.jobType : '';
+            const options = getSheenOptions(category, jobType).slice();
+            if (want && !options.includes(want)) options.unshift(want);
+            sheenEl.innerHTML = '<option value="">-- Select --</option>' + options.map(s => `<option value="${s}">${s}</option>`).join('');
+            if (want && options.includes(want)) sheenEl.value = want;
+        }
+
+        // Update the Finish Type selector + Sheen dropdown based on the chosen
+        // product. preferredSheen force-selects a saved finish (e.g. when
+        // editing an existing surface). The Finish Type selector is the user's
+        // manual override — if the product isn't categorized as a stain, they
+        // can flip it to Stain here and instantly get stain finishes.
         function updateSurfaceSheenDropdown(productId, preferredSheen) {
             const product = products.find(p => p.id === productId);
             const sheenEl = document.getElementById('surfaceSheen');
             if (!sheenEl) return;
             const current = sheenEl.value;
             const cat = _inferFinishCategory(product, window.currentSurfaceType, preferredSheen);
-            const options = (SHEEN_OPTIONS[cat] || SHEEN_OPTIONS.Paint).slice();
-            // The finish we want to land on, in priority order.
+            const typeEl = document.getElementById('surfaceFinishType');
+            if (typeEl) typeEl.value = cat;
             const want = preferredSheen || product?.sheen || current;
-            // Never drop a saved finish that isn't in this category's list.
-            if (want && !options.includes(want)) options.unshift(want);
-            sheenEl.innerHTML = '<option value="">-- Select --</option>' + options.map(s => `<option value="${s}">${s}</option>`).join('');
-            if (want && options.includes(want)) sheenEl.value = want;
+            _fillSurfaceSheenOptions(cat, want);
         }
+
+        // User manually flips the Paint/Stain/Primer toggle in the surface modal.
+        window.onSurfaceFinishTypeChange = function() {
+            const cat = document.getElementById('surfaceFinishType')?.value || 'Paint';
+            const current = document.getElementById('surfaceSheen')?.value || '';
+            // Only carry the current finish over if it belongs to the new
+            // category — otherwise start fresh so we don't keep a paint sheen
+            // selected under Stain.
+            const keep = _categoryFromSheen(current) === cat ? current : '';
+            _fillSurfaceSheenOptions(cat, keep);
+        };
 
         // Quick-add product from surface config screen
         window.quickAddProduct = async function() {
