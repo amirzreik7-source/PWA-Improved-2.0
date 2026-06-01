@@ -149,7 +149,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v92</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v93</span>
             </div>
 
             <!-- Global Search -->
@@ -950,7 +950,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v92</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v93</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -14436,38 +14436,50 @@ Generate JSON with these EXACT keys:
                 setBtn('Rendering…', true);
 
                 // html2pdf renders the WHOLE element to a single canvas, then
-                // slices it into pages. iOS Safari caps canvas area (~16.7M px),
-                // so a tall proposal at scale 2 silently produces a blank/empty
-                // PDF. Scale down dynamically to stay safely under the cap.
+                // slices it into pages. iOS Safari caps canvas area (~16.7M px)
+                // and is slow, so we render at 1x (plenty for a proposal at
+                // 96dpi) and only scale DOWN further for very tall documents.
                 const docHeightPx = proposalEl.scrollHeight || 1056;
-                const MAX_CANVAS_AREA = 12000000; // conservative vs iOS limit
-                let scale = Math.min(2, Math.sqrt(MAX_CANVAS_AREA / (816 * docHeightPx)));
-                if (!isFinite(scale) || scale < 0.7) scale = 0.7;
+                const MAX_CANVAS_AREA = 10000000; // conservative vs iOS limit
+                let scale = Math.min(1, Math.sqrt(MAX_CANVAS_AREA / (816 * docHeightPx)));
+                if (!isFinite(scale) || scale < 0.6) scale = 0.6;
 
                 const worker = html2pdf().set({
                     margin: [0.4, 0, 0.4, 0],
                     filename: _buildProposalFilename() + '.pdf',
-                    image: { type: 'jpeg', quality: 0.95 },
+                    image: { type: 'jpeg', quality: 0.85 },
                     html2canvas: { scale, useCORS: true, allowTaint: true, backgroundColor: '#ffffff', logging: false, width: 816, windowWidth: 816 },
                     jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait', compress: true },
                     pagebreak: { mode: ['css', 'legacy'] },
                 }).from(proposalEl);
 
-                // Get a Blob (works cross-browser); open/download it ourselves.
-                const blob = await worker.outputPdf('blob');
+                // Get a Blob, then hand the user a TAP TARGET in the reserved
+                // tab. iOS often blocks/blanks an automatic blob navigation, but
+                // a user tap on a blob: link reliably opens the PDF viewer where
+                // they can Share -> Save to Files / email (no URL footer).
+                const pdf = await worker.toPdf().get('pdf');
+                const blob = pdf.output('blob');
                 const url = URL.createObjectURL(blob);
+                const fname = _buildProposalFilename() + '.pdf';
 
                 if (pdfTab && !pdfTab.closed) {
-                    // iOS + desktop: show the PDF in the reserved tab.
-                    pdfTab.location.href = url;
+                    pdfTab.document.open();
+                    pdfTab.document.write(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>${fname}</title></head>
+                    <body style="margin:0;font-family:-apple-system,Arial;background:#f4f4f5;">
+                      <div style="padding:24px;text-align:center;">
+                        <p style="font-size:17px;color:#333;margin:0 0 16px;">Your proposal PDF is ready.</p>
+                        <a href="${url}" target="_blank" rel="noopener" style="display:inline-block;background:#16a34a;color:#fff;font-size:18px;font-weight:700;padding:16px 28px;border-radius:12px;text-decoration:none;">📄 Open / Save your PDF</a>
+                        <p style="font-size:13px;color:#777;margin:16px 0 0;">Then tap the share icon → Save to Files or email it.</p>
+                      </div>
+                      <iframe src="${url}" style="width:100%;height:78vh;border:0;margin-top:8px;"></iframe>
+                    </body></html>`);
+                    pdfTab.document.close();
                 } else {
-                    // Popup blocked — fall back to a direct download (desktop) /
-                    // navigation (which still beats the URL-footer print path).
                     const a = document.createElement('a');
-                    a.href = url; a.download = _buildProposalFilename() + '.pdf';
+                    a.href = url; a.download = fname; a.target = '_blank';
                     document.body.appendChild(a); a.click(); a.remove();
                 }
-                setTimeout(() => URL.revokeObjectURL(url), 120000);
+                setTimeout(() => URL.revokeObjectURL(url), 600000);
             } catch (e) {
                 console.error('Save proposal PDF failed:', e);
                 if (pdfTab && !pdfTab.closed) { try { pdfTab.close(); } catch (_) {} }
