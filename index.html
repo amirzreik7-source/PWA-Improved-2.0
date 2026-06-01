@@ -149,7 +149,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v87</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v88</span>
             </div>
 
             <!-- Global Search -->
@@ -889,7 +889,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v87</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v88</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -5000,11 +5000,21 @@ Based on the journal entries, calculate and return this JSON (no other text):
         // the product/surface name (e.g. "Deck Staining", "Cabot Stain"), and
         // any finish already saved on the product or surface.
         function _inferFinishCategory(product, surfaceType, preferredSheen) {
-            if (product?.category && SHEEN_OPTIONS[product.category]) return product.category;
+            // A finish that's already chosen is the strongest signal — a stain
+            // finish (Solid/Semi-Solid/etc.) can only belong to a stain, no
+            // matter how the product happens to be categorized.
+            const fromPref = _categoryFromSheen(preferredSheen);
+            if (fromPref) return fromPref;
+            // Name hints next ("Cabot Stain", "Deck Staining").
             const hay = ((product?.name || '') + ' ' + (surfaceType || window.currentSurfaceType || '')).toLowerCase();
             if (hay.includes('stain')) return 'Stain';
+            // The product's own saved finish if it's unmistakably a stain.
+            const fromProductSheen = _categoryFromSheen(product?.sheen);
+            if (fromProductSheen === 'Stain') return 'Stain';
+            // Then the product's explicit category, then remaining hints.
+            if (product?.category && SHEEN_OPTIONS[product.category]) return product.category;
             if (hay.includes('primer')) return 'Primer';
-            return _categoryFromSheen(preferredSheen) || _categoryFromSheen(product?.sheen) || 'Paint';
+            return fromProductSheen || 'Paint';
         }
 
         // Update surface sheen dropdown based on selected product.
