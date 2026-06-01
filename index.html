@@ -149,7 +149,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v86</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v87</span>
             </div>
 
             <!-- Global Search -->
@@ -846,7 +846,8 @@
         <div id="proposalViewScreen" class="screen">
             <div class="no-print" style="display:flex;gap:10px;margin-bottom:15px;flex-wrap:wrap;">
                 <button class="btn btn-back" onclick="exitProposalView()" style="flex:0 0 auto;">← Back</button>
-                <button class="btn btn-success" id="printPdfBtn" onclick="fastPrint()" style="flex:1;">🖨️ Print / Save PDF</button>
+                <button class="btn btn-success" id="proposalSavePdfBtn" onclick="saveProposalAsPdf()" style="flex:1;min-width:140px;" title="Generate a clean PDF with no browser URL footer">📥 Save PDF</button>
+                <button class="btn btn-secondary" id="printPdfBtn" onclick="fastPrint()" style="flex:0 0 auto;" title="Use the browser print dialog (may include URL footer on phone)">🖨️ Print</button>
             </div>
             <div id="proposalContent" style="background:#fff;"></div>
         </div>
@@ -888,7 +889,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v86</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v87</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -4985,21 +4986,44 @@ Based on the journal entries, calculate and return this JSON (no other text):
         // Init on load
         setTimeout(() => updateProductSheenOptions(), 100);
 
-        // Update surface sheen dropdown based on selected product
-        function updateSurfaceSheenDropdown(productId) {
+        // Which SHEEN_OPTIONS category does a saved finish belong to?
+        function _categoryFromSheen(sheen) {
+            if (!sheen) return null;
+            for (const [cat, opts] of Object.entries(SHEEN_OPTIONS)) {
+                if (opts.includes(sheen)) return cat;
+            }
+            return null;
+        }
+
+        // Best-guess the finish category (Paint / Stain / Primer) even when a
+        // product's category field wasn't set. Looks at the product category,
+        // the product/surface name (e.g. "Deck Staining", "Cabot Stain"), and
+        // any finish already saved on the product or surface.
+        function _inferFinishCategory(product, surfaceType, preferredSheen) {
+            if (product?.category && SHEEN_OPTIONS[product.category]) return product.category;
+            const hay = ((product?.name || '') + ' ' + (surfaceType || window.currentSurfaceType || '')).toLowerCase();
+            if (hay.includes('stain')) return 'Stain';
+            if (hay.includes('primer')) return 'Primer';
+            return _categoryFromSheen(preferredSheen) || _categoryFromSheen(product?.sheen) || 'Paint';
+        }
+
+        // Update surface sheen dropdown based on selected product.
+        // preferredSheen lets callers force-select a saved finish (e.g. when
+        // editing an existing surface) — it is always added to the option list
+        // so a stain finish is never silently dropped against a paint list.
+        function updateSurfaceSheenDropdown(productId, preferredSheen) {
             const product = products.find(p => p.id === productId);
             const sheenEl = document.getElementById('surfaceSheen');
             if (!sheenEl) return;
-            const cat = product?.category || 'Paint';
-            const options = SHEEN_OPTIONS[cat] || SHEEN_OPTIONS.Paint;
             const current = sheenEl.value;
+            const cat = _inferFinishCategory(product, window.currentSurfaceType, preferredSheen);
+            const options = (SHEEN_OPTIONS[cat] || SHEEN_OPTIONS.Paint).slice();
+            // The finish we want to land on, in priority order.
+            const want = preferredSheen || product?.sheen || current;
+            // Never drop a saved finish that isn't in this category's list.
+            if (want && !options.includes(want)) options.unshift(want);
             sheenEl.innerHTML = '<option value="">-- Select --</option>' + options.map(s => `<option value="${s}">${s}</option>`).join('');
-            // Auto-select product's sheen, or keep current if valid
-            if (product?.sheen && options.includes(product.sheen)) {
-                sheenEl.value = product.sheen;
-            } else if (options.includes(current)) {
-                sheenEl.value = current;
-            }
+            if (want && options.includes(want)) sheenEl.value = want;
         }
 
         // Quick-add product from surface config screen
@@ -6362,8 +6386,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 // Editing existing
                 document.getElementById('surfaceQuantity').value = existingSurface.quantity || '';
                 document.getElementById('surfaceProduct').value = existingSurface.productId || '';
-                updateSurfaceSheenDropdown(existingSurface.productId);
-                document.getElementById('surfaceSheen').value = existingSurface.sheen || '';
+                updateSurfaceSheenDropdown(existingSurface.productId, existingSurface.sheen);
                 document.getElementById('surfaceColor').value = existingSurface.color || '';
                 document.getElementById('surfaceCoats').value = existingSurface.coats || 2;
                 document.getElementById('autoCalcNote').classList.add('hidden');
@@ -6402,12 +6425,10 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 const ind = window._industryDefaults?.(surfaceType, jobType) || null;
                 if (profileProductId) {
                     document.getElementById('surfaceProduct').value = profileProductId;
-                    updateSurfaceSheenDropdown(profileProductId);
-                    document.getElementById('surfaceSheen').value = profileSheen || (ind?.sheen || '');
+                    updateSurfaceSheenDropdown(profileProductId, profileSheen || ind?.sheen);
                 } else {
                     document.getElementById('surfaceProduct').value = '';
-                    updateSurfaceSheenDropdown('');
-                    if (ind?.sheen) document.getElementById('surfaceSheen').value = ind.sheen;
+                    updateSurfaceSheenDropdown('', ind?.sheen);
                 }
                 document.getElementById('surfaceColor').value = profileColor || '';
                 document.getElementById('surfaceCoats').value = (typeof profileCoats === 'number' && profileCoats > 0)
@@ -6707,8 +6728,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 // Editing existing
                 document.getElementById('surfaceQuantity').value = existingSurface.quantity || '';
                 document.getElementById('surfaceProduct').value = existingSurface.productId || '';
-                updateSurfaceSheenDropdown(existingSurface.productId);
-                document.getElementById('surfaceSheen').value = existingSurface.sheen || '';
+                updateSurfaceSheenDropdown(existingSurface.productId, existingSurface.sheen);
                 document.getElementById('surfaceColor').value = existingSurface.color || '';
                 document.getElementById('surfaceCoats').value = existingSurface.coats || 2;
             } else {
@@ -6726,10 +6746,10 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 if (profileProductId) {
                     document.getElementById('surfaceProduct').value = profileProductId;
                     const product = window.products.find(p => p.id === profileProductId);
-                    document.getElementById('surfaceSheen').value = profileSheen || (product ? product.sheen : '') || (ind?.sheen || '');
+                    updateSurfaceSheenDropdown(profileProductId, profileSheen || (product ? product.sheen : '') || ind?.sheen);
                 } else {
                     document.getElementById('surfaceProduct').value = '';
-                    document.getElementById('surfaceSheen').value = ind?.sheen || '';
+                    updateSurfaceSheenDropdown('', ind?.sheen);
                 }
                 document.getElementById('surfaceColor').value = profileColor || '';
                 document.getElementById('surfaceCoats').value = (typeof profileCoats === 'number' && profileCoats > 0)
@@ -6760,8 +6780,10 @@ Based on the journal entries, calculate and return this JSON (no other text):
             const color = document.getElementById('surfaceColor').value;
             const coats = parseInt(document.getElementById('surfaceCoats').value);
 
-            if (!quantity || !productId || !sheen || !color || !coats) {
-                alert('Please fill in all fields');
+            // Finish/sheen is optional — some products (e.g. clear stains/sealers)
+            // don't have a meaningful finish, and operators can fill it later.
+            if (!quantity || !productId || !color || !coats) {
+                alert('Please fill in quantity, product, color, and coats');
                 return;
             }
 
@@ -13928,6 +13950,87 @@ Generate JSON with these EXACT keys:
             }
         };
 
+        // Build a clean PDF filename for the proposal (what the customer sees
+        // in Downloads / as an email attachment). No internal job codes.
+        function _buildProposalFilename() {
+            const customer = customers.find(c => c.id === currentEstimate.customerId);
+            const who = (customer?.name || currentEstimate.jobName || 'Northern Star Painters').trim();
+            const raw = `${who} — Painting Proposal`;
+            return raw.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim();
+        }
+
+        // Generate the proposal PDF directly with html2pdf.js, bypassing the
+        // browser print dialog. iOS Safari's "Print Headers and Footers" adds
+        // the page URL + page number to every printed page and can't be
+        // suppressed via CSS — this path never goes through print, so the
+        // saved PDF is clean. Output is rasterized (text not selectable) but
+        // matches the on-screen proposal.
+        window.saveProposalAsPdf = async function() {
+            const btn = document.getElementById('proposalSavePdfBtn');
+            const setBtn = (text, disabled) => { if (btn) { btn.textContent = text; btn.disabled = disabled; } };
+            setBtn('Preparing…', true);
+
+            let overrideStyle = null;
+            try {
+                if (typeof html2pdf === 'undefined') {
+                    await new Promise((resolve, reject) => {
+                        const script = document.createElement('script');
+                        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+                        script.onload = resolve;
+                        script.onerror = () => reject(new Error('Could not load PDF library'));
+                        document.head.appendChild(script);
+                    });
+                }
+
+                const imgs = document.querySelectorAll('#proposalContent img');
+                await Promise.all([...imgs].map(img => img.complete && img.naturalWidth > 0
+                    ? Promise.resolve()
+                    : new Promise(resolve => { img.onload = resolve; img.onerror = resolve; })));
+                if (document.fonts && document.fonts.ready) await document.fonts.ready;
+
+                const proposalEl = document.querySelector('#proposalContent .proposal-doc') || document.getElementById('proposalContent');
+                if (!proposalEl) throw new Error('Proposal content not found');
+
+                // Pin the document to true letter width (8.5in = 816px @96dpi)
+                // so output is identical regardless of the phone's viewport.
+                overrideStyle = document.createElement('style');
+                overrideStyle.id = '_proposalPdfOverride';
+                overrideStyle.textContent = `
+                    #proposalContent { padding: 0 !important; }
+                    #proposalContent .proposal-doc { width: 8.5in !important; max-width: 8.5in !important; margin: 0 !important; }`;
+                document.head.appendChild(overrideStyle);
+                await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+                setBtn('Rendering…', true);
+
+                await html2pdf().set({
+                    // Top/bottom page margins so flowing content clears the
+                    // sheet edges; horizontal padding comes from .page-content.
+                    margin: [0.4, 0, 0.4, 0],
+                    filename: _buildProposalFilename() + '.pdf',
+                    image: { type: 'jpeg', quality: 0.95 },
+                    html2canvas: {
+                        scale: 2,
+                        useCORS: true,
+                        allowTaint: true,
+                        backgroundColor: '#ffffff',
+                        logging: false,
+                        width: 816,
+                        windowWidth: 816,
+                    },
+                    jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait', compress: true },
+                    // Honor the page-break-inside:avoid already on rows/tables.
+                    pagebreak: { mode: ['css', 'legacy'] },
+                }).from(proposalEl).save();
+            } catch (e) {
+                console.error('Save proposal PDF failed:', e);
+                alert(`PDF render failed: ${e?.message || e}. Tap "Print" instead and Save as PDF from there.`);
+            } finally {
+                if (overrideStyle) overrideStyle.remove();
+                setBtn('📥 Save PDF', false);
+            }
+        };
+
         window.fastPrint = function() {
             const btn = document.getElementById('printPdfBtn');
             btn.textContent = 'Preparing...';
@@ -13961,7 +14064,7 @@ Generate JSON with these EXACT keys:
                         document.title = origTitle;
                         // Restore hidden screens
                         hidden.forEach(s => s.style.display = '');
-                        btn.textContent = '🖨️ Print / Save PDF';
+                        btn.textContent = '🖨️ Print';
                         btn.disabled = false;
                     });
                 });
