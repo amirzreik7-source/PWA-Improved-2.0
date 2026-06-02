@@ -149,7 +149,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v93</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v94</span>
             </div>
 
             <!-- Global Search -->
@@ -950,7 +950,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v93</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v94</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -5935,11 +5935,19 @@ Based on the journal entries, calculate and return this JSON (no other text):
         }
 
         const TIER_BADGE = { Budget: '🥉 Budget', Mid: '🥈 Mid', Premium: '🥇 Premium' };
+        const BRAND_LOGO = { 'Benjamin Moore': '🅑🅜', 'Sherwin Williams': '🆂🆆' };
 
-        function displayProfileSelection() {
+        // Two-stage profile picker: pick a BRAND first, then that brand's tiers.
+        // window._profileBrand holds the currently chosen brand (null = brand
+        // selection view). Reset whenever the picker is (re)entered fresh.
+        window._profileBrand = null;
+
+        function displayProfileSelection(keepBrand) {
+            if (!keepBrand) window._profileBrand = null;
             const jobType = currentEstimate.jobType;
             const matching = (window.profiles || []).filter(p => p.type === jobType);
             const list = document.getElementById('profileSelectionList');
+            const subtitle = document.querySelector('#estimateStep3Screen .screen-subtitle');
 
             const tierProfiles = matching.filter(p => p.tier && p.brand);
             const customProfiles = matching.filter(p => !(p.tier && p.brand));
@@ -5947,19 +5955,45 @@ Based on the journal entries, calculate and return this JSON (no other text):
             // Group tier profiles by brand.
             const byBrand = {};
             tierProfiles.forEach(p => { (byBrand[p.brand] = byBrand[p.brand] || []).push(p); });
+            const brands = Object.keys(byBrand).sort();
 
-            let html = '';
-
-            Object.keys(byBrand).sort().forEach(brand => {
-                const tiers = byBrand[brand].sort((a, b) => (TIER_ORDER[a.tier] ?? 9) - (TIER_ORDER[b.tier] ?? 9));
-                html += `<div style="margin:6px 0 4px;font-weight:700;color:#1e3a8a;font-size:15px;">${brand}</div>`;
+            // ── STAGE 2: a brand is chosen → show its three tiers ──
+            if (window._profileBrand && byBrand[window._profileBrand]) {
+                if (subtitle) subtitle.textContent = `${window._profileBrand} — choose a tier`;
+                const tiers = byBrand[window._profileBrand].sort((a, b) => (TIER_ORDER[a.tier] ?? 9) - (TIER_ORDER[b.tier] ?? 9));
+                let html = `<div class="selection-card" style="background:#f8f9fa;border-style:dashed;" onclick="backToBrandSelection()">
+                    <h3 style="margin:0;color:#555;">← Choose a different brand</h3>
+                </div>`;
                 html += tiers.map(p => `
                     <div class="selection-card" onclick="selectProfile('${p.id}')">
                         <h3>${TIER_BADGE[p.tier] || p.tier} — ${p.name.replace(/^.*—\s*/, '')}</h3>
                         <p style="color:#555;">${_tierSummary(p) || (Object.keys(p.surfaceMapping || {}).length + ' surfaces configured')}</p>
                     </div>
                 `).join('');
+                list.innerHTML = html;
+                return;
+            }
+
+            // ── STAGE 1: brand selection ──
+            if (subtitle) subtitle.textContent = 'Choose a paint brand, or skip to pick products manually';
+            let html = '';
+
+            brands.forEach(brand => {
+                const count = byBrand[brand].length;
+                html += `<div class="selection-card" onclick="selectProfileBrand('${brand.replace(/'/g, "\\'")}')">
+                    <h3>${BRAND_LOGO[brand] ? BRAND_LOGO[brand] + '  ' : ''}${brand}</h3>
+                    <p style="color:#555;">${count} tier${count === 1 ? '' : 's'} — Budget / Mid / Premium</p>
+                </div>`;
             });
+
+            // Offer one-tap setup of the BM interior tiers when they're not yet present.
+            const hasBmInteriorTiers = brands.includes('Benjamin Moore');
+            if (jobType === 'Interior' && !hasBmInteriorTiers) {
+                html += `<div class="selection-card" style="border:1px dashed #2563eb;background:#f0f6ff;" onclick="setupBmInteriorTiers(this)">
+                    <h3>✨ Set up Benjamin Moore tiers</h3>
+                    <p style="color:#555;">Creates the Budget / Mid / Premium interior profiles.</p>
+                </div>`;
+            }
 
             if (customProfiles.length) {
                 html += `<div style="margin:14px 0 4px;font-weight:700;color:#555;font-size:14px;">Other profiles</div>`;
@@ -5971,20 +6005,21 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 `).join('');
             }
 
-            // Offer one-tap setup of the BM interior tiers when they're not yet present.
-            const hasBmInteriorTiers = tierProfiles.some(p => p.brand === 'Benjamin Moore');
-            if (jobType === 'Interior' && !hasBmInteriorTiers) {
-                html += `<div class="selection-card" style="border:1px dashed #2563eb;background:#f0f6ff;" onclick="setupBmInteriorTiers(this)">
-                    <h3>✨ Set up Benjamin Moore tiers</h3>
-                    <p style="color:#555;">Creates the Budget / Mid / Premium interior profiles.</p>
-                </div>`;
-            }
-
             if (!html) {
                 html = '<p style="color:#999;text-align:center;padding:40px">No profiles for this job type. Create one in Profiles or skip.</p>';
             }
             list.innerHTML = html;
         }
+
+        window.selectProfileBrand = function(brand) {
+            window._profileBrand = brand;
+            displayProfileSelection(true);
+        };
+
+        window.backToBrandSelection = function() {
+            window._profileBrand = null;
+            displayProfileSelection(false);
+        };
 
         window.selectProfile = function(profileId) {
             currentEstimate.profileId = profileId;
