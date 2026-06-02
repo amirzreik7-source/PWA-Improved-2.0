@@ -149,7 +149,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v94</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v95</span>
             </div>
 
             <!-- Global Search -->
@@ -363,10 +363,30 @@
         </div>
 
         <!-- SURFACE CONFIGURATION MODAL -->
+        <!-- SIDING TYPE CHOOSER (exterior only) -->
+        <div id="sidingTypeModal" class="screen">
+            <button class="btn btn-back" onclick="closeSidingTypeChooser()">← Back to Room</button>
+            <h2 class="screen-title">What type of siding?</h2>
+            <p class="screen-subtitle">Pick the material — it shows on the customer's proposal.</p>
+            <div id="sidingTypeList" class="selection-grid"></div>
+        </div>
+
         <div id="surfaceConfigModal" class="screen">
             <button class="btn btn-back" onclick="closeSurfaceConfig()">← Back to Room</button>
             <h2 class="screen-title" id="surfaceConfigTitle">Configure Surface</h2>
-            
+
+            <div class="room-card hidden" id="sidingDetailCard">
+                <h3>Siding</h3>
+                <div class="form-group">
+                    <label>Siding type</label>
+                    <select id="surfaceSidingType"></select>
+                </div>
+                <div class="form-group">
+                    <label>Application method</label>
+                    <select id="surfaceApplicationMethod"></select>
+                </div>
+            </div>
+
             <div class="room-card">
                 <h3>Quantity</h3>
                 <div class="form-group">
@@ -950,7 +970,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v94</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v95</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -1596,6 +1616,21 @@
                                     'Garage Door', 'Garage Door Frame', 'Shutters', 'Bay Windows', 'Railings'];
         const INTERIOR_SURFACES_DEFAULT = ['Walls', 'Ceiling', 'Doors', 'Windows', 'Baseboards', 'Closets',
                                    'Cabinet Doors', 'Cabinet Drawers', 'Spindles'];
+
+        // Exterior siding sub-types. Each carries a default application method
+        // shown to the customer on the proposal (e.g. "Siding — Brick · Spray
+        // & Backroll"). Method is editable per surface.
+        const SIDING_TYPES = [
+            { type: 'Brick',                 method: 'Spray & Backroll' },
+            { type: 'Vinyl Siding',          method: 'Spray & Backroll' },
+            { type: 'Aluminum Siding',       method: 'Spray & Backroll' },
+            { type: 'Wood Siding',           method: 'Spray & Backroll' },
+            { type: 'Fiber Cement (Hardie)', method: 'Spray & Backroll' },
+            { type: 'Cedar Shake',           method: 'Spray & Backroll' },
+            { type: 'Stucco',                method: 'Spray & Backroll' },
+            { type: 'Other',                 method: 'Spray & Backroll' }
+        ];
+        const SIDING_APPLICATION_METHODS = ['Spray & Backroll', 'Spray Only', 'Brush & Roll', 'Roll Only'];
 
         // Custom surfaces stored per user (loaded from Firebase)
         let customExteriorSurfaces = [];
@@ -6262,7 +6297,8 @@ Based on the journal entries, calculate and return this JSON (no other text):
                     const coatsDisplay = surface.usePrimer ? `${surface.coats}/${surface.primerCoats}` : `${surface.coats}`;
                     box.innerHTML = `
                         <div style="padding-right:35px;">
-                            <h4 style="margin:0 0 5px 0;color:#155724;">✓ ${surfaceType}</h4>
+                            <h4 style="margin:0 0 5px 0;color:#155724;">✓ ${_surfaceDisplayName(surface)}</h4>
+                            ${surface.sidingType ? '<p style="margin:2px 0;font-size:9pt;color:#155724;">' + (surface.applicationMethod || 'Spray & Backroll') + '</p>' : ''}
                             <p style="margin:2px 0;font-size:10pt;color:#155724;">${surface.color} • ${surface.sheen} • ${coatsDisplay} coat(s)</p>
                             ${primerInfo}
                             <p style="margin:2px 0;font-weight:bold;color:#155724;">$${(cost.total || 0).toFixed(2)}</p>
@@ -6296,9 +6332,9 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 }
                 
                 box.addEventListener('click', function() {
-                    openSurfaceConfig(surfaceType);
+                    openSurfaceOrSidingChooser(surfaceType);
                 });
-                
+
                 container.appendChild(box);
             });
 
@@ -6628,13 +6664,79 @@ Based on the journal entries, calculate and return this JSON (no other text):
             showScreen('estimateStep4Screen');
         };
 
+        // Display name for a surface — Siding shows its material ("Siding — Brick").
+        function _surfaceDisplayName(surface) {
+            if (surface && surface.surfaceType === 'Siding' && surface.sidingType) {
+                return `Siding — ${surface.sidingType}`;
+            }
+            return surface?.surfaceType || 'Surface';
+        }
+
+        // Exterior Siding gets a material chooser first; everything else goes
+        // straight to the config modal.
+        window.openSurfaceOrSidingChooser = function(surfaceType) {
+            if (surfaceType === 'Siding' && currentEstimate.jobType === 'Exterior') {
+                openSidingTypeChooser();
+            } else {
+                openSurfaceConfig(surfaceType);
+            }
+        };
+
+        window.openSidingTypeChooser = function() {
+            const existing = window.currentRoom.surfaces.find(s => s.surfaceType === 'Siding');
+            const list = document.getElementById('sidingTypeList');
+            list.innerHTML = SIDING_TYPES.map(s => {
+                const sel = existing && existing.sidingType === s.type;
+                return `<div class="selection-card" style="${sel ? 'border:2px solid #2563eb;background:#f0f6ff;' : ''}" onclick="pickSidingType('${s.type.replace(/'/g, "\\'")}','${s.method.replace(/'/g, "\\'")}')">
+                    <h3 style="margin:0;">${s.type}${sel ? ' ✓' : ''}</h3>
+                    <p style="color:#555;margin:4px 0 0;">${s.method}</p>
+                </div>`;
+            }).join('');
+            showScreen('sidingTypeModal');
+        };
+
+        window.closeSidingTypeChooser = function() {
+            displayRoomDetail();
+            showScreen('roomDetailScreen');
+        };
+
+        // Chosen siding material → stash and open the config modal.
+        window.pickSidingType = function(type, method) {
+            const existing = window.currentRoom.surfaces.find(s => s.surfaceType === 'Siding');
+            window._pendingSidingType = type;
+            window._pendingApplicationMethod = (existing && existing.sidingType === type && existing.applicationMethod)
+                ? existing.applicationMethod : method;
+            openSurfaceConfig('Siding');
+        };
+
         // Open surface config from room detail screen
         window.openSurfaceConfig = function(surfaceType) {
             window.currentSurfaceType = surfaceType;
             const existingSurface = window.currentRoom.surfaces.find(s => s.surfaceType === surfaceType);
-            
+
+            // Siding detail card (type + application method) — exterior Siding only.
+            const sidingCard = document.getElementById('sidingDetailCard');
+            const isSiding = surfaceType === 'Siding' && currentEstimate.jobType === 'Exterior';
+            if (sidingCard) sidingCard.classList.toggle('hidden', !isSiding);
+            if (isSiding) {
+                const chosenType = window._pendingSidingType || existingSurface?.sidingType || 'Brick';
+                const chosenMethod = window._pendingApplicationMethod || existingSurface?.applicationMethod || 'Spray & Backroll';
+                const typeEl = document.getElementById('surfaceSidingType');
+                const methodEl = document.getElementById('surfaceApplicationMethod');
+                const typeList = SIDING_TYPES.map(s => s.type);
+                if (!typeList.includes(chosenType)) typeList.push(chosenType);
+                typeEl.innerHTML = typeList.map(t => `<option value="${t}">${t}</option>`).join('');
+                typeEl.value = chosenType;
+                const methods = SIDING_APPLICATION_METHODS.slice();
+                if (!methods.includes(chosenMethod)) methods.unshift(chosenMethod);
+                methodEl.innerHTML = methods.map(m => `<option value="${m}">${m}</option>`).join('');
+                methodEl.value = chosenMethod;
+            }
+
             // Update modal title
-            document.getElementById('surfaceConfigTitle').textContent = 'Configure ' + surfaceType;
+            document.getElementById('surfaceConfigTitle').textContent = isSiding
+                ? 'Configure Siding — ' + (window._pendingSidingType || existingSurface?.sidingType || 'Brick')
+                : 'Configure ' + surfaceType;
             
             // Filter products by job type
             const jobType = currentEstimate.jobType; // 'Exterior' or 'Interior'
@@ -7109,6 +7211,14 @@ Based on the journal entries, calculate and return this JSON (no other text):
             surface.primerProductId = usePrimer ? primerProductId : '';
             surface.primerCoats = usePrimer ? primerCoats : 0;
 
+            // Siding material + application method (exterior Siding only).
+            if (surfaceType === 'Siding' && currentEstimate.jobType === 'Exterior') {
+                surface.sidingType = document.getElementById('surfaceSidingType')?.value || surface.sidingType || 'Brick';
+                surface.applicationMethod = document.getElementById('surfaceApplicationMethod')?.value || surface.applicationMethod || 'Spray & Backroll';
+            }
+            window._pendingSidingType = null;
+            window._pendingApplicationMethod = null;
+
             console.log('Surface saved:', surface);
 
             // Refresh room detail screen and go back
@@ -7118,6 +7228,8 @@ Based on the journal entries, calculate and return this JSON (no other text):
         
         // Close surface config modal (back button)
         window.closeSurfaceConfig = function() {
+            window._pendingSidingType = null;
+            window._pendingApplicationMethod = null;
             showScreen('roomDetailScreen');
         };
 
@@ -14652,7 +14764,11 @@ Generate JSON with these EXACT keys:
                         const primerCoats = s.usePrimer ? s.primerCoats : 0;
                         let prodDisplay = product ? product.name : 'Product';
                         if (s.usePrimer && s.primerProductId) { const pp = products.find(p=>p.id===s.primerProductId); if(pp) prodDisplay += '<br><span style="font-size:8pt;color:#666">Primer: '+pp.name+'</span>'; }
-                        rows += `<tr><td style="padding:4px 4px 4px 14px;font-size:9pt">${s.surfaceType||'Surface'}</td><td style="padding:4px;font-size:9pt">${prodDisplay}</td><td style="padding:4px;font-size:9pt">${s.sheen}</td><td style="padding:4px;font-size:9pt">${s.color}</td><td style="padding:4px;font-size:9pt">${s.coats}/${primerCoats}</td></tr>`;
+                        let surfaceLabel = s.surfaceType || 'Surface';
+                        if (s.surfaceType === 'Siding' && s.sidingType) {
+                            surfaceLabel = `Siding — ${s.sidingType}` + (s.applicationMethod ? `<br><span style="font-size:8pt;color:#666">${s.applicationMethod}</span>` : '');
+                        }
+                        rows += `<tr><td style="padding:4px 4px 4px 14px;font-size:9pt">${surfaceLabel}</td><td style="padding:4px;font-size:9pt">${prodDisplay}</td><td style="padding:4px;font-size:9pt">${s.sheen}</td><td style="padding:4px;font-size:9pt">${s.color}</td><td style="padding:4px;font-size:9pt">${s.coats}/${primerCoats}</td></tr>`;
                     });
                     const brands = [...new Set(room.surfaces.map(s=>{const p=products.find(pr=>pr.id===s.productId);return p?p.brand:'Brand'}))].join(', ');
                     rows += `<tr><td colspan="5" style="padding:3px 6px;font-size:8.5pt;color:#666">Brands: ${brands}</td></tr>`;
@@ -14848,7 +14964,7 @@ ${priceRow('Balance','$'+balanceAmount.toFixed(2))}
 </div>`}
 ${sectionTitle('PROJECT SUMMARY')}
 <p><strong>Included in the price above:</strong></p>
-<ul>${groupedRooms.map(r=>{const parts=[...r.surfaces.map(s=>s.surfaceType||'Surface'),...(r.additionalServices||[]).map(svc=>svc.name)];return '<li><strong>'+r.name+'</strong>'+(parts.length?' ('+parts.join(', ')+')':'')+'</li>';}).join('')}</ul>
+<ul>${groupedRooms.map(r=>{const parts=[...r.surfaces.map(s=>(s.surfaceType==='Siding'&&s.sidingType)?('Siding — '+s.sidingType):(s.surfaceType||'Surface')),...(r.additionalServices||[]).map(svc=>svc.name)];return '<li><strong>'+r.name+'</strong>'+(parts.length?' ('+parts.join(', ')+')':'')+'</li>';}).join('')}</ul>
 ${projectNotes ? '<p style="margin-top:8px">'+projectNotes+'</p>' : ''}
 ${detailsHTML}
 ${window._crewMode ? '' : sectionTitle((_isCombined ? 'PAINTING' : currentEstimate.jobType.toUpperCase()+' PAINTING')+' CONTRACT TERMS')}
