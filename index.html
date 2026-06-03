@@ -149,7 +149,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v95</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v96</span>
             </div>
 
             <!-- Global Search -->
@@ -970,7 +970,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v95</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v96</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -14863,7 +14863,8 @@ Generate JSON with these EXACT keys:
                 if (project) {
                     const si = [];
                     if (project.assignedCrewLeader) si.push('<p style="margin:4px 0;"><strong>Crew Leader:</strong> ' + project.assignedCrewLeader + '</p>');
-                    if (crewSize) si.push('<p style="margin:4px 0;"><strong>Crew Size:</strong> ' + crewSize + ' members</p>');
+                    // Crew size intentionally omitted from the crew-facing document
+                    // (kept internal only — caused confusion on the proposal).
                     if (project.scheduledStartDate) {
                         const d = new Date(project.scheduledStartDate + 'T00:00');
                         si.push('<p style="margin:4px 0;"><strong>Start Date:</strong> ' + d.toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric', year:'numeric'}) + '</p>');
@@ -14883,9 +14884,9 @@ Generate JSON with these EXACT keys:
                     : 'NSP will supply all paint and materials for this job. The total shown above is the full labor payout with no material deductions.';
                 const termsBg = isLaborPlusMat ? '#eff6ff' : '#f8fafc';
                 const termsBorder = isLaborPlusMat ? '#2563eb' : '#64748b';
+                // Crew Size + Estimated Days intentionally omitted from the
+                // crew-facing document (internal-only — caused confusion).
                 crewPricingHTML = sectionTitle(payHeading) + '<div style="margin:8px 0">' +
-                    priceRow('Crew Size', crewSize + ' members') +
-                    priceRow('Estimated Days', crewDays + ' day' + (crewDays !== 1 ? 's' : '')) +
                     '<div style="display:flex;justify-content:space-between;padding:10px 0;font-size:13pt;font-weight:700;border-top:2px solid #1e3a8a;margin-top:6px;"><span>' + totalLabel + '</span><span>$' + crewPrice.toFixed(2) + '</span></div>' +
                     '<div style="background:' + termsBg + ';border-left:3px solid ' + termsBorder + ';padding:8px 10px;margin-top:8px;font-size:9pt;color:#333;line-height:1.45;">' + termsNote + '</div>' +
                     (cpData?.notes ? '<p style="font-style:italic;color:#666;font-size:9pt;margin-top:6px;">Notes: ' + cpData.notes + '</p>' : '') +
