@@ -149,7 +149,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v96</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v97</span>
             </div>
 
             <!-- Global Search -->
@@ -970,7 +970,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v96</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v97</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -13490,6 +13490,18 @@ Generate JSON with these EXACT keys:
             const setBtn = (text, disabled) => {
                 if (btn) { btn.textContent = text; btn.disabled = disabled; }
             };
+
+            // Open a tab SYNCHRONOUSLY inside the click gesture. iOS Safari
+            // ignores programmatic <a download> (the old .save() did nothing),
+            // but it will show a PDF opened in a tab — where the native share
+            // sheet lets the user Save to Files / email it, with NO URL footer.
+            // Reserving the tab now avoids the popup blocker after awaits.
+            let pdfTab = null;
+            try {
+                pdfTab = window.open('about:blank', '_blank');
+                if (pdfTab) pdfTab.document.write('<title>Generating PDF…</title><body style="font-family:-apple-system,Arial;padding:40px;color:#333;font-size:18px">Generating your keepsake PDF… one moment.</body>');
+            } catch (_) {}
+
             setBtn('Preparing…', true);
 
             // We override mobile-only CSS that html2canvas can't interpret
@@ -13546,12 +13558,22 @@ Generate JSON with these EXACT keys:
 
                 setBtn('Rendering…', true);
 
-                await html2pdf().set({
+                // html2pdf renders the WHOLE element to a single canvas, then
+                // slices it into .page-sized pages. iOS Safari caps canvas area
+                // (~16.7M px) — a 10-page keepsake at scale 2 is ~34M px and
+                // silently yields a BLANK PDF. Render at 1x (sharp enough at
+                // 96dpi) and scale DOWN further for very tall (many-area) docs.
+                const docHeightPx = reportEl.scrollHeight || 1056;
+                const MAX_CANVAS_AREA = 10000000; // conservative vs iOS limit
+                let scale = Math.min(1, Math.sqrt(MAX_CANVAS_AREA / (816 * docHeightPx)));
+                if (!isFinite(scale) || scale < 0.6) scale = 0.6;
+
+                const worker = html2pdf().set({
                     margin: 0,
                     filename: filename,
-                    image: { type: 'jpeg', quality: 0.95 },
+                    image: { type: 'jpeg', quality: 0.92 },
                     html2canvas: {
-                        scale: 2,
+                        scale,
                         useCORS: true,
                         allowTaint: true,
                         backgroundColor: '#ffffff',
@@ -13566,10 +13588,38 @@ Generate JSON with these EXACT keys:
                     // emits .page-break-before on .page + .page; this just
                     // tells html2pdf to honor it.
                     pagebreak: { mode: ['css', 'legacy'], before: '.report-doc .page' },
-                }).from(reportEl).save();
-                _reportToast?.('PDF saved', 'success', 1400);
+                }).from(reportEl);
+
+                // Get a Blob, then hand the user a TAP TARGET in the reserved
+                // tab. iOS often blocks/blanks an automatic blob navigation, but
+                // a user tap on a blob: link reliably opens the PDF viewer where
+                // they can Share -> Save to Files / email (no URL footer).
+                const pdf = await worker.toPdf().get('pdf');
+                const blob = pdf.output('blob');
+                const url = URL.createObjectURL(blob);
+
+                if (pdfTab && !pdfTab.closed) {
+                    pdfTab.document.open();
+                    pdfTab.document.write(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>${filename}</title></head>
+                    <body style="margin:0;font-family:-apple-system,Arial;background:#f4f4f5;">
+                      <div style="padding:24px;text-align:center;">
+                        <p style="font-size:17px;color:#333;margin:0 0 16px;">Your keepsake PDF is ready.</p>
+                        <a href="${url}" target="_blank" rel="noopener" style="display:inline-block;background:#16a34a;color:#fff;font-size:18px;font-weight:700;padding:16px 28px;border-radius:12px;text-decoration:none;">📄 Open / Save your PDF</a>
+                        <p style="font-size:13px;color:#777;margin:16px 0 0;">Then tap the share icon → Save to Files or email it.</p>
+                      </div>
+                      <iframe src="${url}" style="width:100%;height:78vh;border:0;margin-top:8px;"></iframe>
+                    </body></html>`);
+                    pdfTab.document.close();
+                } else {
+                    const a = document.createElement('a');
+                    a.href = url; a.download = filename; a.target = '_blank';
+                    document.body.appendChild(a); a.click(); a.remove();
+                }
+                setTimeout(() => URL.revokeObjectURL(url), 600000);
+                _reportToast?.('PDF ready', 'success', 1400);
             } catch (e) {
                 console.error('Save PDF failed:', e);
+                if (pdfTab && !pdfTab.closed) { try { pdfTab.close(); } catch (_) {} }
                 const msg = `PDF render failed: ${e?.message || e}. Tap "Print" instead and Save as PDF from there.`;
                 if (typeof _reportToast === 'function') _reportToast(msg, 'error', 5000);
                 else alert(msg);
