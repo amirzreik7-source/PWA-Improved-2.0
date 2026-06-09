@@ -149,7 +149,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v97</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v98</span>
             </div>
 
             <!-- Global Search -->
@@ -970,7 +970,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v97</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v98</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -14990,8 +14990,8 @@ ${customer.address ? '<div style="display:flex;justify-content:space-between;pad
 </div></div>
 ${sectionTitle('PREPARED FOR')}
 <div style="display:flex;justify-content:space-between;padding:8px 0;align-items:start;page-break-inside:avoid">
-<div><p style="font-size:11pt;font-weight:700;margin:0">${customer.name}</p>${customer.address?'<p style="font-size:9pt;color:#555;margin:2px 0">'+customer.address+'</p>':''}</div>
-<div style="text-align:right;font-size:9pt">${customer.email?'<p style="margin:1px 0"><span style="color:#2563eb">✉</span> '+customer.email+'</p>':''}${customer.phone?'<p style="margin:1px 0"><span style="color:#2563eb">☎</span> '+customer.phone+'</p>':''}</div>
+<div><p style="font-size:11pt;font-weight:700;margin:0">${window._crewMode ? ((customer.name||'').trim().split(/\s+/)[0] || customer.name) : customer.name}</p>${customer.address?'<p style="font-size:9pt;color:#555;margin:2px 0">'+customer.address+'</p>':''}</div>
+${window._crewMode ? '' : `<div style="text-align:right;font-size:9pt">${customer.email?'<p style="margin:1px 0"><span style="color:#2563eb">✉</span> '+customer.email+'</p>':''}${customer.phone?'<p style="margin:1px 0"><span style="color:#2563eb">☎</span> '+customer.phone+'</p>':''}</div>`}
 </div>
 ${sectionTitle('PREPARED BY')}
 <div style="display:flex;align-items:center;gap:12px;padding:8px 0;page-break-inside:avoid">
