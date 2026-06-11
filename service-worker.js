@@ -1,7 +1,7 @@
 // Northern Star Painters - Service Worker
 // Version 1.0.0
 
-const CACHE_NAME = 'nsp-v101';
+const CACHE_NAME = 'nsp-v102';
 const FIREBASE_CACHE = 'nsp-firebase-v1';
 
 // Files to cache immediately
@@ -65,12 +65,21 @@ self.addEventListener('activate', event => {
 // Fetch event - network first, cache fallback
 self.addEventListener('fetch', event => {
     const url = event.request.url;
-    
+
     // Skip chrome-extension and non-http requests
     if (!url.startsWith('http')) {
         return;
     }
-    
+
+    // Only ever handle GET. The Cache API cannot store POST/PUT responses
+    // (cache.put rejects on non-GET), and intercepting a cross-origin POST
+    // here can STALL it on iOS Safari — this is what made the PDF worker's
+    // Save PDF request hang ("Rendering…" forever). Let the browser handle
+    // POSTs (PDF worker, Firebase writes) natively.
+    if (event.request.method !== 'GET') {
+        return;
+    }
+
     event.respondWith(
         fetch(event.request)
             .then(response => {

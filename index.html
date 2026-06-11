@@ -149,7 +149,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v101</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v102</span>
             </div>
 
             <!-- Global Search -->
@@ -970,7 +970,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v101</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v102</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -9681,11 +9681,23 @@ Only return JSON, no other text.`;
         const NSP_PDF_WORKER = 'https://nsp-pdf.amirzreik7.workers.dev';
 
         async function _renderPdfViaWorker(html, kind) {
-            const resp = await fetch(NSP_PDF_WORKER, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ html, fonts: REPORT_FONTS_LINK, kind }),
-            });
+            // Hard timeout so a stalled request can never hang the UI forever
+            // (cold Browser-Rendering start is usually <15s; 75s is generous).
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 75000);
+            let resp;
+            try {
+                resp = await fetch(NSP_PDF_WORKER, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ html, fonts: REPORT_FONTS_LINK, kind }),
+                    signal: ctrl.signal,
+                });
+            } catch (e) {
+                throw new Error(ctrl.signal.aborted ? 'Server timed out (75s)' : `Network error: ${e?.message || e}`);
+            } finally {
+                clearTimeout(timer);
+            }
             if (!resp.ok) {
                 let detail = '';
                 try { detail = (await resp.json()).error || ''; } catch (_) {}
@@ -9697,6 +9709,25 @@ Only return JSON, no other text.`;
             // the caller falls back to the client path.
             if (!blob || blob.size < 2000) throw new Error('Worker returned an empty PDF');
             return blob;
+        }
+
+        // Update / read-out the overlay status line (so the user can see and
+        // report exactly where a stuck render is).
+        function _pdfSetStatus(text) {
+            const el = document.getElementById('_pdfOvStatus');
+            if (el) el.textContent = text;
+        }
+        // Show an error INSIDE the overlay (not just a toast) so it's readable
+        // on a phone and the user can relay it back.
+        function _pdfShowError(msg) {
+            const ov = document.getElementById('_pdfOverlay');
+            const body = ov && ov.querySelector('#_pdfOvBody');
+            if (!body) { alert(msg); return; }
+            body.innerHTML = `
+              <div style="font-size:38px;line-height:1;margin-bottom:10px;">⚠️</div>
+              <p style="font-size:17px;font-weight:700;color:#b91c1c;margin:0 0 8px;">Couldn't make the PDF</p>
+              <p style="font-size:13px;color:#555;margin:0 0 18px;word-break:break-word;">${msg}</p>
+              <button onclick="document.getElementById('_pdfOverlay').remove()" style="background:#1A2B4A;color:#fff;font-size:15px;font-weight:600;padding:12px 24px;border:none;border-radius:10px;cursor:pointer;">Close</button>`;
         }
 
         // In-page "Generating…" overlay. We do PDF work in the FOREGROUND
@@ -9715,7 +9746,7 @@ Only return JSON, no other text.`;
                 <div id="_pdfOvBody">
                   <div style="width:42px;height:42px;border:4px solid #e5e7eb;border-top-color:#16a34a;border-radius:50%;margin:0 auto 18px;animation:reportSpin 0.8s linear infinite;"></div>
                   <p style="font-size:17px;color:#333;margin:0;">${title}</p>
-                  <p style="font-size:13px;color:#999;margin:10px 0 0;">Building it on our server — a few seconds.</p>
+                  <p id="_pdfOvStatus" style="font-size:13px;color:#999;margin:10px 0 0;">Starting…</p>
                 </div>
                 <button onclick="document.getElementById('_pdfOverlay').remove()" style="margin-top:22px;background:none;border:none;color:#aaa;font-size:14px;cursor:pointer;">Cancel</button>
               </div>`;
@@ -13601,6 +13632,7 @@ Generate JSON with these EXACT keys:
                 // html2pdf path only if the worker is unreachable/errors.
                 try {
                     setBtn('Rendering…', true);
+                    _pdfSetStatus('Sending to our PDF server…');
                     const html = document.getElementById('reportContent').innerHTML;
                     const blob = await _renderPdfViaWorker(html, 'report');
                     _deliverPdfBlob(blob, filename);
@@ -13608,6 +13640,7 @@ Generate JSON with these EXACT keys:
                 } catch (workerErr) {
                     console.warn('Server PDF failed — falling back to client render:', workerErr);
                     setBtn('Rendering…', true);
+                    _pdfSetStatus('Server unavailable — trying on-device…');
                 }
 
                 // ── FALLBACK: client-side html2pdf ──────────────────────────
@@ -13691,10 +13724,7 @@ Generate JSON with these EXACT keys:
                 _deliverPdfBlob(blob, filename);
             } catch (e) {
                 console.error('Save PDF failed:', e);
-                const ov = document.getElementById('_pdfOverlay'); if (ov) ov.remove();
-                const msg = `PDF render failed: ${e?.message || e}. Tap "Print" instead and Save as PDF from there.`;
-                if (typeof _reportToast === 'function') _reportToast(msg, 'error', 5000);
-                else alert(msg);
+                _pdfShowError(`${e?.message || e}. You can still use the 🖨️ Print button as a backup.`);
             } finally {
                 if (overrideStyle) overrideStyle.remove();
                 setBtn('📥 Save PDF', false);
@@ -14675,6 +14705,7 @@ Generate JSON with these EXACT keys:
                 // html2pdf only if the worker is unreachable/errors.
                 try {
                     setBtn('Rendering…', true);
+                    _pdfSetStatus('Sending to our PDF server…');
                     const phtml = proposalEl.outerHTML;
                     const blob = await _renderPdfViaWorker(phtml, 'proposal');
                     _deliverPdfBlob(blob, _buildProposalFilename() + '.pdf');
@@ -14682,6 +14713,7 @@ Generate JSON with these EXACT keys:
                 } catch (workerErr) {
                     console.warn('Server PDF failed — falling back to client render:', workerErr);
                     setBtn('Rendering…', true);
+                    _pdfSetStatus('Server unavailable — trying on-device…');
                 }
 
                 // ── FALLBACK: client-side html2pdf ──────────────────────────
@@ -14735,8 +14767,7 @@ Generate JSON with these EXACT keys:
                 _deliverPdfBlob(blob, _buildProposalFilename() + '.pdf');
             } catch (e) {
                 console.error('Save proposal PDF failed:', e);
-                const ov = document.getElementById('_pdfOverlay'); if (ov) ov.remove();
-                alert(`Couldn't generate the PDF: ${e?.message || e}. Tap "Print" and choose Save to Files.`);
+                _pdfShowError(`${e?.message || e}. You can still use the 🖨️ Print button as a backup.`);
             } finally {
                 if (overrideStyle) overrideStyle.remove();
                 setBtn('📥 Save PDF', false);
