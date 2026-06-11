@@ -149,7 +149,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v100</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v101</span>
             </div>
 
             <!-- Global Search -->
@@ -970,7 +970,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v100</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v101</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -9699,28 +9699,60 @@ Only return JSON, no other text.`;
             return blob;
         }
 
-        // Deliver a finished PDF blob to the user. iOS Safari ignores
-        // programmatic <a download>, so we hand the user a tap target in a
-        // tab opened synchronously during the click gesture (share sheet →
-        // Save to Files / email, no URL footer). Desktop downloads directly.
-        function _deliverPdfBlob(blob, filename, pdfTab) {
+        // In-page "Generating…" overlay. We do PDF work in the FOREGROUND
+        // tab (never a pre-opened blank tab) because iOS Safari suspends
+        // background tabs — opening a tab first froze the tab doing the work,
+        // so nothing ever finished (the "blank white page" bug). Returns the
+        // overlay element; its #_pdfOvBody is swapped to the ready state by
+        // _deliverPdfBlob.
+        function _pdfProgressOverlay(title) {
+            const old = document.getElementById('_pdfOverlay');
+            if (old) old.remove();
+            const ov = document.createElement('div');
+            ov.id = '_pdfOverlay';
+            ov.style.cssText = 'position:fixed;inset:0;background:rgba(20,34,58,0.92);z-index:100000;display:flex;align-items:center;justify-content:center;padding:24px;';
+            ov.innerHTML = `<div style="background:#fff;border-radius:16px;max-width:420px;width:100%;padding:28px;text-align:center;font-family:-apple-system,Arial;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+                <div id="_pdfOvBody">
+                  <div style="width:42px;height:42px;border:4px solid #e5e7eb;border-top-color:#16a34a;border-radius:50%;margin:0 auto 18px;animation:reportSpin 0.8s linear infinite;"></div>
+                  <p style="font-size:17px;color:#333;margin:0;">${title}</p>
+                  <p style="font-size:13px;color:#999;margin:10px 0 0;">Building it on our server — a few seconds.</p>
+                </div>
+                <button onclick="document.getElementById('_pdfOverlay').remove()" style="margin-top:22px;background:none;border:none;color:#aaa;font-size:14px;cursor:pointer;">Cancel</button>
+              </div>`;
+            document.body.appendChild(ov);
+            return ov;
+        }
+
+        // Deliver a finished PDF blob. The user taps a button in the overlay
+        // (a FRESH user gesture — iOS honors share/download from a gesture
+        // but blocks them after an await). iOS gets the native share sheet
+        // via navigator.share({files}); desktop gets a direct download.
+        function _deliverPdfBlob(blob, filename) {
             const url = URL.createObjectURL(blob);
-            if (pdfTab && !pdfTab.closed) {
-                pdfTab.document.open();
-                pdfTab.document.write(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>${filename}</title></head>
-                <body style="margin:0;font-family:-apple-system,Arial;background:#f4f4f5;">
-                  <div style="padding:24px;text-align:center;">
-                    <p style="font-size:17px;color:#333;margin:0 0 16px;">Your PDF is ready.</p>
-                    <a href="${url}" target="_blank" rel="noopener" style="display:inline-block;background:#16a34a;color:#fff;font-size:18px;font-weight:700;padding:16px 28px;border-radius:12px;text-decoration:none;">📄 Open / Save your PDF</a>
-                    <p style="font-size:13px;color:#777;margin:16px 0 0;">Then tap the share icon → Save to Files or email it.</p>
-                  </div>
-                  <iframe src="${url}" style="width:100%;height:78vh;border:0;margin-top:8px;"></iframe>
-                </body></html>`);
-                pdfTab.document.close();
-            } else {
-                const a = document.createElement('a');
-                a.href = url; a.download = filename; a.target = '_blank';
-                document.body.appendChild(a); a.click(); a.remove();
+            let file = null;
+            try { file = new File([blob], filename, { type: 'application/pdf' }); } catch (_) {}
+            const canShareFile = !!(file && navigator.canShare && navigator.canShare({ files: [file] }));
+
+            const ov = document.getElementById('_pdfOverlay') || _pdfProgressOverlay('Finishing…');
+            const body = ov.querySelector('#_pdfOvBody');
+            if (body) {
+                body.innerHTML = `
+                  <div style="font-size:40px;line-height:1;margin-bottom:10px;">✅</div>
+                  <p style="font-size:19px;font-weight:700;color:#1A2B4A;margin:0 0 4px;">Your PDF is ready</p>
+                  <p style="font-size:12px;color:#999;margin:0 0 20px;word-break:break-word;">${filename}</p>
+                  <button id="_pdfActionBtn" style="background:#16a34a;color:#fff;font-size:17px;font-weight:700;padding:15px 26px;border:none;border-radius:12px;width:100%;cursor:pointer;">${canShareFile ? '📤 Save / Share PDF' : '📄 Open / Download PDF'}</button>
+                  <a id="_pdfFallbackLink" href="${url}" download="${filename}" target="_blank" rel="noopener" style="display:block;margin-top:14px;font-size:13px;color:#2563eb;">or open in a new tab</a>`;
+                const actionBtn = body.querySelector('#_pdfActionBtn');
+                actionBtn.onclick = async () => {
+                    if (canShareFile) {
+                        try { await navigator.share({ files: [file], title: filename }); }
+                        catch (e) { try { window.open(url, '_blank'); } catch (_) {} }
+                    } else {
+                        const a = document.createElement('a');
+                        a.href = url; a.download = filename; a.target = '_blank';
+                        document.body.appendChild(a); a.click(); a.remove();
+                    }
+                };
             }
             setTimeout(() => URL.revokeObjectURL(url), 600000);
         }
@@ -13544,24 +13576,41 @@ Generate JSON with these EXACT keys:
                 if (btn) { btn.textContent = text; btn.disabled = disabled; }
             };
 
-            // Open a tab SYNCHRONOUSLY inside the click gesture. iOS Safari
-            // ignores programmatic <a download> (the old .save() did nothing),
-            // but it will show a PDF opened in a tab — where the native share
-            // sheet lets the user Save to Files / email it, with NO URL footer.
-            // Reserving the tab now avoids the popup blocker after awaits.
-            let pdfTab = null;
-            try {
-                pdfTab = window.open('about:blank', '_blank');
-                if (pdfTab) pdfTab.document.write('<title>Generating PDF…</title><body style="font-family:-apple-system,Arial;padding:40px;color:#333;font-size:18px">Generating your keepsake PDF… one moment.</body>');
-            } catch (_) {}
-
+            // Show an in-page overlay and do all work in the FOREGROUND tab.
+            // We no longer pre-open a blank tab — iOS Safari suspends the
+            // background tab, freezing the one doing the work (the "blank
+            // white page, nothing happens" bug). The finished PDF is handed
+            // over via a button tap (fresh gesture) in _deliverPdfBlob.
+            _pdfProgressOverlay('Generating your keepsake PDF…');
             setBtn('Preparing…', true);
 
-            // We override mobile-only CSS that html2canvas can't interpret
-            // (CSS `zoom`) and force full 8.5×11 page boxes during render so
-            // each .page captures correctly. Restored in `finally`.
+            // overrideStyle is only used by the html2pdf fallback; restored
+            // in `finally`.
             let overrideStyle = null;
             try {
+                const projectId = window._reportProjectId;
+                const project = projects.find(p => p.id === projectId);
+                const filename = _buildReportFilename(project) + '.pdf';
+                const reportEl = document.querySelector('#reportContent .report-doc');
+                if (!reportEl) throw new Error('Report content not found');
+
+                // PRIMARY PATH: server-side render (headless Chrome). Crisp,
+                // deterministic 10 pages, selectable text, no Safari pipeline.
+                // The report's innerHTML carries its own scoped <style>, so it
+                // renders identically off-device. Fall through to the client
+                // html2pdf path only if the worker is unreachable/errors.
+                try {
+                    setBtn('Rendering…', true);
+                    const html = document.getElementById('reportContent').innerHTML;
+                    const blob = await _renderPdfViaWorker(html, 'report');
+                    _deliverPdfBlob(blob, filename);
+                    return;
+                } catch (workerErr) {
+                    console.warn('Server PDF failed — falling back to client render:', workerErr);
+                    setBtn('Rendering…', true);
+                }
+
+                // ── FALLBACK: client-side html2pdf ──────────────────────────
                 if (typeof html2pdf === 'undefined') {
                     await new Promise((resolve, reject) => {
                         const script = document.createElement('script');
@@ -13579,29 +13628,6 @@ Generate JSON with these EXACT keys:
 
                 if (document.fonts && document.fonts.ready) {
                     await document.fonts.ready;
-                }
-
-                const projectId = window._reportProjectId;
-                const project = projects.find(p => p.id === projectId);
-                const filename = _buildReportFilename(project) + '.pdf';
-                const reportEl = document.querySelector('#reportContent .report-doc');
-                if (!reportEl) throw new Error('Report content not found');
-
-                // PRIMARY PATH: server-side render (headless Chrome). Crisp,
-                // deterministic 10 pages, selectable text, no Safari pipeline.
-                // The report's innerHTML carries its own scoped <style>, so it
-                // renders identically off-device. Fall through to the client
-                // html2pdf path only if the worker is unreachable/errors.
-                try {
-                    setBtn('Rendering…', true);
-                    const html = document.getElementById('reportContent').innerHTML;
-                    const blob = await _renderPdfViaWorker(html, 'report');
-                    _deliverPdfBlob(blob, filename, pdfTab);
-                    _reportToast?.('PDF ready', 'success', 1400);
-                    return;
-                } catch (workerErr) {
-                    console.warn('Server PDF failed — falling back to client render:', workerErr);
-                    setBtn('Rendering…', true);
                 }
 
                 // Force full letter-size pages and disable the mobile zoom +
@@ -13660,36 +13686,12 @@ Generate JSON with these EXACT keys:
                     pagebreak: { mode: ['css', 'legacy'], before: '.report-doc .page' },
                 }).from(reportEl);
 
-                // Get a Blob, then hand the user a TAP TARGET in the reserved
-                // tab. iOS often blocks/blanks an automatic blob navigation, but
-                // a user tap on a blob: link reliably opens the PDF viewer where
-                // they can Share -> Save to Files / email (no URL footer).
                 const pdf = await worker.toPdf().get('pdf');
                 const blob = pdf.output('blob');
-                const url = URL.createObjectURL(blob);
-
-                if (pdfTab && !pdfTab.closed) {
-                    pdfTab.document.open();
-                    pdfTab.document.write(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>${filename}</title></head>
-                    <body style="margin:0;font-family:-apple-system,Arial;background:#f4f4f5;">
-                      <div style="padding:24px;text-align:center;">
-                        <p style="font-size:17px;color:#333;margin:0 0 16px;">Your keepsake PDF is ready.</p>
-                        <a href="${url}" target="_blank" rel="noopener" style="display:inline-block;background:#16a34a;color:#fff;font-size:18px;font-weight:700;padding:16px 28px;border-radius:12px;text-decoration:none;">📄 Open / Save your PDF</a>
-                        <p style="font-size:13px;color:#777;margin:16px 0 0;">Then tap the share icon → Save to Files or email it.</p>
-                      </div>
-                      <iframe src="${url}" style="width:100%;height:78vh;border:0;margin-top:8px;"></iframe>
-                    </body></html>`);
-                    pdfTab.document.close();
-                } else {
-                    const a = document.createElement('a');
-                    a.href = url; a.download = filename; a.target = '_blank';
-                    document.body.appendChild(a); a.click(); a.remove();
-                }
-                setTimeout(() => URL.revokeObjectURL(url), 600000);
-                _reportToast?.('PDF ready', 'success', 1400);
+                _deliverPdfBlob(blob, filename);
             } catch (e) {
                 console.error('Save PDF failed:', e);
-                if (pdfTab && !pdfTab.closed) { try { pdfTab.close(); } catch (_) {} }
+                const ov = document.getElementById('_pdfOverlay'); if (ov) ov.remove();
                 const msg = `PDF render failed: ${e?.message || e}. Tap "Print" instead and Save as PDF from there.`;
                 if (typeof _reportToast === 'function') _reportToast(msg, 'error', 5000);
                 else alert(msg);
@@ -14658,20 +14660,31 @@ Generate JSON with these EXACT keys:
             const btn = document.getElementById('proposalSavePdfBtn');
             const setBtn = (text, disabled) => { if (btn) { btn.textContent = text; btn.disabled = disabled; } };
 
-            // Open a tab SYNCHRONOUSLY inside the click gesture. iOS Safari
-            // ignores programmatic <a download> (the old .save() did nothing),
-            // but it will show a PDF opened in a tab — where the native share
-            // sheet lets the user Save to Files / email it, with NO URL footer.
-            // Reserving the tab now avoids the popup blocker after awaits.
-            let pdfTab = null;
-            try {
-                pdfTab = window.open('about:blank', '_blank');
-                if (pdfTab) pdfTab.document.write('<title>Generating PDF…</title><body style="font-family:-apple-system,Arial;padding:40px;color:#333;font-size:18px">Generating your proposal PDF… one moment.</body>');
-            } catch (_) {}
-
+            // Foreground overlay + button-tap delivery (see saveReportAsPdf
+            // for why we no longer pre-open a blank tab — iOS suspends it).
+            _pdfProgressOverlay('Generating your proposal PDF…');
             setBtn('Preparing…', true);
             let overrideStyle = null;
             try {
+                const proposalEl = document.querySelector('#proposalContent .proposal-doc') || document.getElementById('proposalContent');
+                if (!proposalEl) throw new Error('Proposal content not found');
+
+                // PRIMARY PATH: server-side render (headless Chrome). The
+                // .proposal-doc carries its own scoped <style> + @page, so it
+                // renders identically off-device. Fall through to client
+                // html2pdf only if the worker is unreachable/errors.
+                try {
+                    setBtn('Rendering…', true);
+                    const phtml = proposalEl.outerHTML;
+                    const blob = await _renderPdfViaWorker(phtml, 'proposal');
+                    _deliverPdfBlob(blob, _buildProposalFilename() + '.pdf');
+                    return;
+                } catch (workerErr) {
+                    console.warn('Server PDF failed — falling back to client render:', workerErr);
+                    setBtn('Rendering…', true);
+                }
+
+                // ── FALLBACK: client-side html2pdf ──────────────────────────
                 if (typeof html2pdf === 'undefined') {
                     await new Promise((resolve, reject) => {
                         const script = document.createElement('script');
@@ -14687,25 +14700,6 @@ Generate JSON with these EXACT keys:
                     ? Promise.resolve()
                     : new Promise(resolve => { img.onload = resolve; img.onerror = resolve; })));
                 if (document.fonts && document.fonts.ready) await document.fonts.ready;
-
-                const proposalEl = document.querySelector('#proposalContent .proposal-doc') || document.getElementById('proposalContent');
-                if (!proposalEl) throw new Error('Proposal content not found');
-
-                // PRIMARY PATH: server-side render (headless Chrome). The
-                // .proposal-doc carries its own scoped <style> + @page, so it
-                // renders identically off-device. Fall through to client
-                // html2pdf only if the worker is unreachable/errors.
-                try {
-                    setBtn('Rendering…', true);
-                    const phtml = (document.querySelector('#proposalContent .proposal-doc') || document.getElementById('proposalContent')).outerHTML;
-                    const blob = await _renderPdfViaWorker(phtml, 'proposal');
-                    _deliverPdfBlob(blob, _buildProposalFilename() + '.pdf', pdfTab);
-                    if (typeof _reportToast === 'function') _reportToast('PDF ready', 'success', 1400);
-                    return;
-                } catch (workerErr) {
-                    console.warn('Server PDF failed — falling back to client render:', workerErr);
-                    setBtn('Rendering…', true);
-                }
 
                 // Pin the document to true letter width (8.5in = 816px @96dpi).
                 overrideStyle = document.createElement('style');
@@ -14736,36 +14730,12 @@ Generate JSON with these EXACT keys:
                     pagebreak: { mode: ['css', 'legacy'] },
                 }).from(proposalEl);
 
-                // Get a Blob, then hand the user a TAP TARGET in the reserved
-                // tab. iOS often blocks/blanks an automatic blob navigation, but
-                // a user tap on a blob: link reliably opens the PDF viewer where
-                // they can Share -> Save to Files / email (no URL footer).
                 const pdf = await worker.toPdf().get('pdf');
                 const blob = pdf.output('blob');
-                const url = URL.createObjectURL(blob);
-                const fname = _buildProposalFilename() + '.pdf';
-
-                if (pdfTab && !pdfTab.closed) {
-                    pdfTab.document.open();
-                    pdfTab.document.write(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>${fname}</title></head>
-                    <body style="margin:0;font-family:-apple-system,Arial;background:#f4f4f5;">
-                      <div style="padding:24px;text-align:center;">
-                        <p style="font-size:17px;color:#333;margin:0 0 16px;">Your proposal PDF is ready.</p>
-                        <a href="${url}" target="_blank" rel="noopener" style="display:inline-block;background:#16a34a;color:#fff;font-size:18px;font-weight:700;padding:16px 28px;border-radius:12px;text-decoration:none;">📄 Open / Save your PDF</a>
-                        <p style="font-size:13px;color:#777;margin:16px 0 0;">Then tap the share icon → Save to Files or email it.</p>
-                      </div>
-                      <iframe src="${url}" style="width:100%;height:78vh;border:0;margin-top:8px;"></iframe>
-                    </body></html>`);
-                    pdfTab.document.close();
-                } else {
-                    const a = document.createElement('a');
-                    a.href = url; a.download = fname; a.target = '_blank';
-                    document.body.appendChild(a); a.click(); a.remove();
-                }
-                setTimeout(() => URL.revokeObjectURL(url), 600000);
+                _deliverPdfBlob(blob, _buildProposalFilename() + '.pdf');
             } catch (e) {
                 console.error('Save proposal PDF failed:', e);
-                if (pdfTab && !pdfTab.closed) { try { pdfTab.close(); } catch (_) {} }
+                const ov = document.getElementById('_pdfOverlay'); if (ov) ov.remove();
                 alert(`Couldn't generate the PDF: ${e?.message || e}. Tap "Print" and choose Save to Files.`);
             } finally {
                 if (overrideStyle) overrideStyle.remove();
