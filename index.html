@@ -149,7 +149,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v98</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v99</span>
             </div>
 
             <!-- Global Search -->
@@ -970,7 +970,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v98</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v99</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -12423,33 +12423,31 @@ Generate JSON with these EXACT keys:
                         margin: 0 !important;
                         box-shadow: none !important;
                     }
-                    /* Safari residual margin compensation. Even with @page
-                       margin:0 AND user headers/footers turned off, Safari
-                       reserves ~1in (0.5in top + 0.5in bottom) for its own
-                       print mechanics. Headless Chrome doesn't — the same
-                       CSS produces 10 pages there but 20 in Safari, because
-                       any .page taller than Safari's printable area
-                       overflows half an inch onto a continuation page that
-                       then break-before kicks the next section past. .page
-                       at 10in (1in shorter than physical paper) fits inside
-                       Safari's true printable area so nothing overflows. */
+                    /* Safari residual-margin compensation — REWRITTEN 2026-06-11.
+                       Root cause of the recurring 20-page doubling: a .page box
+                       even slightly TALLER than Safari's true printable area
+                       spans two physical sheets (overflow:hidden clips the paint
+                       but the border-box still occupies its full height in flow),
+                       and break-before then kicks the next .page to a third
+                       sheet — so every page doubles.
+
+                       The prior fix put the phone height (9in) inside a NESTED
+                       @media (max-width:500px). That never matched: in print
+                       mode the width media feature measures the PAPER width
+                       (8.5in = 816px), not the phone screen — so every real
+                       iPhone print silently used the DESKTOP value (10in) and
+                       kept doubling. We have therefore never actually shipped a
+                       sub-10in page to a real iPhone.
+
+                       Fix: one unconditional print height that fits iOS Safari's
+                       printable area (the device the operator actually prints
+                       from — saved PDFs report Producer = iOS Safari). 9in clears
+                       the URL/page-number footer + Home-indicator reserve. Trade:
+                       desktop prints get a ~2in white strip at the bottom — fine
+                       as an interim band-aid; the server-side renderer (headless
+                       Chrome, deterministic 10 pages, no strip) is the real fix. */
                     .report-doc .page {
-                        height: 10in !important;
-                    }
-                    /* iOS Safari has an even smaller printable area than
-                       macOS Safari — the URL/page-number footer plus the
-                       Home-indicator zone eat additional vertical space.
-                       At 10in the iOS print pipeline overflows and produces
-                       1:1 doubling (user reported 20 pages at 100% scale,
-                       needs to manually drop to 80% to fit). Mobile
-                       viewport detection via max-width:500px narrows this
-                       override to phone-print only; tablets keep the macOS
-                       desktop behavior. 9in observed to fit at 100% scale
-                       on iOS Safari when URL/page-number headers are on. */
-                    @media (max-width: 500px) {
-                        .report-doc .page {
-                            height: 9in !important;
-                        }
+                        height: 9in !important;
                     }
                 }
             </style>`;
