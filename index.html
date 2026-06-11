@@ -127,13 +127,18 @@
     <div id="loginScreen" class="login-screen hidden">
         <div class="login-box">
             <h2>⭐ Northern Star Painters</h2>
-            <p style="text-align:center; color:#666; margin-bottom:20px;">Enter your email to get started</p>
+            <p style="text-align:center; color:#666; margin-bottom:20px;">Sign in to your account</p>
+            <button type="button" onclick="signInWithGoogle()" class="btn" style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;background:#fff;color:#3c4043;border:1px solid #dadce0;font-weight:600;padding:12px;border-radius:8px;font-size:15px;cursor:pointer;">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="" style="width:18px;height:18px;"> Sign in with Google
+            </button>
+            <p id="loginGoogleError" style="color:#b91c1c;font-size:13px;text-align:center;margin-top:10px;display:none;"></p>
+            <div style="display:flex;align-items:center;gap:10px;margin:18px 0;color:#aaa;font-size:12px;"><div style="flex:1;height:1px;background:#e0e0e0;"></div>OR<div style="flex:1;height:1px;background:#e0e0e0;"></div></div>
             <form id="loginForm" onsubmit="handleLogin(event)">
                 <div class="form-group">
-                    <label>Email</label>
-                    <input type="email" id="loginEmail" required placeholder="your@email.com">
+                    <label style="font-size:13px;color:#888;">Email (legacy)</label>
+                    <input type="email" id="loginEmail" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="your@email.com">
                 </div>
-                <button type="submit" class="btn btn-primary">Continue</button>
+                <button type="submit" class="btn" style="width:100%;background:#f1f1f1;color:#555;">Continue with email</button>
             </form>
         </div>
     </div>
@@ -149,7 +154,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v102</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v103</span>
             </div>
 
             <!-- Global Search -->
@@ -970,7 +975,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v102</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v103</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -1498,7 +1503,7 @@
     <script type="module">
         // Import Firebase modules
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
         import { getFirestore, collection, addDoc, getDocs, getDoc, doc, updateDoc, deleteDoc, deleteField, query, where, orderBy, enableIndexedDbPersistence, serverTimestamp, runTransaction } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
         import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js';
 
@@ -1661,6 +1666,30 @@
             }
         });
 
+        // Surface any error from a redirect-based Google sign-in (iOS/PWA path).
+        getRedirectResult(auth).catch((e) => {
+            const el = document.getElementById('loginGoogleError');
+            if (el && e) { el.textContent = 'Google sign-in failed: ' + (e?.message || e); el.style.display = 'block'; }
+        });
+
+        // Primary auth: Sign in with Google. Tries popup (desktop), falls back
+        // to redirect when popups are blocked (common on iOS / standalone PWA).
+        window.signInWithGoogle = async function() {
+            const el = document.getElementById('loginGoogleError');
+            if (el) { el.style.display = 'none'; el.textContent = ''; }
+            const provider = new GoogleAuthProvider();
+            provider.setCustomParameters({ prompt: 'select_account' });
+            try {
+                await signInWithPopup(auth, provider);
+            } catch (e) {
+                const code = e?.code || '';
+                if (['auth/popup-blocked','auth/popup-closed-by-user','auth/cancelled-popup-request','auth/operation-not-supported-in-this-environment'].includes(code)) {
+                    try { await signInWithRedirect(auth, provider); return; } catch (e2) { e = e2; }
+                }
+                if (el) { el.textContent = 'Google sign-in failed: ' + (e?.message || e); el.style.display = 'block'; }
+            }
+        };
+
         function showLoginScreen() {
             document.getElementById('loadingScreen').classList.add('hidden');
             document.getElementById('loginScreen').classList.remove('hidden');
@@ -1669,23 +1698,17 @@
 
         async function handleLogin(event) {
             event.preventDefault();
-            const email = document.getElementById('loginEmail').value.trim();
+            // Legacy email login (kept temporarily during the Google migration).
+            // SECURITY: no longer auto-creates accounts — a failed sign-in just
+            // fails. Email is lowercased so the derived password is stable
+            // (also fixes the iOS first-letter auto-capitalization bug).
+            const email = document.getElementById('loginEmail').value.trim().toLowerCase();
+            if (!email) return;
             const password = 'northern-star-' + email.replace(/[^a-zA-Z0-9]/g, '');
-            
             try {
                 await signInWithEmailAndPassword(auth, email, password);
             } catch (error) {
-                if (error.code === 'auth/invalid-credential' || 
-                    error.code === 'auth/user-not-found' || 
-                    error.code === 'auth/wrong-password') {
-                    try {
-                        await createUserWithEmailAndPassword(auth, email, password);
-                    } catch (createError) {
-                        alert('Error creating account: ' + createError.message);
-                    }
-                } else {
-                    alert('Error signing in: ' + error.message);
-                }
+                alert('Email login failed. Please use “Sign in with Google” above.');
             }
         }
 
