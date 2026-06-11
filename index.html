@@ -149,7 +149,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v99</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v100</span>
             </div>
 
             <!-- Global Search -->
@@ -970,7 +970,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v99</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v100</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -9670,6 +9670,61 @@ Only return JSON, no other text.`;
             document.head.appendChild(link);
         }
 
+        // ── Server-side PDF rendering (Cloudflare Browser Rendering) ────────
+        // The PERMANENT fix for Safari's print doubling + the flaky client
+        // html2pdf path. Headless Chrome honors @page margin:0 exactly →
+        // deterministic 10 pages, selectable text, ~10x smaller files, no
+        // Safari pipeline, no URL footer. The completion report + proposal
+        // markup are self-contained (scoped <style> + doc), so we just POST
+        // the rendered innerHTML and get back a PDF blob. Falls back to the
+        // client html2pdf path if the worker is unreachable/errors.
+        const NSP_PDF_WORKER = 'https://nsp-pdf.amirzreik7.workers.dev';
+
+        async function _renderPdfViaWorker(html, kind) {
+            const resp = await fetch(NSP_PDF_WORKER, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ html, fonts: REPORT_FONTS_LINK, kind }),
+            });
+            if (!resp.ok) {
+                let detail = '';
+                try { detail = (await resp.json()).error || ''; } catch (_) {}
+                throw new Error(`PDF worker ${resp.status} ${detail}`.trim());
+            }
+            const blob = await resp.blob();
+            // A real keepsake/proposal PDF is tens of KB minimum; anything
+            // tiny means the render silently failed — treat as an error so
+            // the caller falls back to the client path.
+            if (!blob || blob.size < 2000) throw new Error('Worker returned an empty PDF');
+            return blob;
+        }
+
+        // Deliver a finished PDF blob to the user. iOS Safari ignores
+        // programmatic <a download>, so we hand the user a tap target in a
+        // tab opened synchronously during the click gesture (share sheet →
+        // Save to Files / email, no URL footer). Desktop downloads directly.
+        function _deliverPdfBlob(blob, filename, pdfTab) {
+            const url = URL.createObjectURL(blob);
+            if (pdfTab && !pdfTab.closed) {
+                pdfTab.document.open();
+                pdfTab.document.write(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>${filename}</title></head>
+                <body style="margin:0;font-family:-apple-system,Arial;background:#f4f4f5;">
+                  <div style="padding:24px;text-align:center;">
+                    <p style="font-size:17px;color:#333;margin:0 0 16px;">Your PDF is ready.</p>
+                    <a href="${url}" target="_blank" rel="noopener" style="display:inline-block;background:#16a34a;color:#fff;font-size:18px;font-weight:700;padding:16px 28px;border-radius:12px;text-decoration:none;">📄 Open / Save your PDF</a>
+                    <p style="font-size:13px;color:#777;margin:16px 0 0;">Then tap the share icon → Save to Files or email it.</p>
+                  </div>
+                  <iframe src="${url}" style="width:100%;height:78vh;border:0;margin-top:8px;"></iframe>
+                </body></html>`);
+                pdfTab.document.close();
+            } else {
+                const a = document.createElement('a');
+                a.href = url; a.download = filename; a.target = '_blank';
+                document.body.appendChild(a); a.click(); a.remove();
+            }
+            setTimeout(() => URL.revokeObjectURL(url), 600000);
+        }
+
         // Common surface types per area + which we ask about. We always ask
         // about walls; ceiling/trim/accent are optional follow-ups.
         const REPORT_SURFACES_INTERIOR = ['walls', 'ceiling', 'trim'];
@@ -13532,6 +13587,23 @@ Generate JSON with these EXACT keys:
                 const reportEl = document.querySelector('#reportContent .report-doc');
                 if (!reportEl) throw new Error('Report content not found');
 
+                // PRIMARY PATH: server-side render (headless Chrome). Crisp,
+                // deterministic 10 pages, selectable text, no Safari pipeline.
+                // The report's innerHTML carries its own scoped <style>, so it
+                // renders identically off-device. Fall through to the client
+                // html2pdf path only if the worker is unreachable/errors.
+                try {
+                    setBtn('Rendering…', true);
+                    const html = document.getElementById('reportContent').innerHTML;
+                    const blob = await _renderPdfViaWorker(html, 'report');
+                    _deliverPdfBlob(blob, filename, pdfTab);
+                    _reportToast?.('PDF ready', 'success', 1400);
+                    return;
+                } catch (workerErr) {
+                    console.warn('Server PDF failed — falling back to client render:', workerErr);
+                    setBtn('Rendering…', true);
+                }
+
                 // Force full letter-size pages and disable the mobile zoom +
                 // screen margins. !important to beat the @media screen rules
                 // inside the report's own scoped style block.
@@ -14618,6 +14690,22 @@ Generate JSON with these EXACT keys:
 
                 const proposalEl = document.querySelector('#proposalContent .proposal-doc') || document.getElementById('proposalContent');
                 if (!proposalEl) throw new Error('Proposal content not found');
+
+                // PRIMARY PATH: server-side render (headless Chrome). The
+                // .proposal-doc carries its own scoped <style> + @page, so it
+                // renders identically off-device. Fall through to client
+                // html2pdf only if the worker is unreachable/errors.
+                try {
+                    setBtn('Rendering…', true);
+                    const phtml = (document.querySelector('#proposalContent .proposal-doc') || document.getElementById('proposalContent')).outerHTML;
+                    const blob = await _renderPdfViaWorker(phtml, 'proposal');
+                    _deliverPdfBlob(blob, _buildProposalFilename() + '.pdf', pdfTab);
+                    if (typeof _reportToast === 'function') _reportToast('PDF ready', 'success', 1400);
+                    return;
+                } catch (workerErr) {
+                    console.warn('Server PDF failed — falling back to client render:', workerErr);
+                    setBtn('Rendering…', true);
+                }
 
                 // Pin the document to true letter width (8.5in = 816px @96dpi).
                 overrideStyle = document.createElement('style');
