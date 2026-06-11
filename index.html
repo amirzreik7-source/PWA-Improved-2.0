@@ -154,7 +154,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v104</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v105</span>
             </div>
 
             <!-- Global Search -->
@@ -975,7 +975,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v104</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v105</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -9710,6 +9710,33 @@ Only return JSON, no other text.`;
         // client html2pdf path if the worker is unreachable/errors.
         const NSP_PDF_WORKER = 'https://nsp-pdf.amirzreik7.workers.dev';
 
+        // PRIMARY Save-PDF path: submit a real <form> straight to the render
+        // worker with target="_blank". The browser navigates a new tab to the
+        // worker and displays the returned PDF (Content-Disposition: inline) —
+        // the most Safari-reliable delivery, with NONE of the fragile pieces
+        // that kept failing on iOS: no fetch, no blob, no CORS preflight, no
+        // service-worker interception, no html2canvas. The user just gets the
+        // PDF in a tab and taps Share → Save to Files / email.
+        // MUST run synchronously inside the click (no awaits before submit) or
+        // iOS Safari blocks the new tab.
+        function _submitPdfForm(html, kind, filename) {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = NSP_PDF_WORKER;
+            form.target = '_blank';
+            form.acceptCharset = 'UTF-8';
+            form.style.display = 'none';
+            const add = (n, v) => { const i = document.createElement('input'); i.type = 'hidden'; i.name = n; i.value = (v == null ? '' : v); form.appendChild(i); };
+            add('html', html);
+            add('kind', kind);
+            add('fonts', REPORT_FONTS_LINK);
+            add('filename', filename);
+            document.body.appendChild(form);
+            form.submit();
+            setTimeout(() => { try { form.remove(); } catch (_) {} }, 2000);
+            if (typeof _reportToast === 'function') _reportToast('Opening your PDF in a new tab…', 'success', 2200);
+        }
+
         async function _renderPdfViaWorker(html, kind) {
             // Hard timeout so a stalled request can never hang the UI forever
             // (cold Browser-Rendering start is usually <15s; 75s is generous).
@@ -13631,134 +13658,14 @@ Generate JSON with these EXACT keys:
         // saved file never carries the URL/page-number footer that iOS adds
         // when "Print Headers and Footers" is on. Output is rasterized
         // (text isn't selectable) but visually matches the screen view.
-        window.saveReportAsPdf = async function() {
-            const btn = document.getElementById('reportSavePdfBtn');
-            const setBtn = (text, disabled) => {
-                if (btn) { btn.textContent = text; btn.disabled = disabled; }
-            };
-
-            // Show an in-page overlay and do all work in the FOREGROUND tab.
-            // We no longer pre-open a blank tab — iOS Safari suspends the
-            // background tab, freezing the one doing the work (the "blank
-            // white page, nothing happens" bug). The finished PDF is handed
-            // over via a button tap (fresh gesture) in _deliverPdfBlob.
-            _pdfProgressOverlay('Generating your keepsake PDF…');
-            setBtn('Preparing…', true);
-
-            // overrideStyle is only used by the html2pdf fallback; restored
-            // in `finally`.
-            let overrideStyle = null;
-            try {
-                const projectId = window._reportProjectId;
-                const project = projects.find(p => p.id === projectId);
-                const filename = _buildReportFilename(project) + '.pdf';
-                const reportEl = document.querySelector('#reportContent .report-doc');
-                if (!reportEl) throw new Error('Report content not found');
-
-                // PRIMARY PATH: server-side render (headless Chrome). Crisp,
-                // deterministic 10 pages, selectable text, no Safari pipeline.
-                // The report's innerHTML carries its own scoped <style>, so it
-                // renders identically off-device. Fall through to the client
-                // html2pdf path only if the worker is unreachable/errors.
-                try {
-                    setBtn('Rendering…', true);
-                    _pdfSetStatus('Sending to our PDF server…');
-                    const html = document.getElementById('reportContent').innerHTML;
-                    const blob = await _renderPdfViaWorker(html, 'report');
-                    _deliverPdfBlob(blob, filename);
-                    return;
-                } catch (workerErr) {
-                    console.warn('Server PDF failed — falling back to client render:', workerErr);
-                    setBtn('Rendering…', true);
-                    _pdfSetStatus('Server unavailable — trying on-device…');
-                }
-
-                // ── FALLBACK: client-side html2pdf ──────────────────────────
-                if (typeof html2pdf === 'undefined') {
-                    await new Promise((resolve, reject) => {
-                        const script = document.createElement('script');
-                        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-                        script.onload = resolve;
-                        script.onerror = () => reject(new Error('Could not load PDF library'));
-                        document.head.appendChild(script);
-                    });
-                }
-
-                const imgs = document.querySelectorAll('#reportContent img');
-                await Promise.all([...imgs].map(img => img.complete && img.naturalWidth > 0
-                    ? Promise.resolve()
-                    : new Promise(resolve => { img.onload = resolve; img.onerror = resolve; })));
-
-                if (document.fonts && document.fonts.ready) {
-                    await document.fonts.ready;
-                }
-
-                // Force full letter-size pages and disable the mobile zoom +
-                // screen margins. !important to beat the @media screen rules
-                // inside the report's own scoped style block.
-                overrideStyle = document.createElement('style');
-                overrideStyle.id = '_pdfRenderOverride';
-                overrideStyle.textContent = `
-                    #reportContent { padding: 0 !important; }
-                    #reportContent .report-doc { width: 8.5in !important; margin: 0 !important; }
-                    #reportContent .report-doc .page {
-                        zoom: 1 !important;
-                        width: 8.5in !important;
-                        height: 11in !important;
-                        margin: 0 !important;
-                        box-shadow: none !important;
-                    }`;
-                document.head.appendChild(overrideStyle);
-
-                // Wait two animation frames for the override to take effect
-                // and the browser to repaint with the new sizes before the
-                // html2canvas snapshot.
-                await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-
-                setBtn('Rendering…', true);
-
-                // html2pdf renders the WHOLE element to a single canvas, then
-                // slices it into .page-sized pages. iOS Safari caps canvas area
-                // (~16.7M px) — a 10-page keepsake at scale 2 is ~34M px and
-                // silently yields a BLANK PDF. Render at 1x (sharp enough at
-                // 96dpi) and scale DOWN further for very tall (many-area) docs.
-                const docHeightPx = reportEl.scrollHeight || 1056;
-                const MAX_CANVAS_AREA = 10000000; // conservative vs iOS limit
-                let scale = Math.min(1, Math.sqrt(MAX_CANVAS_AREA / (816 * docHeightPx)));
-                if (!isFinite(scale) || scale < 0.6) scale = 0.6;
-
-                const worker = html2pdf().set({
-                    margin: 0,
-                    filename: filename,
-                    image: { type: 'jpeg', quality: 0.92 },
-                    html2canvas: {
-                        scale,
-                        useCORS: true,
-                        allowTaint: true,
-                        backgroundColor: '#ffffff',
-                        logging: false,
-                        // 8.5in × 96dpi = 816px. Force the canvas to render at
-                        // letter width regardless of the phone's actual viewport.
-                        width: 816,
-                        windowWidth: 816,
-                    },
-                    jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait', compress: true },
-                    // Break BEFORE each .page sibling. The renderer already
-                    // emits .page-break-before on .page + .page; this just
-                    // tells html2pdf to honor it.
-                    pagebreak: { mode: ['css', 'legacy'], before: '.report-doc .page' },
-                }).from(reportEl);
-
-                const pdf = await worker.toPdf().get('pdf');
-                const blob = pdf.output('blob');
-                _deliverPdfBlob(blob, filename);
-            } catch (e) {
-                console.error('Save PDF failed:', e);
-                _pdfShowError(`${e?.message || e}. You can still use the 🖨️ Print button as a backup.`);
-            } finally {
-                if (overrideStyle) overrideStyle.remove();
-                setBtn('📥 Save PDF', false);
-            }
+        window.saveReportAsPdf = function() {
+            // Direct form submit to the render worker (see _submitPdfForm).
+            const reportEl = document.querySelector('#reportContent .report-doc');
+            if (!reportEl) { alert('Open the report first, then tap Save PDF.'); return; }
+            const html = document.getElementById('reportContent').innerHTML;
+            const project = projects.find(p => p.id === window._reportProjectId);
+            const filename = _buildReportFilename(project) + '.pdf';
+            _submitPdfForm(html, 'report', filename);
         };
 
         // Build a customer-facing PDF filename — one they'd actually open.
@@ -14716,92 +14623,12 @@ Generate JSON with these EXACT keys:
         // suppressed via CSS — this path never goes through print, so the
         // saved PDF is clean. Output is rasterized (text not selectable) but
         // matches the on-screen proposal.
-        window.saveProposalAsPdf = async function() {
-            const btn = document.getElementById('proposalSavePdfBtn');
-            const setBtn = (text, disabled) => { if (btn) { btn.textContent = text; btn.disabled = disabled; } };
-
-            // Foreground overlay + button-tap delivery (see saveReportAsPdf
-            // for why we no longer pre-open a blank tab — iOS suspends it).
-            _pdfProgressOverlay('Generating your proposal PDF…');
-            setBtn('Preparing…', true);
-            let overrideStyle = null;
-            try {
-                const proposalEl = document.querySelector('#proposalContent .proposal-doc') || document.getElementById('proposalContent');
-                if (!proposalEl) throw new Error('Proposal content not found');
-
-                // PRIMARY PATH: server-side render (headless Chrome). The
-                // .proposal-doc carries its own scoped <style> + @page, so it
-                // renders identically off-device. Fall through to client
-                // html2pdf only if the worker is unreachable/errors.
-                try {
-                    setBtn('Rendering…', true);
-                    _pdfSetStatus('Sending to our PDF server…');
-                    const phtml = proposalEl.outerHTML;
-                    const blob = await _renderPdfViaWorker(phtml, 'proposal');
-                    _deliverPdfBlob(blob, _buildProposalFilename() + '.pdf');
-                    return;
-                } catch (workerErr) {
-                    console.warn('Server PDF failed — falling back to client render:', workerErr);
-                    setBtn('Rendering…', true);
-                    _pdfSetStatus('Server unavailable — trying on-device…');
-                }
-
-                // ── FALLBACK: client-side html2pdf ──────────────────────────
-                if (typeof html2pdf === 'undefined') {
-                    await new Promise((resolve, reject) => {
-                        const script = document.createElement('script');
-                        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-                        script.onload = resolve;
-                        script.onerror = () => reject(new Error('Could not load PDF library'));
-                        document.head.appendChild(script);
-                    });
-                }
-
-                const imgs = document.querySelectorAll('#proposalContent img');
-                await Promise.all([...imgs].map(img => img.complete && img.naturalWidth > 0
-                    ? Promise.resolve()
-                    : new Promise(resolve => { img.onload = resolve; img.onerror = resolve; })));
-                if (document.fonts && document.fonts.ready) await document.fonts.ready;
-
-                // Pin the document to true letter width (8.5in = 816px @96dpi).
-                overrideStyle = document.createElement('style');
-                overrideStyle.id = '_proposalPdfOverride';
-                overrideStyle.textContent = `
-                    #proposalContent { padding: 0 !important; }
-                    #proposalContent .proposal-doc { width: 8.5in !important; max-width: 8.5in !important; margin: 0 !important; }`;
-                document.head.appendChild(overrideStyle);
-                await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-
-                setBtn('Rendering…', true);
-
-                // html2pdf renders the WHOLE element to a single canvas, then
-                // slices it into pages. iOS Safari caps canvas area (~16.7M px)
-                // and is slow, so we render at 1x (plenty for a proposal at
-                // 96dpi) and only scale DOWN further for very tall documents.
-                const docHeightPx = proposalEl.scrollHeight || 1056;
-                const MAX_CANVAS_AREA = 10000000; // conservative vs iOS limit
-                let scale = Math.min(1, Math.sqrt(MAX_CANVAS_AREA / (816 * docHeightPx)));
-                if (!isFinite(scale) || scale < 0.6) scale = 0.6;
-
-                const worker = html2pdf().set({
-                    margin: [0.4, 0, 0.4, 0],
-                    filename: _buildProposalFilename() + '.pdf',
-                    image: { type: 'jpeg', quality: 0.85 },
-                    html2canvas: { scale, useCORS: true, allowTaint: true, backgroundColor: '#ffffff', logging: false, width: 816, windowWidth: 816 },
-                    jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait', compress: true },
-                    pagebreak: { mode: ['css', 'legacy'] },
-                }).from(proposalEl);
-
-                const pdf = await worker.toPdf().get('pdf');
-                const blob = pdf.output('blob');
-                _deliverPdfBlob(blob, _buildProposalFilename() + '.pdf');
-            } catch (e) {
-                console.error('Save proposal PDF failed:', e);
-                _pdfShowError(`${e?.message || e}. You can still use the 🖨️ Print button as a backup.`);
-            } finally {
-                if (overrideStyle) overrideStyle.remove();
-                setBtn('📥 Save PDF', false);
-            }
+        window.saveProposalAsPdf = function() {
+            // Direct form submit to the render worker (see _submitPdfForm).
+            const proposalEl = document.querySelector('#proposalContent .proposal-doc') || document.getElementById('proposalContent');
+            if (!proposalEl) { alert('Open the proposal first, then tap Save PDF.'); return; }
+            const html = proposalEl.outerHTML;
+            _submitPdfForm(html, 'proposal', _buildProposalFilename() + '.pdf');
         };
 
         window.fastPrint = function() {
