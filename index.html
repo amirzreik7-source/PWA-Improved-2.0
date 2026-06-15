@@ -154,7 +154,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v106</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v107</span>
             </div>
 
             <!-- Global Search -->
@@ -975,7 +975,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v106</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v107</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -1619,7 +1619,7 @@
         // Surface definitions
         const EXTERIOR_SURFACES_DEFAULT = ['Siding', 'Soffit', 'Fascia', 'Windows', 'Front Door', 'Front Door Frame',
                                     'Garage Door', 'Garage Door Frame', 'Shutters', 'Bay Windows', 'Railings'];
-        const INTERIOR_SURFACES_DEFAULT = ['Walls', 'Ceiling', 'Doors', 'Windows', 'Baseboards', 'Closets',
+        const INTERIOR_SURFACES_DEFAULT = ['Walls', 'Ceiling', 'Doors', 'Windows', 'Baseboards', 'Crown Molding', 'Chair Rail', 'Closets',
                                    'Cabinet Doors', 'Cabinet Drawers', 'Spindles'];
 
         // Exterior siding sub-types. Each carries a default application method
@@ -2572,6 +2572,8 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             'Doors':           { sheen: 'Semi-Gloss', coats: 1, color: 'Match' },
             'Windows':         { sheen: 'Semi-Gloss', coats: 1, color: 'Match' },
             'Baseboards':      { sheen: 'Semi-Gloss', coats: 1, color: 'Match' },
+            'Crown Molding':   { sheen: 'Semi-Gloss', coats: 1, color: 'Match' },
+            'Chair Rail':      { sheen: 'Semi-Gloss', coats: 1, color: 'Match' },
             'Spindles':        { sheen: 'Semi-Gloss', coats: 1, color: 'Match' },
             'Closets':         { sheen: 'Matte',      coats: 2, color: 'TBD' },
             'Cabinet Doors':   { sheen: 'Semi-Gloss', coats: 2, color: 'Match' },
@@ -2586,11 +2588,11 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
         // product doc id at seed time).
         const BM_INTERIOR_TIERS = [
             { tierKey: 'bm-int-budget', tier: 'Budget', brand: 'Benjamin Moore', name: 'Benjamin Moore — Essential (Budget)',
-              products: { 'Walls':'Ultra Spec 500','Ceiling':'Ultra Spec 500','Doors':'Ultra Spec 500','Windows':'Ultra Spec 500','Baseboards':'Ultra Spec 500','Spindles':'Ultra Spec 500','Closets':'Ultra Spec 500','Cabinet Doors':'Ultra Spec 500','Cabinet Drawers':'Ultra Spec 500' } },
+              products: { 'Walls':'Ultra Spec 500','Ceiling':'Ultra Spec 500','Doors':'Ultra Spec 500','Windows':'Ultra Spec 500','Baseboards':'Ultra Spec 500','Crown Molding':'Ultra Spec 500','Chair Rail':'Ultra Spec 500','Spindles':'Ultra Spec 500','Closets':'Ultra Spec 500','Cabinet Doors':'Ultra Spec 500','Cabinet Drawers':'Ultra Spec 500' } },
             { tierKey: 'bm-int-mid', tier: 'Mid', brand: 'Benjamin Moore', name: 'Benjamin Moore — Signature (Mid)',
-              products: { 'Walls':'ben','Ceiling':'Ultra Spec 500','Doors':'ben','Windows':'ben','Baseboards':'ben','Spindles':'ben','Closets':'ben','Cabinet Doors':'ben','Cabinet Drawers':'ben' } },
+              products: { 'Walls':'ben','Ceiling':'Ultra Spec 500','Doors':'ben','Windows':'ben','Baseboards':'ben','Crown Molding':'ben','Chair Rail':'ben','Spindles':'ben','Closets':'ben','Cabinet Doors':'ben','Cabinet Drawers':'ben' } },
             { tierKey: 'bm-int-premium', tier: 'Premium', brand: 'Benjamin Moore', name: 'Benjamin Moore — Luxury (Premium)',
-              products: { 'Walls':'Regal Select','Ceiling':'ben','Doors':'ben','Windows':'ben','Baseboards':'ben','Spindles':'ben','Closets':'Regal Select','Cabinet Doors':'ben','Cabinet Drawers':'ben' } }
+              products: { 'Walls':'Regal Select','Ceiling':'ben','Doors':'ben','Windows':'ben','Baseboards':'ben','Crown Molding':'ben','Chair Rail':'ben','Spindles':'ben','Closets':'Regal Select','Cabinet Doors':'ben','Cabinet Drawers':'ben' } }
         ];
 
         // Products each tier set needs to exist in the catalog (brand+name+type).
@@ -6169,6 +6171,9 @@ Based on the journal entries, calculate and return this JSON (no other text):
                         material = (qty / PRICING.InteriorWindowPaintCoverage) * PRICING.InteriorPaintPricePerGallon * coats;
                         break;
                     case 'Baseboards':
+                    case 'Crown Molding':
+                    case 'Chair Rail':
+                        // Trim run priced per linear foot, same rates as baseboards.
                         labor = (qty / PRICING.BaseboardLaborRate) * PRICING.LaborRate * coats;
                         material = (qty / PRICING.BaseboardPaintCoverage) * PRICING.InteriorPaintPricePerGallon * coats;
                         break;
@@ -6899,7 +6904,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
         // Get the unit for a surface type
         function getSurfaceUnit(surfaceType) {
             const sqFtSurfaces = ['Siding', 'Ceiling', 'Walls'];
-            const linFtSurfaces = ['Soffit', 'Fascia', 'Baseboards'];
+            const linFtSurfaces = ['Soffit', 'Fascia', 'Baseboards', 'Crown Molding', 'Chair Rail'];
 
             if (sqFtSurfaces.includes(surfaceType)) return 'Sq Ft';
             if (linFtSurfaces.includes(surfaceType)) return 'Lin Ft';
@@ -15140,7 +15145,7 @@ AVAILABLE PRODUCTS IN OUR SYSTEM:
 ${productList || 'No products configured yet — set productName to null'}
 
 SURFACE TYPES:
-Interior built-in: Walls, Ceiling, Doors, Windows, Baseboards, Closets, Cabinet Doors, Cabinet Drawers, Spindles
+Interior built-in: Walls, Ceiling, Doors, Windows, Baseboards, Crown Molding, Chair Rail, Closets, Cabinet Doors, Cabinet Drawers, Spindles
 ${customInt ? 'Interior custom: ' + customInt : ''}
 Exterior built-in: Siding, Soffit, Fascia, Windows, Front Door, Front Door Frame, Garage Door, Garage Door Frame, Shutters, Bay Windows, Railings
 ${customExt ? 'Exterior custom: ' + customExt : ''}
@@ -15188,7 +15193,7 @@ QUANTITY DEFAULTS (when not specified):
 Interior:
 - Walls: 2*(L*H)+2*(W*H). Defaults: bedroom=320, living=480, kitchen=400, bath=200, dining=360, hall=280
 - Ceiling: L*W. Same size defaults
-- Baseboards/Lin Ft surfaces: 2*(L+W). Defaults: bedroom=44, living=56, kitchen=48, bath=28
+- Baseboards / Crown Molding / Chair Rail (all linear feet = room perimeter): 2*(L+W). Defaults: bedroom=44, living=56, kitchen=48, bath=28
 - Doors: 1-2 per room. Windows: 1-2 per room. Closets: 1 per bedroom
 Exterior:
 - Siding: 400-600 sq ft per side (front typically largest)
