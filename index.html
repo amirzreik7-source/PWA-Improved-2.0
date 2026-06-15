@@ -154,7 +154,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v107</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v108</span>
             </div>
 
             <!-- Global Search -->
@@ -321,6 +321,8 @@
                             <input type="number" id="roomHeight" value="8" step="0.1" min="0" onchange="updateRoomDetail()">
                         </div>
                     </div>
+                    <button type="button" class="btn btn-small" onclick="recalcRoomSurfacesFromDims()" style="width:100%;background:#eef2ff;color:#3730a3;border:1px solid #c7d2fe;margin-top:4px;">🔄 Recalc surface sizes from L × W × H</button>
+                    <p style="font-size:11px;color:#9ca3af;margin:4px 0 0;">Updates Walls (sq ft), Ceiling (sq ft) & Baseboards/Crown Molding/Chair Rail (lin ft). Door/Window counts are left alone.</p>
                 </div>
                 
                 <div class="form-group">
@@ -975,7 +977,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v107</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v108</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -6422,8 +6424,50 @@ Based on the journal entries, calculate and return this JSON (no other text):
             window.currentRoom.width = parseFloat(document.getElementById('roomWidth').value) || 0;
             window.currentRoom.height = parseFloat(document.getElementById('roomHeight').value) || 8;
             window.currentRoom.notes = document.getElementById('roomNotes').value;
-            
+
             updateRoomTotals();
+        };
+
+        // Recompute dimension-derived surface quantities from the room's
+        // L × W × H, then re-price + re-render. Walls = perimeter × height,
+        // Ceiling = L × W, Baseboards/Crown Molding/Chair Rail = perimeter
+        // (lin ft). Count-based surfaces (Doors, Windows, Closets, Cabinets,
+        // Spindles, custom) are left untouched so manual entries survive.
+        window.recalcRoomSurfacesFromDims = function() {
+            if (!window.currentRoom) return;
+            updateRoomDetail(); // flush latest L/W/H from the inputs first
+            const L = window.currentRoom.length || 0;
+            const W = window.currentRoom.width || 0;
+            const H = window.currentRoom.height || 8;
+            if (L <= 0 || W <= 0) {
+                alert('Enter Length and Width first, then tap Recalc.');
+                return;
+            }
+            const perimeter = 2 * (L + W);
+            let changed = 0;
+            (window.currentRoom.surfaces || []).forEach(s => {
+                let q = null;
+                switch (s.surfaceType) {
+                    case 'Walls':         q = Math.round(perimeter * H); break;
+                    case 'Ceiling':       q = Math.round(L * W);          break;
+                    case 'Baseboards':
+                    case 'Crown Molding':
+                    case 'Chair Rail':    q = Math.round(perimeter);      break;
+                }
+                if (q !== null) {
+                    s.quantity = q;
+                    const cost = calculateSurfaceCost(s);
+                    s.laborCost = cost.laborCost;
+                    s.materialCost = cost.materialCost;
+                    s.total = cost.total;
+                    changed++;
+                }
+            });
+            displaySurfaceButtons();
+            updateRoomTotals();
+            if (changed === 0) {
+                alert('No size-based surfaces on this room to recalc (Walls, Ceiling, Baseboards, Crown Molding, Chair Rail).');
+            }
         };
 
         function updateRoomTotals() {
@@ -15124,6 +15168,9 @@ JSON STRUCTURE:
   "rooms": [
     {
       "name": "Front",
+      "length": 15,
+      "width": 12,
+      "height": 8,
       "notes": "Professional, clean note about this side/room",
       "surfaces": [
         {
@@ -15188,6 +15235,11 @@ PRIMER:
 - "prime", "primer", "priming", "seal" → usePrimer: true, primerCoats: 1
 - "2 coats primer" → primerCoats: 2
 - Default: usePrimer: false
+
+ROOM DIMENSIONS (interior):
+- When the user gives a room size (e.g. "15 x 12 x 8" = L x W x H), set "length", "width", "height" (in feet) on that room object. Default height to 8 if only L x W given.
+- Do NOT repeat the dimensions inside the "notes" field — they belong in the dedicated length/width/height fields. Use "notes" only for real notes (exclusions, repairs, conditions).
+- Still compute each surface's "quantity" from the dimensions as below. For EXTERIOR sides, set length/width/height to 0.
 
 QUANTITY DEFAULTS (when not specified):
 Interior:
