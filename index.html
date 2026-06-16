@@ -154,7 +154,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v109</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v110</span>
             </div>
 
             <!-- Global Search -->
@@ -1016,7 +1016,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v109</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v110</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -8057,6 +8057,7 @@ Only return JSON, no other text.`;
 
             let totalLabor = 0;
             let totalMaterials = 0;
+            let servicesTotal = 0;   // cabinets, shadow boxes, etc. (flat price)
 
             const roomsHTML = currentEstimate.rooms.map(room => {
                 const roomTotal = calculateRoomTotal(room);
@@ -8066,6 +8067,13 @@ Only return JSON, no other text.`;
                 room.surfaces.forEach(s => {
                     roomLabor += s.laborCost || 0;
                     roomMaterials += s.materialCost || 0;
+                });
+
+                // Additional services (Cabinets, Shadow Boxes) are flat-priced
+                // line items — they must count toward the estimate total just
+                // like they do in each room's own total (calculateRoomTotal).
+                (room.additionalServices || []).forEach(svc => {
+                    servicesTotal += (svc.total != null ? svc.total : (svc.price || 0) * (svc.qty || 1));
                 });
 
                 totalLabor += roomLabor;
@@ -8097,9 +8105,10 @@ Only return JSON, no other text.`;
 
             currentEstimate.totalLabor = totalLabor;
             currentEstimate.totalMaterials = totalMaterials;
+            currentEstimate.servicesTotal = servicesTotal;
             // Only set basePrice from calculation if user hasn't manually overridden it
             if (!currentEstimate.priceOverride) {
-                currentEstimate.basePrice = totalLabor + totalMaterials;
+                currentEstimate.basePrice = totalLabor + totalMaterials + servicesTotal;
             }
 
             // Cost breakdown (internal — not shown to customer)
