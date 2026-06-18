@@ -154,7 +154,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v110</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v111</span>
             </div>
 
             <!-- Global Search -->
@@ -1016,7 +1016,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v110</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v111</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -3468,6 +3468,13 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                     failures.push({ id: pid, reason: e.message || String(e) });
                 }
             }
+            // On completion, snapshot the proposal(s) so the QB invoicer can
+            // attach the proposal PDF. Fire-and-forget + silent; only the
+            // projects that wrote successfully.
+            if (newStatus === 'Complete') {
+                const okIds = projectIds.filter(pid => !failures.some(f => f.id === pid));
+                if (okIds.length) _captureProposalForCompletion(okIds);
+            }
             return failures;
         }
 
@@ -3621,6 +3628,100 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             } catch (e) {
                 console.error('Combined proposal upload failed:', e);
                 return null;
+            }
+        }
+
+        // Snapshot a SINGLE project's landed proposal to Firebase Storage and
+        // write `proposalHtmlUrl` onto the project doc. Renders the proposal
+        // SILENTLY (no UI navigation) via generateProposal({silent:true}) using a
+        // throwaway currentEstimate built from the landed job. The QB invoicer
+        // agent reads proposalHtmlUrl to attach the proposal PDF to the invoice.
+        // Stable filename per project — each snapshot overwrites the previous.
+        async function _uploadProposalHtml(projectId) {
+            try {
+                if (!currentUser?.uid) return null;
+                const project = projects.find(p => p.id === projectId);
+                if (!project || !project.landedProposalId) return null;
+                const job = jobs.find(j => j.id === project.landedProposalId);
+                if (!job || !(job.rooms || []).length) return null;
+
+                const _prevEstimate = currentEstimate;
+                const _prevCrewMode = window._crewMode;
+                let html = null;
+                try {
+                    currentEstimate = { ...job, _combined: false };
+                    window._crewMode = false;
+                    html = await generateProposal(null, { silent: true });
+                } finally {
+                    currentEstimate = _prevEstimate;
+                    window._crewMode = _prevCrewMode;
+                }
+                if (!html) return null;
+
+                const path = `users/${currentUser.uid}/proposals/${projectId}-proposal.html`;
+                const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Proposal</title></head><body style="margin:0;padding:0;">${html}</body></html>`;
+                const sRef = ref(storage, path);
+                await uploadBytes(sRef, new Blob([fullHtml], { type: 'text/html' }));
+                const url = await getDownloadURL(sRef);
+                const updateData = {
+                    proposalHtmlUrl: url,
+                    proposalHtmlUpdatedAt: new Date().toISOString()
+                };
+                await updateDoc(doc(db, 'projects', projectId), updateData);
+                const p = projects.find(pr => pr.id === projectId);
+                if (p) Object.assign(p, updateData);
+                return url;
+            } catch (e) {
+                console.error('Proposal HTML snapshot failed for', projectId, e);
+                return null;
+            }
+        }
+
+        // Fire-and-forget snapshot triggered when project(s) are marked Complete.
+        // Linked group → COMBINED proposal artifact (combinedProposalUrl on every
+        // side). Single project → that project's proposal (proposalHtmlUrl).
+        // Best-effort: all failures swallowed so completion is never blocked; the
+        // agent's catch-up attach path self-heals any miss on a later hourly run.
+        async function _captureProposalForCompletion(projectIds) {
+            try {
+                const ids = (projectIds || []).filter(Boolean);
+                if (!ids.length || !currentUser?.uid) return;
+                if (ids.length > 1) {
+                    const _prevEstimate = currentEstimate;
+                    const _prevCrewMode = window._crewMode;
+                    let html = null;
+                    try {
+                        currentEstimate = _buildCombinedEstimate(ids);
+                        window._crewMode = false;
+                        html = await generateProposal(null, { silent: true });
+                    } finally {
+                        currentEstimate = _prevEstimate;
+                        window._crewMode = _prevCrewMode;
+                    }
+                    if (!html) return;
+                    const sortedIds = [...ids].sort();
+                    const path = `users/${currentUser.uid}/proposals/combined-${sortedIds[0]}.html`;
+                    const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Combined Proposal</title></head><body style="margin:0;padding:0;">${html}</body></html>`;
+                    const sRef = ref(storage, path);
+                    await uploadBytes(sRef, new Blob([fullHtml], { type: 'text/html' }));
+                    const url = await getDownloadURL(sRef);
+                    const updateData = {
+                        combinedProposalUrl: url,
+                        combinedProposalUpdatedAt: new Date().toISOString(),
+                        combinedProposalGroupIds: sortedIds
+                    };
+                    for (const pid of ids) {
+                        try {
+                            await updateDoc(doc(db, 'projects', pid), updateData);
+                            const p = projects.find(pr => pr.id === pid);
+                            if (p) Object.assign(p, updateData);
+                        } catch (e) { console.error('combined url write failed', pid, e); }
+                    }
+                } else {
+                    await _uploadProposalHtml(ids[0]);
+                }
+            } catch (e) {
+                console.error('_captureProposalForCompletion failed', e);
             }
         }
 
@@ -9462,6 +9563,10 @@ Only return JSON, no other text.`;
                         }
                     }
 
+                    // Snapshot the proposal(s) for the QB invoicer to attach.
+                    // Fire-and-forget + silent — never blocks completion.
+                    if (markComplete) { _captureProposalForCompletion(allIds); }
+
                     await _refreshAfterStatusChange();
                     const linkedCount = allIds.length - 1;
                     const linkedNote = linkedCount > 0 ? ` (synced to ${linkedCount} linked side${linkedCount === 1 ? '' : 's'})` : '';
@@ -14909,8 +15014,18 @@ Generate JSON with these EXACT keys:
         };
 
         // Generate Proposal — renders in-app (no popup, works in Safari PWA)
-        window.generateProposal = async function(returnScreen) {
-            if (currentEstimate.rooms.length === 0) { alert('Please add rooms before generating proposal'); return; }
+        window.generateProposal = async function(returnScreen, opts) {
+            // `opts.silent` builds and RETURNS the proposal HTML string without
+            // touching the DOM or navigating — used to snapshot a proposal to
+            // Firebase Storage at completion time (see _uploadProposalHtml) so
+            // the QB invoicer agent can attach the proposal PDF to the invoice.
+            opts = opts || {};
+            const _silent = opts.silent === true;
+            if (currentEstimate.rooms.length === 0) {
+                if (_silent) return null;
+                alert('Please add rooms before generating proposal');
+                return;
+            }
             window._proposalReturnScreen = returnScreen || 'estimateStep6Screen';
 
             const customer = customers.find(c => c.id === currentEstimate.customerId);
@@ -15240,6 +15355,11 @@ ${currentEstimate.customerSignature ? '<p>Signature:</p><img src="'+currentEstim
 </div>
 <div style="background-color:#1e3a8a;height:16px;margin:20px 0 0 0;${pca}"></div>
 </div>`;
+
+            // Silent snapshot mode: return the fully-built HTML (real image
+            // srcs intact, NOT lazified) for off-screen capture. No DOM write,
+            // no navigation.
+            if (_silent) return html;
 
             // Render in-app — use lazy image loading for faster first paint
             const proposalEl = document.getElementById('proposalContent');
