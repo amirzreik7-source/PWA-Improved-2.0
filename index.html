@@ -154,7 +154,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v111</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v112</span>
             </div>
 
             <!-- Global Search -->
@@ -477,6 +477,19 @@
                 <div id="actualsRevenueBreakdown" style="font-size:14px;"></div>
             </div>
 
+            <!-- WHO PAID FOR MATERIALS — drives how the crew payout splits into labor vs material.
+                 Profit is exact in all three modes; this only changes the labor/hourly read. -->
+            <div class="room-card" id="materialModeCard" style="border-left:4px solid #6366f1;">
+                <h3>Who paid for materials?</h3>
+                <p style="color:#666;font-size:12px;margin:2px 0 10px;">Sets how the crew payout splits into labor vs. materials. Your profit comes out exact either way.</p>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+                    <button type="button" id="materialModeNsp" onclick="setMaterialMode('nsp')" style="padding:10px 4px;border:2px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;font-size:12px;font-weight:500;cursor:pointer;line-height:1.25;text-align:center;">🏢<br>NSP bought<br>materials</button>
+                    <button type="button" id="materialModeCrewKnown" onclick="setMaterialMode('crew_known')" style="padding:10px 4px;border:2px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;font-size:12px;font-weight:500;cursor:pointer;line-height:1.25;text-align:center;">👷<br>Crew paid<br>(I know cost)</button>
+                    <button type="button" id="materialModeCrewUnknown" onclick="setMaterialMode('crew_unknown')" style="padding:10px 4px;border:2px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;font-size:12px;font-weight:500;cursor:pointer;line-height:1.25;text-align:center;">👷<br>Crew paid<br>(off our account)</button>
+                </div>
+                <div id="materialModeHint" style="margin-top:8px;font-size:12px;color:#4b5563;line-height:1.5;"></div>
+            </div>
+
             <div class="room-card">
                 <h3>Crew & Time</h3>
                 <div class="form-group">
@@ -508,33 +521,56 @@
                 <input type="hidden" id="actualCrewCount" value="">
                 <input type="hidden" id="actualDays" value="">
                 <div class="form-group" style="margin-top:12px;">
-                    <label>Crew Payout (Agreed Lump) ($)</label>
+                    <label id="crewPayoutLabel">Crew Payout ($)</label>
                     <input type="number" id="actualCrewPayout" step="0.01" min="0" placeholder="0.00" oninput="calculateProfit()">
-                    <p style="font-size:11px;color:#666;margin:3px 0 0;">Gross lump you agreed to pay. Paint (Labor + Materials mode) and non-paint (unless NSP absorbed it) get auto-deducted — the crew's actual take-home shows below.</p>
+                    <p id="crewPayoutHelp" style="font-size:11px;color:#666;margin:3px 0 0;">What you paid the crew.</p>
                     <div id="crewNetTakeDisplay" style="display:none;margin-top:8px;padding:8px 10px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;font-size:13px;line-height:1.5;"></div>
                 </div>
             </div>
 
             <div class="room-card">
                 <h3>Materials</h3>
-                <p style="color:#666;font-size:12px;margin:2px 0 10px;">Track paint and non-paint separately. Estimates only cover paint, so blending the two skews the variance.</p>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                    <div class="form-group">
-                        <label>Paint Cost ($)</label>
-                        <input type="number" id="actualPaintCost" step="0.01" min="0" placeholder="0.00" oninput="calculateProfit()">
-                        <p style="font-size:11px;color:#666;margin:3px 0 0;">What NSP paid the paint store for paint specifically.</p>
+
+                <!-- NSP-COVERED: paint + non-paint are NSP's own expense, tracked separately. -->
+                <div id="nspMaterialFields">
+                    <p style="color:#666;font-size:12px;margin:2px 0 10px;">NSP bought these. Track paint and non-paint separately — estimates only cover paint, so blending the two skews the variance.</p>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                        <div class="form-group">
+                            <label>Paint Cost ($)</label>
+                            <input type="number" id="actualPaintCost" step="0.01" min="0" placeholder="0.00" oninput="calculateProfit()">
+                            <p style="font-size:11px;color:#666;margin:3px 0 0;">What NSP paid the paint store for paint specifically.</p>
+                        </div>
+                        <div class="form-group">
+                            <label>Non-paint Materials ($)</label>
+                            <input type="number" id="actualNonPaintCost" step="0.01" min="0" placeholder="0.00" oninput="calculateProfit()">
+                            <p style="font-size:11px;color:#666;margin:3px 0 4px;">Plastic, tape, drop cloths, sandpaper, wood, etc.</p>
+                        </div>
                     </div>
+                    <!-- Hidden: in NSP mode non-paint is always NSP's cost. Kept for legacy save math. -->
+                    <input type="checkbox" id="actualNonPaintAbsorbed" checked style="display:none;">
+                </div>
+
+                <!-- CREW-COVERED, COST KNOWN: one number = materials embedded in the gross payout. -->
+                <div id="crewMaterialField" style="display:none;">
                     <div class="form-group">
-                        <label>Non-paint Materials ($)</label>
-                        <input type="number" id="actualNonPaintCost" step="0.01" min="0" placeholder="0.00" oninput="calculateProfit()">
-                        <p style="font-size:11px;color:#666;margin:3px 0 4px;">Plastic, tape, drop cloths, sandpaper, wood, etc.</p>
-                        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#374151;font-weight:400;cursor:pointer;margin:0;">
-                            <input type="checkbox" id="actualNonPaintAbsorbed" onchange="calculateProfit()" style="margin:0;width:auto;">
-                            NSP absorbed — don't deduct from crew
-                        </label>
+                        <label>Materials the crew covered ($)</label>
+                        <input type="number" id="actualCrewMaterial" step="0.01" min="0" placeholder="0.00" oninput="calculateProfit()">
+                        <p style="font-size:11px;color:#666;margin:3px 0 0;">Paint + supplies the crew bought, included in the gross payout above. We subtract it to reveal the crew's labor.</p>
                     </div>
                 </div>
-                <div class="form-group" style="margin-top:10px;">
+
+                <!-- CREW-COVERED, OFF OUR ACCOUNT: cost unknown. Optional rough estimate only. -->
+                <div id="crewUnknownField" style="display:none;">
+                    <div style="padding:10px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:12px;color:#92400e;line-height:1.5;">
+                        Crew bought materials off our account — exact cost &amp; gallons are unknown. <strong>Profit still comes out exact</strong> (the gross payout is your true cost). To gauge the crew's hourly, we estimate materials from the proposal. You can override with a rough number:
+                    </div>
+                    <div class="form-group" style="margin-top:10px;">
+                        <label>Rough material estimate ($) <span style="color:#999;font-weight:400;">— optional</span></label>
+                        <input type="number" id="actualCrewMaterialEst" step="0.01" min="0" placeholder="leave blank to use proposal estimate" oninput="calculateProfit()">
+                    </div>
+                </div>
+
+                <div class="form-group" id="gallonsField" style="margin-top:10px;">
                     <label>Gallons Used</label>
                     <input type="number" id="actualGallons" step="0.5" min="0" placeholder="0">
                 </div>
@@ -1016,7 +1052,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v111</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v112</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -3227,16 +3263,20 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                         <div style="font-size:14px;">
                             <div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Revenue:</span><strong>$${(a.revenue || 0).toFixed(2)}</strong></div>
                             ${(a.crewNetTake !== undefined && a.crewNetTake !== a.crewPayout) ? `
-                                <div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Crew Payout (Lump):</span><span>$${a.crewPayout.toFixed(2)}</span></div>
-                                ${a.nonPaintCost ? `<div style="display:flex;justify-content:space-between;padding:3px 0;color:#92400e;font-size:12px;"><span>− Non-paint deduction:</span><span>−$${a.nonPaintCost.toFixed(2)}</span></div>` : ''}
-                                ${(a.paymentMode === 'labor_plus_materials' && a.paintCost) ? `<div style="display:flex;justify-content:space-between;padding:3px 0;color:#92400e;font-size:12px;"><span>− Paint (L+M mode):</span><span>−$${a.paintCost.toFixed(2)}</span></div>` : ''}
-                                <div style="display:flex;justify-content:space-between;padding:3px 0;font-weight:600;"><span>Net to crew:</span><span>$${a.crewNetTake.toFixed(2)}</span></div>
+                                <div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Crew Payout (gross):</span><span>$${a.crewPayout.toFixed(2)}</span></div>
+                                ${(a.crewMaterialCost || 0) > 0
+                                    ? `<div style="display:flex;justify-content:space-between;padding:3px 0;color:#92400e;font-size:12px;"><span>− Materials${a.crewMaterialEstimated ? ' (est.)' : ''} (crew-covered):</span><span>−$${a.crewMaterialCost.toFixed(2)}</span></div>`
+                                    : `${a.nonPaintCost ? `<div style="display:flex;justify-content:space-between;padding:3px 0;color:#92400e;font-size:12px;"><span>− Non-paint deduction:</span><span>−$${a.nonPaintCost.toFixed(2)}</span></div>` : ''}
+                                       ${(a.paymentMode === 'labor_plus_materials' && a.paintCost) ? `<div style="display:flex;justify-content:space-between;padding:3px 0;color:#92400e;font-size:12px;"><span>− Paint (L+M mode):</span><span>−$${a.paintCost.toFixed(2)}</span></div>` : ''}`}
+                                <div style="display:flex;justify-content:space-between;padding:3px 0;font-weight:600;"><span>Net labor to crew:</span><span>$${a.crewNetTake.toFixed(2)}</span></div>
                             ` : `
                                 <div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Crew Payout:</span><span>$${a.crewPayout.toFixed(2)}</span></div>
                             `}
-                            ${(a.paintCost !== undefined || a.nonPaintCost !== undefined)
+                            ${a.materialResponsibility === 'crew'
+                                ? `<div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Materials (crew-covered${a.crewMaterialEstimated ? ', est.' : ''}):</span><span>${a.materialCostKnown === false && !(a.crewMaterialCost > 0) ? 'unknown' : '$' + (a.crewMaterialCost || 0).toFixed(2)}</span></div>`
+                                : (a.paintCost !== undefined || a.nonPaintCost !== undefined)
                                 ? `<div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Paint:</span><span>$${(a.paintCost || 0).toFixed(2)}</span></div>
-                                   ${(a.nonPaintCost || 0) > 0 ? `<div style="display:flex;justify-content:space-between;padding:3px 0;color:#9ca3af;font-size:12px;"><span>Non-paint (charged to NSP, recovered from crew):</span><span>$${a.nonPaintCost.toFixed(2)}</span></div>` : ''}`
+                                   ${(a.nonPaintCost || 0) > 0 ? `<div style="display:flex;justify-content:space-between;padding:3px 0;color:#9ca3af;font-size:12px;"><span>Non-paint (NSP):</span><span>$${a.nonPaintCost.toFixed(2)}</span></div>` : ''}`
                                 : `<div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Materials:</span><span>$${(a.materialCost || 0).toFixed(2)}</span></div>`}
                             <div style="display:flex;justify-content:space-between;padding:3px 0;border-top:2px solid #333;margin-top:4px;padding-top:6px;font-weight:700;"><span>Net Profit:</span><span style="color:${profitColor};">$${a.netProfit.toFixed(2)}</span></div>
                             <div style="display:flex;justify-content:space-between;padding:3px 0;"><span>Margin:</span><span style="color:${profitColor};font-weight:700;">${a.profitMargin.toFixed(1)}%</span></div>
@@ -4659,9 +4699,16 @@ Based on the journal entries, calculate and return this JSON (no other text):
                     if (result.totalDays) document.getElementById('actualDays').value = result.totalDays;
                     if (result.crewPayout) document.getElementById('actualCrewPayout').value = result.crewPayout;
                     // AI extracts a single `materialCost` from the journal — usually impossible
-                    // to know paint vs non-paint split from natural-language entries. Pre-fill
-                    // it as paint cost (conservative); operator splits out non-paint if needed.
-                    if (result.materialCost) document.getElementById('actualPaintCost').value = result.materialCost;
+                    // to know paint vs non-paint split from natural-language entries. Route it to
+                    // whichever material field the current mode shows: NSP→paint, crew-known→crew
+                    // material, crew-unknown→rough estimate. Operator can re-split if needed.
+                    if (result.materialCost) {
+                        const matTarget = window._materialMode === 'crew_known' ? 'actualCrewMaterial'
+                                        : window._materialMode === 'crew_unknown' ? 'actualCrewMaterialEst'
+                                        : 'actualPaintCost';
+                        const matEl = document.getElementById(matTarget);
+                        if (matEl) matEl.value = result.materialCost;
+                    }
                     if (result.gallonsUsed) document.getElementById('actualGallons').value = result.gallonsUsed;
                     if (result.startDate) document.getElementById('actualStartDate').value = result.startDate;
                     if (result.endDate) document.getElementById('actualEndDate').value = result.endDate;
@@ -9079,6 +9126,14 @@ Only return JSON, no other text.`;
                 const npAbsorb = document.getElementById('actualNonPaintAbsorbed');
                 if (npAbsorb) npAbsorb.checked = existingActuals.nonPaintAbsorbed === true;
                 document.getElementById('actualMaterialCost').value = existingActuals.materialCost || '';
+                // Crew-covered material fields (new model). For known cost, fill the
+                // material box; for the off-account case only restore a manual rough
+                // override (a proposal-derived estimate stays blank so it re-derives).
+                const cm = existingActuals.crewMaterialCost || 0;
+                const cmKnown = existingActuals.materialCostKnown !== false;
+                document.getElementById('actualCrewMaterial').value = (cmKnown && cm) ? cm : '';
+                document.getElementById('actualCrewMaterialEst').value =
+                    (!cmKnown && cm && Math.abs(cm - (window._actualsEstMaterial || 0)) > 0.5) ? cm : '';
                 document.getElementById('actualGallons').value = existingActuals.gallonsUsed || '';
                 document.getElementById('actualDifficulty').value = existingActuals.difficulty || 5;
                 document.getElementById('diffLabel').textContent = existingActuals.difficulty || 5;
@@ -9103,7 +9158,7 @@ Only return JSON, no other text.`;
             } else {
                 window._completionPhotos = { before: [], after: [] };
                 displayCompletionPhotos();
-                ['actualCrewPayout','actualMaterialCost','actualPaintCost','actualNonPaintCost','actualDays','actualGallons','actualStartDate','actualEndDate','actualNotesGood','actualNotesBad','actualNotesLearning'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+                ['actualCrewPayout','actualMaterialCost','actualPaintCost','actualNonPaintCost','actualCrewMaterial','actualCrewMaterialEst','actualDays','actualGallons','actualStartDate','actualEndDate','actualNotesGood','actualNotesBad','actualNotesLearning'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
                 document.getElementById('actualDifficulty').value = 5;
                 document.getElementById('diffLabel').textContent = '5';
                 const npAbsorb = document.getElementById('actualNonPaintAbsorbed');
@@ -9134,7 +9189,9 @@ Only return JSON, no other text.`;
                 }
             }
 
-            calculateProfit();
+            // Decide & apply the material-responsibility mode (setMaterialMode runs
+            // calculateProfit). Prefers a saved choice, else the crew proposal / legacy mode.
+            setMaterialMode(_deriveMaterialMode(project, project.actuals));
             showScreen('profitTrackingScreen');
         }
 
@@ -9153,7 +9210,7 @@ Only return JSON, no other text.`;
                 window._actualsLinkedProjectIds = [];
                 const revEl = document.getElementById('actualsRevenueBreakdown');
                 if (revEl) revEl.innerHTML = `<div style="display:flex;justify-content:space-between;"><span>Customer Paid</span><strong>$${window._actualsRevenue.toFixed(2)}</strong></div>`;
-                ['actualCrewLeader','actualCrewPayout','actualMaterialCost','actualPaintCost','actualNonPaintCost','actualDays','actualGallons','actualStartDate','actualEndDate','actualNotesGood','actualNotesBad','actualNotesLearning'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+                ['actualCrewLeader','actualCrewPayout','actualMaterialCost','actualPaintCost','actualNonPaintCost','actualCrewMaterial','actualCrewMaterialEst','actualDays','actualGallons','actualStartDate','actualEndDate','actualNotesGood','actualNotesBad','actualNotesLearning'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
                 document.getElementById('actualCrewCount').value = '';
                 document.getElementById('actualHoursPerDay').value = 8;
                 document.getElementById('actualDifficulty').value = 5;
@@ -9163,112 +9220,189 @@ Only return JSON, no other text.`;
                 window._completionPhotos = { before: [], after: [] };
                 displayCompletionPhotos();
                 document.getElementById('profitResultsCard').style.display = 'none';
-                calculateProfit();
+                setMaterialMode('nsp');   // standalone jobs have no crew proposal — default NSP
                 showScreen('profitTrackingScreen');
             }
         };
 
-        window.calculateProfit = function() {
-            // crewPayoutLump = the gross amount NSP agreed to pay the crew. Materials get
-            // auto-deducted from this depending on payment mode + non-paint ownership:
-            //   Labor Only:           non-paint deducted unless NSP absorbed
-            //                         (paint is always NSP's own expense)
-            //   Labor + Materials:    paint AND non-paint deducted; non-paint absorb
-            //                         flag overrides the non-paint deduction
-            // The "actual paid to crew" (net take-home) is computed below.
-            const crewPayoutLump = parseFloat(document.getElementById('actualCrewPayout').value) || 0;
+        // Material responsibility mode for the actuals form. One of:
+        //   'nsp'          → NSP bought materials; crew payout is pure labor.
+        //   'crew_known'   → crew bought materials; gross payout includes them; cost known.
+        //   'crew_unknown' → crew bought off our account; only the gross is known.
+        window._materialMode = 'nsp';
 
-            const paintCostEl = document.getElementById('actualPaintCost');
-            const nonPaintCostEl = document.getElementById('actualNonPaintCost');
-            const paintCost = paintCostEl ? (parseFloat(paintCostEl.value) || 0) : 0;
-            const nonPaintCost = nonPaintCostEl ? (parseFloat(nonPaintCostEl.value) || 0) : 0;
-            const materialCost = paintCost + nonPaintCost;
-            const nonPaintAbsorbed = document.getElementById('actualNonPaintAbsorbed')?.checked === true;
-            // Keep hidden legacy field in sync for any downstream code still reading it.
+        // Decide the mode when opening the form. Prefers an explicit saved choice,
+        // then the record's legacy paymentMode, then the accepted crew proposal,
+        // defaulting to NSP.
+        window._deriveMaterialMode = function(project, actuals) {
+            if (actuals && actuals.materialResponsibility) {
+                if (actuals.materialResponsibility === 'nsp') return 'nsp';
+                return actuals.materialCostKnown === false ? 'crew_unknown' : 'crew_known';
+            }
+            const pm = actuals?.paymentMode;
+            if (pm === 'labor_plus_materials') return 'crew_known';
+            if (pm === 'labor_only') return 'nsp';
+            const cp = project?.crewProposals?.find(c => c.accepted);
+            if (cp?.paymentMode === 'labor_plus_materials') return 'crew_known';
+            return 'nsp';
+        };
+
+        // Apply a mode: paint the segmented buttons, show/hide the right fields,
+        // relabel the payout, then recompute.
+        window.setMaterialMode = function(mode) {
+            window._materialMode = mode;
+            const buttons = { nsp: 'materialModeNsp', crew_known: 'materialModeCrewKnown', crew_unknown: 'materialModeCrewUnknown' };
+            Object.values(buttons).forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const active = buttons[mode] === id;
+                el.style.background = active ? '#6366f1' : '#fff';
+                el.style.color = active ? '#fff' : '#374151';
+                el.style.borderColor = active ? '#6366f1' : '#d1d5db';
+                el.style.fontWeight = active ? '700' : '500';
+            });
+            const show = (id, on) => { const e = document.getElementById(id); if (e) e.style.display = on ? '' : 'none'; };
+            show('nspMaterialFields', mode === 'nsp');
+            show('crewMaterialField', mode === 'crew_known');
+            show('crewUnknownField', mode === 'crew_unknown');
+            show('gallonsField', mode !== 'crew_unknown');   // gallons are unknown off-account
+            // Keep the hidden absorbed flag truthful: NSP eats non-paint in NSP mode.
+            const npAbsorb = document.getElementById('actualNonPaintAbsorbed');
+            if (npAbsorb) npAbsorb.checked = (mode === 'nsp');
+
+            const lbl = document.getElementById('crewPayoutLabel');
+            const help = document.getElementById('crewPayoutHelp');
+            const hint = document.getElementById('materialModeHint');
+            if (mode === 'nsp') {
+                if (lbl) lbl.textContent = 'Crew Payout — labor ($)';
+                if (help) help.textContent = 'What you paid the crew for labor. NSP buys the paint and supplies separately (enter below).';
+                if (hint) hint.innerHTML = '🏢 <strong>NSP buys the materials.</strong> Crew payout is pure labor; paint &amp; supplies below add to NSP\'s cost.';
+            } else if (mode === 'crew_known') {
+                if (lbl) lbl.textContent = 'Crew Payout — gross, incl. materials ($)';
+                if (help) help.textContent = 'The full lump you paid the crew, materials included. Enter the material amount below so we can back out the labor.';
+                if (hint) hint.innerHTML = '👷 <strong>Crew bought materials, cost known.</strong> We subtract it from the gross to show the crew\'s real labor &amp; hourly.';
+            } else {
+                if (lbl) lbl.textContent = 'Crew Payout — gross ($)';
+                if (help) help.textContent = 'Just the total you paid the crew. They bought materials off our account, so the exact split is unknown.';
+                if (hint) hint.innerHTML = '👷 <strong>Crew bought off our account.</strong> Profit stays exact; we estimate materials from the proposal only to gauge hourly.';
+            }
+            if (typeof calculateProfit === 'function') calculateProfit();
+        };
+
+        // Single source of truth for the actuals math. Both calculateProfit (live UI)
+        // and saveProfitActuals (persistence) read from this so they never drift.
+        //
+        // The governing idea: NET PROFIT is always exact = revenue − true NSP cash-out.
+        // The material mode only changes how the crew payout is SPLIT into labor vs.
+        // material for the hourly/effective-rate read — never the profit.
+        window._computeActualsMath = function() {
+            const mode = window._materialMode || 'nsp';
+            const num = id => parseFloat(document.getElementById(id)?.value) || 0;
+            const crewPayout   = num('actualCrewPayout');     // gross in crew modes; pure labor in NSP mode
+            const paintField   = num('actualPaintCost');
+            const nonPaintField= num('actualNonPaintCost');
+            const crewMatField = num('actualCrewMaterial');
+            const crewEstField = num('actualCrewMaterialEst');
+            const estMaterial  = window._actualsEstMaterial || 0;
+            const revenue      = window._actualsRevenue || 0;
+
+            let crewMaterialEmbedded = 0;   // material sitting inside the gross payout (crew modes)
+            let materialEstimated = false;  // true when we proxied an unknown cost from the estimate
+            let nspPaint = 0, nspNonPaint = 0;
+            let paintActual = 0;            // material figure used for variance vs estMaterial
+            if (mode === 'nsp') {
+                nspPaint = paintField; nspNonPaint = nonPaintField;
+                paintActual = paintField;
+            } else if (mode === 'crew_known') {
+                crewMaterialEmbedded = crewMatField;
+                paintActual = crewMatField;
+            } else { // crew_unknown
+                crewMaterialEmbedded = crewEstField > 0 ? crewEstField : estMaterial;
+                materialEstimated = true;
+                paintActual = 0;            // unknown → don't fabricate a paint variance
+            }
+            const crewNetTake = Math.max(0, crewPayout - crewMaterialEmbedded);
+            // True NSP cash-out: NSP mode adds its own material spend on top of labor;
+            // crew modes pay one gross lump (material is embedded, never double-counted).
+            const totalCosts = mode === 'nsp' ? (crewPayout + nspPaint + nspNonPaint) : crewPayout;
+
+            const hrsPerDay = parseFloat(document.getElementById('actualHoursPerDay')?.value) || 8;
+            const summary = window._summarizeDailyLog ? window._summarizeDailyLog() : null;
+            let days, crewCount, totalManDays;
+            if (summary) { days = summary.workedDays; crewCount = summary.maxCrew; totalManDays = summary.totalManDays; }
+            else { days = num('actualDays'); crewCount = parseInt(document.getElementById('actualCrewCount')?.value) || 0; totalManDays = days * crewCount; }
+            const totalHours = totalManDays * hrsPerDay;
+
+            const netProfit = revenue - totalCosts;
+            const profitPct = revenue > 0 ? (netProfit / revenue) * 100 : 0;
+            const hourlyRate = totalHours > 0 ? crewNetTake / totalHours : 0;
+            const profitPerDay = days > 0 ? netProfit / days : 0;
+            const materialCost = mode === 'nsp' ? (nspPaint + nspNonPaint) : crewMaterialEmbedded;
+
+            return {
+                mode, crewPayout, crewMaterialEmbedded, materialEstimated, nspPaint, nspNonPaint,
+                paintActual, materialCost, crewNetTake, totalCosts, hrsPerDay, days, crewCount,
+                totalManDays, totalHours, revenue, estMaterial, netProfit, profitPct, hourlyRate, profitPerDay,
+            };
+        };
+
+        window.calculateProfit = function() {
+            // All derived numbers come from the single shared math helper so the live
+            // UI and the saved record can never disagree. See _computeActualsMath.
+            const m = window._computeActualsMath();
+            const mode = m.mode;
+            const crewPayout = m.crewPayout;            // gross (crew modes) or pure labor (NSP mode)
+            const crewNetTake = m.crewNetTake;          // labor portion → drives hourly
+            const paintCost = m.paintActual;            // material figure used for variance
+            const nonPaintCost = m.nspNonPaint;
+            const materialCost = m.materialCost;
+            const materialDeducted = m.crewMaterialEmbedded;   // backed out of gross in crew modes
+            const materialEstimated = m.materialEstimated;
+            const paymentMode = mode === 'nsp' ? 'labor_only' : 'labor_plus_materials';  // legacy label
+            const hrsPerDay = m.hrsPerDay, days = m.days, totalManDays = m.totalManDays;
+
+            // Keep hidden legacy fields in sync for any downstream code still reading them.
             const legacyMatEl = document.getElementById('actualMaterialCost');
             if (legacyMatEl) legacyMatEl.value = materialCost || '';
+            const legacyDaysEl = document.getElementById('actualDays');
+            const legacyCrewEl = document.getElementById('actualCrewCount');
+            if (legacyDaysEl) legacyDaysEl.value = days || '';
+            if (legacyCrewEl) legacyCrewEl.value = m.crewCount || '';
 
-            // Determine payment mode from accepted crew proposal (default labor_only).
-            // Computed early because deduction logic needs it.
-            const projectForMode = window._actualsProjectId
-                ? (projects || []).find(p => p.id === window._actualsProjectId) : null;
-            const acceptedCp = projectForMode?.crewProposals?.find(cp => cp.accepted);
-            const paymentMode = acceptedCp?.paymentMode || 'labor_only';
-
-            // Apply deductions per the operator's actual workflow.
-            const paintDeducted = paymentMode === 'labor_plus_materials' ? paintCost : 0;
-            const nonPaintDeducted = nonPaintAbsorbed ? 0 : nonPaintCost;
-            const crewNetTake = Math.max(0, crewPayoutLump - paintDeducted - nonPaintDeducted);
-
-            // Live "Net to crew" panel — operator sees the math as they type.
+            // Live "Net to crew" panel — operator sees labor get backed out as they type.
             const netDisplay = document.getElementById('crewNetTakeDisplay');
             if (netDisplay) {
-                if (crewPayoutLump > 0 && (paintDeducted > 0 || nonPaintDeducted > 0)) {
-                    let lines = [`<div style="display:flex;justify-content:space-between;"><span>Crew Payout (Lump):</span><strong>$${crewPayoutLump.toFixed(2)}</strong></div>`];
-                    if (nonPaintDeducted > 0) {
-                        lines.push(`<div style="display:flex;justify-content:space-between;color:#92400e;"><span>− Non-paint deduction:</span><span>−$${nonPaintDeducted.toFixed(2)}</span></div>`);
-                    }
-                    if (paintDeducted > 0) {
-                        lines.push(`<div style="display:flex;justify-content:space-between;color:#92400e;"><span>− Paint (Labor + Materials mode):</span><span>−$${paintDeducted.toFixed(2)}</span></div>`);
-                    }
-                    lines.push(`<div style="display:flex;justify-content:space-between;border-top:1px solid #bae6fd;margin-top:4px;padding-top:4px;font-weight:700;"><span>Net to crew:</span><strong style="color:#075985;">$${crewNetTake.toFixed(2)}</strong></div>`);
-                    netDisplay.innerHTML = lines.join('');
+                if (crewPayout > 0 && materialDeducted > 0) {
+                    const matLabel = materialEstimated ? '− Materials (est. from proposal)' : '− Materials (crew-covered)';
+                    netDisplay.innerHTML = [
+                        `<div style="display:flex;justify-content:space-between;"><span>Crew Payout (gross):</span><strong>$${crewPayout.toFixed(2)}</strong></div>`,
+                        `<div style="display:flex;justify-content:space-between;color:#92400e;"><span>${matLabel}:</span><span>−$${materialDeducted.toFixed(2)}</span></div>`,
+                        `<div style="display:flex;justify-content:space-between;border-top:1px solid #bae6fd;margin-top:4px;padding-top:4px;font-weight:700;"><span>Net labor to crew:</span><strong style="color:#075985;">$${crewNetTake.toFixed(2)}</strong></div>`,
+                    ].join('');
                     netDisplay.style.display = 'block';
-                } else if (crewPayoutLump > 0) {
-                    // No deductions — show a one-liner so the user knows nothing was taken out
-                    netDisplay.innerHTML = `<div style="color:#0369a1;">No material deductions — crew gets the full $${crewPayoutLump.toFixed(2)}.</div>`;
+                } else if (crewPayout > 0) {
+                    netDisplay.innerHTML = mode === 'nsp'
+                        ? `<div style="color:#0369a1;">Pure labor — crew keeps the full $${crewPayout.toFixed(2)}.</div>`
+                        : `<div style="color:#0369a1;">No materials entered yet — net labor = full $${crewPayout.toFixed(2)}.</div>`;
                     netDisplay.style.display = 'block';
                 } else {
                     netDisplay.style.display = 'none';
                 }
             }
 
-            // From here on, treat `crewPayout` as the gross lump (used for variance).
-            // Hourly rate uses the NET take-home (what the crew actually earns per hour).
-            const crewPayout = crewPayoutLump;
-
-            const hrsPerDay = parseFloat(document.getElementById('actualHoursPerDay').value) || 8;
-
-            // Derive days and man-days from the daily log. Fall back to legacy hidden fields
-            // if no log exists yet (e.g., re-editing a very old record that has crewCount/days).
-            const summary = window._summarizeDailyLog ? window._summarizeDailyLog() : null;
-            let days, crewCount, totalManDays;
-            if (summary) {
-                days = summary.workedDays;
-                crewCount = summary.maxCrew;
-                totalManDays = summary.totalManDays;
-            } else {
-                days = parseFloat(document.getElementById('actualDays')?.value) || 0;
-                crewCount = parseInt(document.getElementById('actualCrewCount')?.value) || 0;
-                totalManDays = days * crewCount;
-            }
-            // Sync hidden legacy fields so downstream code that still reads them stays consistent
-            const legacyDaysEl = document.getElementById('actualDays');
-            const legacyCrewEl = document.getElementById('actualCrewCount');
-            if (legacyDaysEl) legacyDaysEl.value = days || '';
-            if (legacyCrewEl) legacyCrewEl.value = crewCount || '';
-
             if (crewPayout <= 0 && materialCost <= 0) {
                 document.getElementById('profitResultsCard').style.display = 'none';
                 return;
             }
 
-            // NSP cash out (true expense the operator is bearing):
-            //   Lump always (the gross commitment to the crew).
-            //   + paint, only in Labor Only mode (in L+M, paint passes through via deduction).
-            //   + non-paint, only when NSP absorbed it (otherwise it's a wash via deduction).
-            const totalCosts = crewPayout
-                + (paymentMode === 'labor_only' ? paintCost : 0)
-                + (nonPaintAbsorbed ? nonPaintCost : 0);
-            const revenue = window._actualsRevenue || 0;
-            const estMaterial = window._actualsEstMaterial || 0;
-            const netProfit = revenue - totalCosts;
-            const profitPct = revenue > 0 ? (netProfit / revenue) * 100 : 0;
-            const totalHours = totalManDays * hrsPerDay;
-            // Hourly = NET take-home / hours. The crew earns the lump minus what they
-            // had to pay back (non-paint always; paint too in Labor+Materials mode).
-            const hourlyRate = totalHours > 0 ? crewNetTake / totalHours : 0;
-            const profitPerDay = days > 0 ? netProfit / days : 0;
+            const totalCosts = m.totalCosts;
+            const revenue = m.revenue;
+            const estMaterial = m.estMaterial;
+            const netProfit = m.netProfit;
+            const profitPct = m.profitPct;
+            const totalHours = m.totalHours;
+            const hourlyRate = m.hourlyRate;
+            const profitPerDay = m.profitPerDay;
 
             let profitColor = '#ef4444';
             if (profitPct >= 40) profitColor = '#10b981';
@@ -9314,7 +9448,10 @@ Only return JSON, no other text.`;
                 else if (variance < -15) secondary = `Crew earned ${Math.abs(variance).toFixed(0)}% under benchmark — NSP kept $${dollarImpact.toFixed(0)}.`;
                 else secondary = `Crew earned ${Math.abs(variance).toFixed(0)}% under the 45% benchmark.`;
             }
-            const interpretation = `${primary}${secondary ? ' ' + secondary : ''}`;
+            const estNote = materialEstimated && materialDeducted > 0
+                ? ` <span style="color:#92400e;">Hourly is approximate — materials estimated at $${Math.round(materialDeducted).toLocaleString()} (crew bought off our account).</span>`
+                : '';
+            const interpretation = `${primary}${secondary ? ' ' + secondary : ''}${estNote}`;
 
             // ── Prior 3 jobs trend ──
             // Uses the deduped dataset so linked groups count once. Excludes the
@@ -9354,28 +9491,31 @@ Only return JSON, no other text.`;
                 else if (matVar < 30) { phrase = `$${Math.round(-saved).toLocaleString()} over estimate`; paintTone = '#f59e0b'; }
                 else { phrase = `$${Math.round(-saved).toLocaleString()} over — review gallon prices/spread rates`; paintTone = '#ef4444'; }
                 const pctOfRevenue = revenue > 0 ? (paintCost / revenue * 100).toFixed(0) : '?';
+                const matLabel = mode === 'nsp' ? 'Paint' : 'Materials';
                 paintHTML = `<div style="margin-top:10px;padding:10px 12px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;color:#6b7280;line-height:1.5;">
-                    <strong style="color:#374151;font-size:13px;">Paint</strong> — estimated $${Math.round(estMaterial).toLocaleString()} · actual $${Math.round(paintCost).toLocaleString()} · <span style="color:${paintTone};font-weight:700;">${phrase}</span><br>
-                    <span style="font-size:11px;color:#9ca3af;">Paint = ${pctOfRevenue}% of revenue (rule of thumb: ~10%)</span>
+                    <strong style="color:#374151;font-size:13px;">${matLabel}</strong> — estimated $${Math.round(estMaterial).toLocaleString()} · actual $${Math.round(paintCost).toLocaleString()} · <span style="color:${paintTone};font-weight:700;">${phrase}</span><br>
+                    <span style="font-size:11px;color:#9ca3af;">${matLabel} = ${pctOfRevenue}% of revenue (rule of thumb: ~10%)</span>
                 </div>`;
             }
 
             // ── Breakdown body (hidden by default) ──
-            const deductionLines = [];
-            if (nonPaintDeducted > 0) deductionLines.push(`<div style="display:flex;justify-content:space-between;color:#92400e;font-size:12px;"><span>− Non-paint deduction</span><span>−$${nonPaintDeducted.toFixed(0)}</span></div>`);
-            if (paintDeducted > 0) deductionLines.push(`<div style="display:flex;justify-content:space-between;color:#92400e;font-size:12px;"><span>− Paint (Labor + Materials)</span><span>−$${paintDeducted.toFixed(0)}</span></div>`);
+            const modeLabel = mode === 'nsp' ? 'NSP buys materials'
+                            : mode === 'crew_known' ? 'Crew covers materials'
+                            : 'Crew covers materials (est.)';
+            const payoutLabel = mode === 'nsp' ? 'Crew payout (labor)' : 'Crew payout (gross)';
+            const matDeductLabel = materialEstimated ? '− Materials (est. from proposal)' : '− Materials (crew-covered)';
             const flowLines = `<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:#6b7280;">Revenue</span><strong>$${Math.round(revenue).toLocaleString()}</strong></div>
-                <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:#6b7280;">Crew payout (gross)</span><strong>$${Math.round(crewPayout).toLocaleString()}</strong></div>
-                ${deductionLines.join('')}
-                ${(paintDeducted > 0 || nonPaintDeducted > 0) ? `<div style="display:flex;justify-content:space-between;font-size:13px;border-top:1px dashed #e5e7eb;padding-top:4px;margin-top:2px;"><span style="color:#6b7280;">Crew net take</span><strong>$${Math.round(crewNetTake).toLocaleString()}</strong></div>` : ''}
-                <div style="display:flex;justify-content:space-between;font-size:13px;margin-top:4px;"><span style="color:#6b7280;">Paint cost (NSP${paymentMode === 'labor_plus_materials' ? ' pass-through' : ''})</span><strong>$${Math.round(paintCost).toLocaleString()}</strong></div>
-                ${nonPaintCost > 0 ? `<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:#6b7280;">Non-paint ${nonPaintAbsorbed ? '(NSP absorbed)' : '(deducted)'}</span><strong>$${Math.round(nonPaintCost).toLocaleString()}</strong></div>` : ''}
+                <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:#6b7280;">${payoutLabel}</span><strong>$${Math.round(crewPayout).toLocaleString()}</strong></div>
+                ${materialDeducted > 0 ? `<div style="display:flex;justify-content:space-between;color:#92400e;font-size:12px;"><span>${matDeductLabel}</span><span>−$${Math.round(materialDeducted).toLocaleString()}</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:13px;border-top:1px dashed #e5e7eb;padding-top:4px;margin-top:2px;"><span style="color:#6b7280;">Crew net labor</span><strong>$${Math.round(crewNetTake).toLocaleString()}</strong></div>` : ''}
+                ${mode === 'nsp' && m.nspPaint > 0 ? `<div style="display:flex;justify-content:space-between;font-size:13px;margin-top:4px;"><span style="color:#6b7280;">Paint cost (NSP)</span><strong>$${Math.round(m.nspPaint).toLocaleString()}</strong></div>` : ''}
+                ${mode === 'nsp' && nonPaintCost > 0 ? `<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:#6b7280;">Non-paint (NSP)</span><strong>$${Math.round(nonPaintCost).toLocaleString()}</strong></div>` : ''}
                 <div style="display:flex;justify-content:space-between;font-size:14px;border-top:2px solid #111827;padding-top:6px;margin-top:6px;font-weight:700;"><span>Net Profit</span><span style="color:${profitColor};">$${Math.round(netProfit).toLocaleString()}</span></div>
                 <div style="display:flex;justify-content:space-between;font-size:12px;color:#6b7280;"><span>Profit / day</span><strong>$${Math.round(profitPerDay).toLocaleString()}</strong></div>`;
             const targetMath = `<div style="margin-top:10px;padding:10px 12px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;color:#6b7280;line-height:1.6;">
-                <strong style="color:#374151;font-size:13px;">Crew vs Target</strong> · ${paymentMode === 'labor_plus_materials' ? 'Labor + Materials' : 'Labor Only'} mode<br>
+                <strong style="color:#374151;font-size:13px;">Crew vs Target</strong> · ${modeLabel}<br>
                 Target = <strong>${(laborShare*100).toFixed(0)}%</strong> × $${Math.round(revenue).toLocaleString()} revenue = <strong style="color:#1e3a8a;">$${Math.round(targetCrewPayout).toLocaleString()}</strong><br>
-                Crew net take <strong>$${Math.round(crewNetTake).toLocaleString()}</strong> → <strong style="color:${varColor};">${varSign}${variance.toFixed(0)}%</strong> ${variance >= 0 ? 'above' : 'below'} benchmark
+                Crew net labor <strong>$${Math.round(crewNetTake).toLocaleString()}</strong> → <strong style="color:${varColor};">${varSign}${variance.toFixed(0)}%</strong> ${variance >= 0 ? 'above' : 'below'} benchmark
             </div>`;
             const breakdownHTML = `<div style="padding:10px 12px;background:#f9fafb;border-radius:8px;display:grid;gap:4px;">${flowLines}</div>${targetMath}${paintHTML}${trendHTML}`;
 
@@ -9432,41 +9572,28 @@ Only return JSON, no other text.`;
 
         window.saveProfitActuals = async function(opts) {
             const markComplete = opts && opts.markComplete === true;
-            const hrsPerDay = parseFloat(document.getElementById('actualHoursPerDay').value) || 8;
-            // crewPayout is now the GROSS lump. crewNetTake (computed) is what crew
-            // actually receives after deductions.
-            const crewPayout = parseFloat(document.getElementById('actualCrewPayout').value) || 0;
-            const paintCost = parseFloat(document.getElementById('actualPaintCost')?.value) || 0;
-            const nonPaintCost = parseFloat(document.getElementById('actualNonPaintCost')?.value) || 0;
-            const materialCost = paintCost + nonPaintCost;
 
-            // Determine deductions per payment mode (matches calculateProfit logic)
-            const projectForMode = window._actualsProjectId
-                ? (projects || []).find(p => p.id === window._actualsProjectId) : null;
-            const acceptedCp = projectForMode?.crewProposals?.find(cp => cp.accepted);
-            const paymentMode = acceptedCp?.paymentMode || 'labor_only';
-            const nonPaintAbsorbed = document.getElementById('actualNonPaintAbsorbed')?.checked === true;
-            const paintDeducted = paymentMode === 'labor_plus_materials' ? paintCost : 0;
-            const nonPaintDeducted = nonPaintAbsorbed ? 0 : nonPaintCost;
-            const crewNetTake = Math.max(0, crewPayout - paintDeducted - nonPaintDeducted);
-
-            const revenue = window._actualsRevenue || 0;
-
-            // Derive days / crewCount / totalManDays from the daily log (source of truth).
-            const summary = window._summarizeDailyLog ? window._summarizeDailyLog() : null;
-            const days = summary ? summary.workedDays : (parseFloat(document.getElementById('actualDays')?.value) || 0);
-            const crewCount = summary ? summary.maxCrew : (parseInt(document.getElementById('actualCrewCount')?.value) || 0);
-            const totalManDays = summary ? summary.totalManDays : days * crewCount;
-            const totalHours = totalManDays * hrsPerDay;
+            // Single source of truth — same math the live UI shows.
+            const m = window._computeActualsMath();
+            const mode = m.mode;                         // 'nsp' | 'crew_known' | 'crew_unknown'
+            const hrsPerDay = m.hrsPerDay;
+            const crewPayout = m.crewPayout;             // gross (crew modes) or pure labor (NSP mode)
+            const crewNetTake = m.crewNetTake;           // labor portion → drives hourly
+            const crewMaterialCost = m.crewMaterialEmbedded;   // material embedded in the gross (0 in NSP mode)
+            const crewMaterialEstimated = m.materialEstimated; // true when proxied from the proposal estimate
+            // paintCost keeps driving material variance: real paint in NSP mode, the
+            // crew material in crew_known, 0 (unknown) in crew_unknown.
+            const paintCost = m.paintActual;
+            const nonPaintCost = m.nspNonPaint;
+            const materialCost = m.materialCost;
+            const materialResponsibility = mode === 'nsp' ? 'nsp' : 'crew';
+            const materialCostKnown = mode !== 'crew_unknown';
+            const nonPaintAbsorbed = mode === 'nsp';     // NSP mode = NSP owns supplies
+            const paymentMode = mode === 'nsp' ? 'labor_only' : 'labor_plus_materials';  // legacy label
+            const revenue = m.revenue;
+            const days = m.days, crewCount = m.crewCount, totalManDays = m.totalManDays, totalHours = m.totalHours;
             const dailyLog = (window._actualsDailyLog || []).slice();
-
-            // True NSP cash-out (used for net profit / margin):
-            //   Lump always (NSP's commitment to crew).
-            //   + paint, only in Labor Only (in L+M paint passes through via deduction).
-            //   + non-paint, only when NSP absorbed (otherwise it's recovered via deduction).
-            const totalCosts = crewPayout
-                + (paymentMode === 'labor_only' ? paintCost : 0)
-                + (nonPaintAbsorbed ? nonPaintCost : 0);
+            const totalCosts = m.totalCosts;
 
             const actuals = {
                 crewLeader: document.getElementById('actualCrewLeader').value.trim(),
@@ -9477,14 +9604,18 @@ Only return JSON, no other text.`;
                 startDate: document.getElementById('actualStartDate').value,
                 endDate: document.getElementById('actualEndDate').value,
                 days,
-                crewPayout,             // Gross lump (what NSP committed to pay)
-                crewNetTake,            // Lump minus deductions (what crew actually receives)
-                paymentMode,            // Snapshot of mode used for this record's math
-                paintCost,              // NSP's paint expense (drives material variance)
-                nonPaintCost,           // Total non-paint spend (sandpaper, wood, drop cloths, etc.)
-                nonPaintAbsorbed,       // true → NSP ate this cost; false → deducted from crew payout
-                materialCost,           // = paintCost + nonPaintCost (legacy compatibility)
-                gallonsUsed: parseFloat(document.getElementById('actualGallons').value) || 0,
+                crewPayout,             // Gross lump (crew modes) or pure labor (NSP mode)
+                crewNetTake,            // Labor portion after material is backed out
+                materialResponsibility, // 'nsp' = NSP bought; 'crew' = crew bought (the headline toggle)
+                materialCostKnown,      // false → crew bought off our account, exact cost unknown
+                crewMaterialCost,       // Material embedded in the gross (known or estimated); 0 in NSP mode
+                crewMaterialEstimated,  // true → crewMaterialCost is a proposal-based estimate, not actual
+                paymentMode,            // Legacy mode label kept for older analytics/displays
+                paintCost,              // Material figure that drives variance (see note above)
+                nonPaintCost,           // NSP non-paint spend (NSP mode only; 0 in crew modes)
+                nonPaintAbsorbed,       // Legacy flag — true whenever NSP owns the supplies
+                materialCost,           // Total material for this record (legacy compatibility)
+                gallonsUsed: mode === 'crew_unknown' ? 0 : (parseFloat(document.getElementById('actualGallons').value) || 0),
                 difficulty: parseInt(document.getElementById('actualDifficulty').value) || 5,
                 notesGood: document.getElementById('actualNotesGood')?.value?.trim() || '',
                 notesBad: document.getElementById('actualNotesBad')?.value?.trim() || '',
