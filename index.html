@@ -154,7 +154,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v112</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v113</span>
             </div>
 
             <!-- Global Search -->
@@ -1052,7 +1052,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v112</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v113</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -5955,6 +5955,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 projectSummaryNotes: job.projectSummaryNotes || '',
                 totalLabor: job.totalLabor,
                 totalMaterials: job.totalMaterials,
+                servicesTotal: job.servicesTotal != null ? job.servicesTotal : _servicesTotalOf(job.rooms),
                 grandTotal: job.grandTotal,
                 companySignature: job.companySignature || null,
                 customerSignature: job.customerSignature || null
@@ -6049,6 +6050,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 projectSummaryNotes: job.projectSummaryNotes || '',
                 totalLabor: job.totalLabor,
                 totalMaterials: job.totalMaterials,
+                servicesTotal: job.servicesTotal != null ? job.servicesTotal : _servicesTotalOf(job.rooms),
                 grandTotal: job.grandTotal,
                 companySignature: job.companySignature || null,
                 customerSignature: job.customerSignature || null
@@ -6427,6 +6429,19 @@ Based on the journal entries, calculate and return this JSON (no other text):
             }
 
             return { laborCost: labor, materialCost: material, primerLaborCost: primerLabor, primerMaterialCost: primerMaterial, total: labor + material };
+        }
+
+        // Flat-priced services (Cabinets, Shadow Boxes, …) summed across rooms.
+        // "Calculated price" = totalLabor + totalMaterials + this — anywhere one
+        // of the three is dropped, the numbers drift apart across screens.
+        function _servicesTotalOf(rooms) {
+            let total = 0;
+            (rooms || []).forEach(room => {
+                (room.additionalServices || []).forEach(svc => {
+                    total += (svc.total != null ? svc.total : (svc.price || 0) * (svc.qty || 1));
+                });
+            });
+            return total;
         }
 
         function calculateRoomTotal(room) {
@@ -7126,6 +7141,8 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 case 'Walls': return 2 * (L * H) + 2 * (W * H);
                 case 'Siding': return 2 * (L * H) + 2 * (W * H);
                 case 'Baseboards': return 2 * (L + W);
+                case 'Crown Molding': return 2 * (L + W);
+                case 'Chair Rail': return 2 * (L + W);
                 case 'Soffit': return 2 * (L + W);
                 case 'Fascia': return 2 * (L + W);
             }
@@ -8366,16 +8383,18 @@ Only return JSON, no other text.`;
             const advisorEl = document.getElementById('pricingAdvisorContent');
             if (advisorEl) {
                 const completed = jobs.filter(j => j.actuals && j.actuals.completedAt && j.jobType === currentEstimate.jobType);
-                const calculatedPrice = totalLabor + totalMaterials;
+                const calculatedPrice = totalLabor + totalMaterials + servicesTotal;
                 const basePrice = currentEstimate.basePrice || calculatedPrice;
                 const isOverridden = currentEstimate.priceOverride && Math.abs(basePrice - calculatedPrice) > 0.01;
 
                 if (completed.length < 3) {
                     advisorEl.innerHTML = `<p style="color:#999;">Complete ${3 - completed.length} more ${currentEstimate.jobType?.toLowerCase() || ''} job(s) to unlock pricing insights.</p>`;
                 } else {
-                    // Past calculated price = totalLabor + totalMaterials (system-computed,
-                    // free of override gaming).
-                    const calcOf = j => (j.totalLabor || 0) + (j.totalMaterials || 0);
+                    // Past calculated price = totalLabor + totalMaterials + flat services
+                    // (system-computed, free of override gaming). Older jobs don't carry
+                    // servicesTotal, so fall back to summing their rooms' services.
+                    const calcOf = j => (j.totalLabor || 0) + (j.totalMaterials || 0)
+                        + (j.servicesTotal != null ? j.servicesTotal : _servicesTotalOf(j.rooms));
                     const avgCalculated = completed.reduce((s, j) => s + calcOf(j), 0) / completed.length;
                     const avgGrandTotal = completed.reduce((s, j) => s + (j.grandTotal || 0), 0) / completed.length;
                     const avgMargin = completed.reduce((s, j) => s + (j.actuals.profitMargin || 0), 0) / completed.length;
@@ -8513,8 +8532,10 @@ Only return JSON, no other text.`;
 
             // Update display
             document.getElementById('reviewBasePrice').textContent = `$${basePrice.toFixed(2)}`;
-            // Show calculated price if overridden
-            const calcPrice = (currentEstimate.totalLabor || 0) + (currentEstimate.totalMaterials || 0);
+            // Show calculated price if overridden — includes flat services
+            // (cabinets, shadow boxes) so it matches the Step 4 surfaces total.
+            const calcPrice = (currentEstimate.totalLabor || 0) + (currentEstimate.totalMaterials || 0)
+                + (currentEstimate.servicesTotal != null ? currentEstimate.servicesTotal : _servicesTotalOf(currentEstimate.rooms));
             const calcRow = document.getElementById('calculatedPriceRow');
             if (calcRow) {
                 if (currentEstimate.priceOverride && Math.abs(basePrice - calcPrice) > 0.01) {
@@ -8871,7 +8892,8 @@ Only return JSON, no other text.`;
         // Manual price edit — tap base price to override
         window.editBasePrice = function() {
             const current = currentEstimate.basePrice || 0;
-            const calcPrice = (currentEstimate.totalLabor || 0) + (currentEstimate.totalMaterials || 0);
+            const calcPrice = (currentEstimate.totalLabor || 0) + (currentEstimate.totalMaterials || 0)
+                + (currentEstimate.servicesTotal != null ? currentEstimate.servicesTotal : _servicesTotalOf(currentEstimate.rooms));
             const newPrice = prompt('Enter new base price (calculated: $' + calcPrice.toFixed(2) + '):', current.toFixed(2));
             if (newPrice === null) return;
             const parsed = parseFloat(newPrice);
@@ -14862,6 +14884,7 @@ Generate JSON with these EXACT keys:
                 projectSummaryNotes: projectNotes,
                 totalLabor: currentEstimate.totalLabor,
                 totalMaterials: currentEstimate.totalMaterials,
+                servicesTotal: currentEstimate.servicesTotal != null ? currentEstimate.servicesTotal : _servicesTotalOf(currentEstimate.rooms),
                 grandTotal: currentEstimate.grandTotal,
                 companySignature: currentEstimate.companySignature || null,
                 customerSignature: currentEstimate.customerSignature || null,
