@@ -154,7 +154,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v115</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v116</span>
             </div>
 
             <!-- Global Search -->
@@ -899,6 +899,15 @@
                 </div>
             </div>
 
+            <!-- Proposal Date -->
+            <div class="room-card">
+                <h3>📅 Proposal Date</h3>
+                <div class="form-group">
+                    <label>Shown on the proposal (date only, no time). Change it to backdate or postdate.</label>
+                    <input type="date" id="proposalDateInput" onchange="setProposalDate(this.value)" style="width:100%;padding:12px;border:2px solid #e0e0e0;border-radius:8px;font-size:16px;">
+                </div>
+            </div>
+
             <!-- Project Summary Notes -->
             <div class="room-card">
                 <h3>Project Description (Optional)</h3>
@@ -1055,7 +1064,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v115</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v116</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -3091,7 +3100,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                                 </div>
                                 <strong style="color:#11998e;font-size:16px;">$${(prop.grandTotal || 0).toFixed(2)}</strong>
                             </div>
-                            <p style="color:#666;font-size:12px;margin:4px 0;">${new Date(prop.date).toLocaleDateString()} ${new Date(prop.date).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true})}</p>
+                            <p style="color:#666;font-size:12px;margin:4px 0;">${new Date(prop.date).toLocaleDateString()}</p>
                             <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
                                 <button class="btn btn-primary btn-small" onclick="regenerateProposal('${prop.id}')">👁️ View</button>
                                 <button class="btn btn-warning btn-small" onclick="viewJob('${prop.id}')">✏️ Edit</button>
@@ -3616,6 +3625,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 }))),
                 changeOrdersTotal: pairs.reduce((s, x) => s + (x.prop.changeOrdersTotal || 0), 0),
                 projectSummaryNotes: pairs.map(x => x.prop.projectSummaryNotes).filter(Boolean).join('\n\n'),
+                date: pairs[0].prop.date || null,
                 totalLabor: pairs.reduce((s, x) => s + (x.prop.totalLabor || 0), 0),
                 totalMaterials: pairs.reduce((s, x) => s + (x.prop.totalMaterials || 0), 0),
                 grandTotal: pairs.reduce((s, x) => s + (x.prop.grandTotal || 0), 0),
@@ -5411,7 +5421,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
                             <h3 style="margin:0;font-size:15px;">${job.jobName}</h3>
                             ${getStatusBadge(job.status)}
                         </div>
-                        <p style="margin:6px 0;font-size:13px;color:#666;">${job.jobType} • ${new Date(job.date).toLocaleDateString()} ${new Date(job.date).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true})}</p>
+                        <p style="margin:6px 0;font-size:13px;color:#666;">${job.jobType} • ${new Date(job.date).toLocaleDateString()}</p>
                         <p style="font-size:20px;color:#667eea;font-weight:600;margin:6px 0;">$${(job.grandTotal || 0).toFixed(2)}</p>
                         <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;" onclick="event.stopPropagation()">
                             <button class="btn btn-primary btn-small" onclick="regenerateProposal('${job.id}')">👁️ View</button>
@@ -6138,6 +6148,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 changeOrders: job.changeOrders || [],
                 changeOrdersTotal: job.changeOrdersTotal || 0,
                 projectSummaryNotes: job.projectSummaryNotes || '',
+                date: job.date || null,
                 totalLabor: job.totalLabor,
                 totalMaterials: job.totalMaterials,
                 servicesTotal: job.servicesTotal != null ? job.servicesTotal : _servicesTotalOf(job.rooms),
@@ -6233,6 +6244,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 changeOrders: job.changeOrders || [],
                 changeOrdersTotal: job.changeOrdersTotal || 0,
                 projectSummaryNotes: job.projectSummaryNotes || '',
+                date: job.date || null,
                 totalLabor: job.totalLabor,
                 totalMaterials: job.totalMaterials,
                 servicesTotal: job.servicesTotal != null ? job.servicesTotal : _servicesTotalOf(job.rooms),
@@ -8397,6 +8409,10 @@ Only return JSON, no other text.`;
             // Populate proposal name
             const nameInput = document.getElementById('proposalNameInput');
             if (nameInput) nameInput.value = currentEstimate.jobName || '';
+
+            // Populate proposal date (saved date on edits, today on new estimates)
+            const dateInput = document.getElementById('proposalDateInput');
+            if (dateInput) dateInput.value = _isoToDateInput(currentEstimate.date);
 
             // Display credits + change orders lists
             displayCredits();
@@ -15029,6 +15045,23 @@ Generate JSON with these EXACT keys:
             showScreen('dashboardScreen');
         };
 
+        // ── Proposal date (editable) ─────────────────────────────────────────
+        // ISO timestamp → YYYY-MM-DD in LOCAL time for a date input (slicing
+        // the ISO string would shift evening saves to the next UTC day).
+        function _isoToDateInput(iso) {
+            const d = iso ? new Date(iso) : new Date();
+            if (isNaN(d)) return '';
+            return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        }
+
+        window.setProposalDate = function(val) {
+            if (!val) return;
+            const p = val.split('-');
+            // Local noon — keeps the chosen calendar day stable in any timezone
+            currentEstimate.date = new Date(+p[0], +p[1] - 1, +p[2], 12, 0, 0).toISOString();
+            if (typeof markUnsaved === 'function') markUnsaved();
+        };
+
         // Save Estimate
         window.saveEstimate = async function(opts) {
             const silent = opts && opts.silent; // no alerts, no nav
@@ -15074,7 +15107,7 @@ Generate JSON with these EXACT keys:
                 companySignature: currentEstimate.companySignature || null,
                 customerSignature: currentEstimate.customerSignature || null,
                 status: currentEstimate.status || 'New Lead',
-                date: new Date().toISOString()
+                date: currentEstimate.date || new Date().toISOString()
             };
             
             try {
@@ -15090,9 +15123,12 @@ Generate JSON with these EXACT keys:
                 }
 
                 if (shouldUpdate && existingJob) {
-                    // Update-in-place: mutate the existing proposal. Preserve label/date/status/actuals
-                    // so post-completion data and sort order stay intact.
+                    // Update-in-place: mutate the existing proposal. Preserve label/status/actuals
+                    // so post-completion data stays intact. date comes from currentEstimate —
+                    // seeded from the job on edit-load, so it only moves if the operator
+                    // changed it in the Proposal Date field.
                     const updateFields = {
+                        date: currentEstimate.date || existingJob.date || job.date,
                         customerId: job.customerId,
                         customerName: job.customerName,
                         jobName: job.jobName,
@@ -15368,15 +15404,16 @@ Generate JSON with these EXACT keys:
             window._proposalReturnScreen = returnScreen || 'estimateStep6Screen';
 
             const customer = customers.find(c => c.id === currentEstimate.customerId);
-            const date = new Date().toLocaleDateString();
+            // Proposal date = the estimate's stored/chosen date (editable on the
+            // review screen), falling back to today for unsaved estimates.
+            const _propDate = currentEstimate.date && !isNaN(new Date(currentEstimate.date)) ? new Date(currentEstimate.date) : new Date();
+            const date = _propDate.toLocaleDateString();
             const groupedRooms = currentEstimate.rooms.filter(room => room.surfaces.length > 0 || (room.additionalServices && room.additionalServices.length > 0) || room.notes);
 
-            const proposalNumber = 'NSP-' + new Date().getFullYear() + '-' + String(Date.now()).slice(-6);
-            const validUntilDate = new Date(); validUntilDate.setDate(validUntilDate.getDate() + 15);
+            const proposalNumber = 'NSP-' + _propDate.getFullYear() + '-' + String(Date.now()).slice(-6);
+            const validUntilDate = new Date(_propDate.getTime()); validUntilDate.setDate(validUntilDate.getDate() + 15);
             const validUntil = validUntilDate.toLocaleDateString();
-            const now = new Date();
-            const bannerDate = now.toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'2-digit'});
-            const bannerTime = now.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
+            const bannerDate = _propDate.toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'});
             const basePrice = currentEstimate.basePrice || currentEstimate.grandTotal || 0;
             const discountAmount = currentEstimate.discountAmount || 0;
             const totalCredits = (currentEstimate.credits || []).reduce((sum, c) => sum + c.amount, 0);
@@ -15612,7 +15649,7 @@ Generate JSON with these EXACT keys:
 </style>
 <div style="background-color:#1e3a8a;height:38px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;${pca}">
 <span style="color:#fff;font-size:11pt;font-weight:600">Northern Star Painters &mdash; ${window._crewMode ? 'CREW WORK ORDER' : 'Proposal'}</span>
-<span style="color:#e0e0e0;font-size:8.5pt">${bannerDate} &bull; ${bannerTime}</span></div>
+<span style="color:#e0e0e0;font-size:8.5pt">${bannerDate}</span></div>
 <div class="page-content">
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-top:15px;gap:15px;page-break-inside:avoid">
 <div style="max-width:260px">${co.logoUrl ? '<img src="'+co.logoUrl+'" style="max-width:220px;max-height:80px;display:block">' : '<div style="color:#f4a624;font-size:16px;letter-spacing:2px;'+pca+'">★ ★ ★ ★ ★</div><div style="font-size:18px;font-weight:800;color:#1e3a8a">'+(co.companyName||'Northern Star Painters')+'</div>'}</div>
