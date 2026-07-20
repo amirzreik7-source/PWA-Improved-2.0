@@ -154,7 +154,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v113</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v114</span>
             </div>
 
             <!-- Global Search -->
@@ -1052,7 +1052,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v113</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v114</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -1128,7 +1128,7 @@
             <form id="customerForm" onsubmit="saveCustomer(event)">
                 <div class="form-group"><label>Customer Name *</label><input type="text" id="customerName" required></div>
                 <div class="form-group"><label>Email</label><input type="email" id="customerEmail"></div>
-                <div class="form-group"><label>Phone</label><input type="tel" id="customerPhone"></div>
+                <div class="form-group"><label>Phone</label><input type="tel" id="customerPhone" oninput="formatPhoneInput(this)" placeholder="757-600-8047" inputmode="tel"></div>
                 <div class="form-group"><label>Address</label><textarea id="customerAddress" rows="3"></textarea></div>
                 <div class="nav-buttons">
                     <button type="submit" class="btn btn-success">💾 Save Customer</button>
@@ -1235,7 +1235,7 @@
                     <input type="text" id="crewName" placeholder="Full Name" style="font-size:15px;">
                 </div>
                 <div class="form-group" style="margin-bottom:8px;">
-                    <input type="tel" id="crewPhone" placeholder="Phone Number" style="font-size:15px;">
+                    <input type="tel" id="crewPhone" placeholder="757-600-8047" oninput="formatPhoneInput(this)" inputmode="tel" style="font-size:15px;">
                 </div>
                 <div class="form-group" style="margin-bottom:8px;">
                     <select id="crewRole" style="font-size:15px;">
@@ -4445,8 +4445,10 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
             // Search customers
             customers.forEach(c => {
-                if ((c.name || '').toLowerCase().includes(q) || (c.address || '').toLowerCase().includes(q) || (c.phone || '').includes(q) || (c.email || '').toLowerCase().includes(q)) {
-                    matches.push({ type: 'customer', label: c.name, sub: c.address || c.phone || '', action: `viewCustomerDetail('${c.id}')` });
+                const qDigits = q.replace(/\D/g, '');
+                const phoneHit = qDigits.length >= 3 && (c.phone || '').replace(/\D/g, '').includes(qDigits);
+                if ((c.name || '').toLowerCase().includes(q) || (c.address || '').toLowerCase().includes(q) || phoneHit || (c.email || '').toLowerCase().includes(q)) {
+                    matches.push({ type: 'customer', label: c.name, sub: c.address || formatPhone(c.phone) || '', action: `viewCustomerDetail('${c.id}')` });
                 }
             });
 
@@ -4493,7 +4495,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 <div class="selection-card" style="display:flex;justify-content:space-between;align-items:center;">
                     <div>
                         <h3 style="margin:0;">${c.name}</h3>
-                        <p style="margin:2px 0;color:#666;">${c.role}${c.phone ? ' • ' + c.phone : ''}</p>
+                        <p style="margin:2px 0;color:#666;">${c.role}${c.phone ? ' • ' + formatPhone(c.phone) : ''}</p>
                     </div>
                     <button class="btn btn-danger btn-small" onclick="deleteCrewMember('${c.id}')" style="width:30px;height:30px;padding:0;font-size:16px;">×</button>
                 </div>
@@ -4502,7 +4504,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
 
         window.saveCrewMember = async function() {
             const name = document.getElementById('crewName').value.trim();
-            const phone = document.getElementById('crewPhone').value.trim();
+            const phone = formatPhone(document.getElementById('crewPhone').value);
             const role = document.getElementById('crewRole').value;
             if (!name) { alert('Please enter a name'); return; }
             try {
@@ -4995,6 +4997,113 @@ Based on the journal entries, calculate and return this JSON (no other text):
             } catch(e) { console.error('Error loading customers:', e); }
         }
 
+        // ── Phone formatting: always display/store as 757-600-8047 ──────────
+        // Accepts anything the operator typed — (703) 581-5203, 7035815203,
+        // 1-703-581-5203 — and normalizes to dashed 10-digit form. Anything
+        // that isn't a US 10/11-digit number passes through untouched.
+        window.formatPhone = function(raw) {
+            if (!raw) return '';
+            const digits = String(raw).replace(/\D/g, '');
+            const d = (digits.length === 11 && digits[0] === '1') ? digits.slice(1) : digits;
+            if (d.length === 10) return d.slice(0,3) + '-' + d.slice(3,6) + '-' + d.slice(6);
+            return String(raw).trim();
+        };
+
+        // Live as-you-type formatter for tel inputs: 757 → 757-6 → 757-600-8047
+        window.formatPhoneInput = function(el) {
+            let d = el.value.replace(/\D/g, '');
+            if (d[0] === '1') d = d.slice(1); // US area codes never start with 1 → leading 1 is the country code
+            d = d.slice(0, 10);
+            el.value = d.length > 6 ? d.slice(0,3) + '-' + d.slice(3,6) + '-' + d.slice(6)
+                     : d.length > 3 ? d.slice(0,3) + '-' + d.slice(3)
+                     : d;
+        };
+
+        // ── Customer contact card (view + inline edit) ──────────────────────
+        function _customerInfoCardHTML(customer) {
+            const custJobs = (jobs || []).filter(j => j.customerId === customer.id);
+            const custProjects = (projects || []).filter(p => p.customerId === customer.id);
+            const totalValue = custJobs.reduce((sum, j) => sum + (j.grandTotal || 0), 0);
+            const phone = formatPhone(customer.phone);
+            const hasContact = phone || customer.email || customer.address;
+            return `
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+                    <h2 style="margin:0 0 8px 0;">${_esc(customer.name)}</h2>
+                    <button class="btn btn-secondary btn-small" onclick="editCustomerInfo('${customer.id}')" style="flex-shrink:0;padding:6px 14px;font-size:13px;">✏️ Edit</button>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:7px;margin-top:2px;">
+                    ${phone ? `<a href="tel:${phone.replace(/\D/g,'')}" style="color:#2563eb;text-decoration:none;font-size:14px;">📱 ${_esc(phone)}</a>` : ''}
+                    ${customer.email ? `<a href="mailto:${_esc(customer.email)}" style="color:#2563eb;text-decoration:none;font-size:14px;word-break:break-all;">✉️ ${_esc(customer.email)}</a>` : ''}
+                    ${customer.address ? `<a href="https://maps.apple.com/?q=${encodeURIComponent(customer.address)}" target="_blank" rel="noopener" style="color:#2563eb;text-decoration:none;font-size:14px;line-height:1.45;">📍 ${_esc(customer.address).replace(/\n/g, '<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;')}</a>` : ''}
+                    ${!hasContact ? '<p style="color:#999;font-size:13px;margin:2px 0;">No contact info yet — tap Edit to add phone, email &amp; address.</p>' : ''}
+                </div>
+                <div style="display:flex;gap:20px;margin-top:12px;padding-top:12px;border-top:1px solid #e5e7eb;">
+                    <div><span style="font-size:22px;font-weight:700;color:#667eea;">${custProjects.length}</span><br><span style="font-size:11px;color:#666;">Projects</span></div>
+                    <div><span style="font-size:22px;font-weight:700;color:#10b981;">$${totalValue.toFixed(2)}</span><br><span style="font-size:11px;color:#666;">Total Value</span></div>
+                </div>`;
+        }
+
+        window.editCustomerInfo = function(customerId) {
+            const customer = customers.find(c => c.id === customerId);
+            const card = document.getElementById('customerInfoCard');
+            if (!customer || !card) return;
+            card.innerHTML = `
+                <h3 style="margin:0 0 12px 0;">✏️ Edit Customer Info</h3>
+                <div class="form-group"><label>Name *</label><input type="text" id="editCustName" value="${_esc(customer.name || '')}" autocapitalize="words"></div>
+                <div class="form-group"><label>Phone</label><input type="tel" id="editCustPhone" value="${_esc(formatPhone(customer.phone))}" oninput="formatPhoneInput(this)" placeholder="757-600-8047" inputmode="tel"></div>
+                <div class="form-group"><label>Email</label><input type="email" id="editCustEmail" value="${_esc(customer.email || '')}" autocapitalize="off" autocorrect="off" placeholder="name@email.com"></div>
+                <div class="form-group"><label>Address</label><textarea id="editCustAddress" rows="3" placeholder="11775 Stratford House Place&#10;Unit #301&#10;Reston, VA 20190">${_esc(customer.address || '')}</textarea></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;">
+                    <button class="btn btn-secondary" onclick="cancelCustomerEdit('${customerId}')">Cancel</button>
+                    <button class="btn btn-success" id="saveCustEditBtn" onclick="saveCustomerEdit('${customerId}')">💾 Save</button>
+                </div>`;
+        };
+
+        window.cancelCustomerEdit = function(customerId) {
+            viewCustomerDetail(customerId);
+        };
+
+        window.saveCustomerEdit = async function(customerId) {
+            const customer = customers.find(c => c.id === customerId);
+            if (!customer) return;
+            const name = document.getElementById('editCustName').value.trim();
+            if (!name) { alert('Customer name is required.'); return; }
+            const phone = formatPhone(document.getElementById('editCustPhone').value);
+            const email = document.getElementById('editCustEmail').value.trim();
+            const address = document.getElementById('editCustAddress').value.trim();
+            const btn = document.getElementById('saveCustEditBtn');
+            if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+            try {
+                const oldName = customer.name || '';
+                await updateDoc(doc(db, 'customers', customerId), { name, phone, email, address });
+                // A name fix must also reach the denormalized customerName
+                // copies on this customer's projects and jobs (dashboard,
+                // schedule, proposals all read those snapshots).
+                if (name !== oldName) {
+                    const writes = [];
+                    (projects || []).filter(p => p.customerId === customerId).forEach(p => {
+                        const u = { customerName: name };
+                        if (oldName && p.projectName && p.projectName.includes(oldName)) u.projectName = p.projectName.split(oldName).join(name);
+                        writes.push(updateDoc(doc(db, 'projects', p.id), u));
+                    });
+                    (jobs || []).filter(j => j.customerId === customerId).forEach(j => {
+                        const u = { customerName: name };
+                        if (oldName && j.jobName && j.jobName.includes(oldName)) u.jobName = j.jobName.split(oldName).join(name);
+                        writes.push(updateDoc(doc(db, 'jobs', j.id), u));
+                    });
+                    await Promise.all(writes);
+                    if (writes.length) { await loadJobs(); await loadProjects(); }
+                }
+                await loadCustomers();
+                if (window._reportToast) _reportToast('✅ Customer info updated', 'success');
+                viewCustomerDetail(customerId);
+            } catch(e) {
+                console.error('saveCustomerEdit failed:', e);
+                alert('Could not save changes: ' + (e?.message || e));
+                if (btn) { btn.disabled = false; btn.textContent = '💾 Save'; }
+            }
+        };
+
         function displayCustomerList() {
             const list = document.getElementById('customerList');
             if (customers.length === 0) {
@@ -5045,17 +5154,8 @@ Based on the journal entries, calculate and return this JSON (no other text):
 
             let html = `
                 <button class="btn btn-back" onclick="showScreen('customersScreen')">← Back to Customers</button>
-                <div class="room-card" style="margin-top:15px;">
-                    <h2 style="margin:0 0 8px 0;">${customer.name}</h2>
-                    ${customer.address ? '<p style="color:#666;margin:4px 0;">' + customer.address + '</p>' : ''}
-                    <div style="display:flex;gap:20px;margin-top:10px;flex-wrap:wrap;">
-                        ${customer.email ? '<p style="margin:2px 0;font-size:13px;">✉ ' + customer.email + '</p>' : ''}
-                        ${customer.phone ? '<p style="margin:2px 0;font-size:13px;">☎ ' + customer.phone + '</p>' : ''}
-                    </div>
-                    <div style="display:flex;gap:20px;margin-top:12px;padding-top:12px;border-top:1px solid #e5e7eb;">
-                        <div><span style="font-size:22px;font-weight:700;color:#667eea;">${customerProjects.length}</span><br><span style="font-size:11px;color:#666;">Projects</span></div>
-                        <div><span style="font-size:22px;font-weight:700;color:#10b981;">$${totalValue.toFixed(2)}</span><br><span style="font-size:11px;color:#666;">Total Value</span></div>
-                    </div>
+                <div class="room-card" style="margin-top:15px;" id="customerInfoCard">
+                    ${_customerInfoCardHTML(customer)}
                 </div>
 
                 <div class="room-card" style="margin-top:10px;">
@@ -5302,10 +5402,10 @@ Based on the journal entries, calculate and return this JSON (no other text):
             event.preventDefault();
             const customer = {
                 userId: currentUser.uid,
-                name: document.getElementById('customerName').value,
-                email: document.getElementById('customerEmail').value,
-                phone: document.getElementById('customerPhone').value,
-                address: document.getElementById('customerAddress').value
+                name: document.getElementById('customerName').value.trim(),
+                email: document.getElementById('customerEmail').value.trim(),
+                phone: formatPhone(document.getElementById('customerPhone').value),
+                address: document.getElementById('customerAddress').value.trim()
             };
             await addDoc(collection(db, 'customers'), customer);
             document.getElementById('customerForm').reset();
@@ -6126,7 +6226,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
             list.innerHTML = customers.map(c => `
                 <div class="selection-card" onclick="selectCustomer('${c.id}')">
                     <h3>${c.name}</h3>
-                    <p>${c.email || ''} ${c.phone || ''}</p>
+                    <p>${c.email || ''} ${formatPhone(c.phone) || ''}</p>
                 </div>
             `).join('');
         }
@@ -13139,7 +13239,7 @@ Generate JSON with these EXACT keys:
             const consultantTitle = cs.consultantTitle || 'Project Construction Specialist';
             const companyName = cs.companyName || 'Northern Star Painters';
             const crewLeader = project.assignedCrewLeader || project.actuals?.crewLeader || 'Emilio';
-            const phone = cs.companyPhone || cs.phone || cs.consultantPhone || '';
+            const phone = formatPhone(cs.companyPhone || cs.phone || cs.consultantPhone || '');
             const email = cs.companyEmail || cs.email || cs.consultantEmail || 'info@northernstarpainters.com';
 
             // Unique swatches across the whole palette (palette page + ref card)
@@ -15443,7 +15543,7 @@ ${customer.address ? '<div style="display:flex;justify-content:space-between;pad
 ${sectionTitle('PREPARED FOR')}
 <div style="display:flex;justify-content:space-between;padding:8px 0;align-items:start;page-break-inside:avoid">
 <div><p style="font-size:11pt;font-weight:700;margin:0">${window._crewMode ? ((customer.name||'').trim().split(/\s+/)[0] || customer.name) : customer.name}</p>${customer.address?'<p style="font-size:9pt;color:#555;margin:2px 0">'+customer.address+'</p>':''}</div>
-${window._crewMode ? '' : `<div style="text-align:right;font-size:9pt">${customer.email?'<p style="margin:1px 0"><span style="color:#2563eb">✉</span> '+customer.email+'</p>':''}${customer.phone?'<p style="margin:1px 0"><span style="color:#2563eb">☎</span> '+customer.phone+'</p>':''}</div>`}
+${window._crewMode ? '' : `<div style="text-align:right;font-size:9pt">${customer.email?'<p style="margin:1px 0"><span style="color:#2563eb">✉</span> '+customer.email+'</p>':''}${customer.phone?'<p style="margin:1px 0"><span style="color:#2563eb">☎</span> '+formatPhone(customer.phone)+'</p>':''}</div>`}
 </div>
 ${sectionTitle('PREPARED BY')}
 <div style="display:flex;align-items:center;gap:12px;padding:8px 0;page-break-inside:avoid">
@@ -15504,7 +15604,7 @@ ${currentEstimate.customerSignature ? '<p>Signature:</p><img src="'+currentEstim
 <div style="text-align:center;margin-top:25px;padding:10px 0;color:#6b7280;font-size:8pt">
 <p><strong style="color:#1e3a8a">${co.companyName||'Northern Star Painters'}</strong></p>
 <p>${co.companyAddress||'1300 4th Street SE, Suite 412, Washington DC 20003'}</p>
-<p>${co.companyPhone||'+1 (202) 743-5072'} &bull; ${co.companyWebsite||'www.northernstarpainters.com'}</p>
+<p>${formatPhone(co.companyPhone)||'202-743-5072'} &bull; ${co.companyWebsite||'www.northernstarpainters.com'}</p>
 <p style="margin-top:5px;color:#2563eb;font-weight:600">Thank you for choosing us!</p></div>
 </div>
 <div style="background-color:#1e3a8a;height:16px;margin:20px 0 0 0;${pca}"></div>
