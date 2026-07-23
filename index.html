@@ -154,7 +154,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v117</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v118</span>
             </div>
 
             <!-- Global Search -->
@@ -1075,7 +1075,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v117</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v118</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -1633,6 +1633,18 @@
                     <p style="color:#666;font-size:12px;margin-bottom:8px;">Each block becomes a section on the rebuilt proposal. Edit freely.</p>
                     <div id="importScopeList"></div>
                     <button class="btn btn-info btn-small" onclick="importAddScopeBlock()" style="width:100%;margin-top:4px;">+ Add Scope Block</button>
+                </div>
+
+                <!-- AI edit across the whole proposal -->
+                <div class="room-card" style="border-left:4px solid #7c3aed;">
+                    <h3>🤖 AI Edit</h3>
+                    <p style="color:#666;font-size:12px;margin-bottom:8px;">Describe a change and AI rewrites the whole scope to match — products, prep steps, labor language, everything. e.g. "Change the decking from wood to Trex" or "Make the front door scope two coats of Advance instead".</p>
+                    <textarea id="impAiEditText" rows="2" placeholder="What should change?" style="width:100%;font-size:14px;"></textarea>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;">
+                        <button class="btn btn-primary btn-small" id="impAiEditBtn" onclick="importAiRevise(false)">✨ Apply Change</button>
+                        <button class="btn btn-info btn-small" id="impAiPolishBtn" onclick="importAiRevise(true)">🪄 Just Polish Wording</button>
+                    </div>
+                    <div id="impAiEditStatus" style="display:none;margin-top:8px;padding:8px 10px;border-radius:8px;font-size:12px;line-height:1.5;"></div>
                 </div>
 
                 <!-- Pricing -->
@@ -4769,6 +4781,68 @@ RULES:
             if (!skipAmounts) _importRenderDiscounts();
             const discountSum = window._importDiscounts.reduce((s, d) => s + (d.amount || 0), 0);
             if (subtotal > 0) document.getElementById('impTotal').value = +(subtotal - discountSum).toFixed(2);
+        };
+
+        // AI revision across the whole imported scope. polishOnly=true keeps the
+        // content identical and only cleans up the wording; otherwise the user's
+        // instruction is applied everywhere it's relevant (products, prep steps,
+        // labor process language, summary).
+        window.importAiRevise = async function(polishOnly) {
+            const instruction = polishOnly
+                ? 'Polish the wording only. Keep every product, step, and detail exactly as-is — just make the language clean, professional, and consistent. Fix typos and awkward phrasing.'
+                : document.getElementById('impAiEditText').value.trim();
+            if (!instruction) { alert('Describe what should change first.'); return; }
+            if (!window._importBlocks.length) { alert('No scope blocks to edit yet.'); return; }
+
+            const statusEl = document.getElementById('impAiEditStatus');
+            const showAi = (msg, err) => {
+                statusEl.style.display = 'block';
+                statusEl.style.background = err ? '#fef2f2' : '#f5f3ff';
+                statusEl.style.border = '1px solid ' + (err ? '#fecaca' : '#ddd6fe');
+                statusEl.style.color = err ? '#991b1b' : '#5b21b6';
+                statusEl.textContent = msg;
+            };
+            const btns = [document.getElementById('impAiEditBtn'), document.getElementById('impAiPolishBtn')];
+            btns.forEach(b => { if (b) b.disabled = true; });
+            showAi('⏳ Rewriting the scope…');
+            try {
+                const payload = {
+                    projectTitle: document.getElementById('impTitle').value.trim(),
+                    jobType: document.getElementById('impJobType').value,
+                    summary: (window._importParsed?.summary || ''),
+                    scopeBlocks: window._importBlocks.map(b => ({ name: b.name, text: b.text, price: b.price }))
+                };
+                const system = `You edit painting/restoration contractor proposals. You get the proposal as JSON and an edit instruction. Apply the instruction EVERYWHERE it is relevant — if a product or material changes, every affected block's prep steps, application method, and labor language must change to match (e.g. composite decking is never sanded or stained). Blocks the instruction doesn't touch stay word-for-word identical. Style: professional, process-forward, concrete steps — never fluffy or salesy. Keep each block's bullet lines as lines starting with "• ". Keep prices unchanged unless the instruction explicitly changes a price. Keep the same number of blocks unless the instruction requires adding/removing one. Return ONLY valid JSON, no markdown fences: {"projectTitle": string, "summary": string, "scopeBlocks": [{"name": string, "text": string, "price": number|null}]}`;
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 90000);
+                const response = await fetch('https://damp-moon-203c.amirzreik7.workers.dev', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    signal: controller.signal,
+                    body: JSON.stringify({
+                        max_tokens: 6000,
+                        system,
+                        messages: [{ role: 'user', content: 'PROPOSAL:\n' + JSON.stringify(payload) + '\n\nEDIT INSTRUCTION:\n' + instruction + '\n\nReturn only the revised JSON.' }]
+                    })
+                });
+                clearTimeout(timer);
+                const data = await response.json();
+                let text = data.content?.[0]?.text;
+                if (!text) throw new Error(data.error?.message || 'AI returned no content');
+                text = text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
+                const revised = JSON.parse(text);
+                if (!Array.isArray(revised.scopeBlocks) || revised.scopeBlocks.length === 0) throw new Error('AI response had no scope blocks');
+                window._importBlocks = revised.scopeBlocks.map(b => ({ name: b.name || 'Scope', text: b.text || '', price: b.price ?? null }));
+                _importRenderBlocks();
+                if (revised.projectTitle) document.getElementById('impTitle').value = revised.projectTitle;
+                if (window._importParsed) window._importParsed.summary = revised.summary || window._importParsed.summary;
+                showAi('✅ Done — review the blocks above. Edit anything by hand, or run another change.');
+                if (!polishOnly) document.getElementById('impAiEditText').value = '';
+            } catch (e) {
+                showAi('❌ ' + (e.name === 'AbortError' ? 'Timed out — try again.' : e.message), true);
+            } finally {
+                btns.forEach(b => { if (b) b.disabled = false; });
+            }
         };
 
         window.importSetStatus = function(status) {
