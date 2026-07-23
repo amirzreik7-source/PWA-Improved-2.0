@@ -154,7 +154,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v116</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v117</span>
             </div>
 
             <!-- Global Search -->
@@ -176,6 +176,7 @@
                 <button class="btn btn-primary" onclick="showScreen('customersScreen')">👥 Customers</button>
                 <button class="btn btn-success" onclick="startNewEstimate()">➕ New Project</button>
                 <button class="btn btn-warning" onclick="openQuickProject()">⚡ Quick Project</button>
+                <button class="btn btn-info" onclick="openImportProposal()">📄 Import Old Proposal</button>
                 <button class="btn btn-warning" onclick="showScreen('leadsScreen')">📋 Leads</button>
                 <button class="btn btn-info" onclick="showScreen('productsScreen')">🎨 Products</button>
                 <button class="btn btn-primary" onclick="showScreen('profilesScreen')">📦 Profiles</button>
@@ -482,15 +483,25 @@
             <div class="room-card" id="materialModeCard" style="border-left:4px solid #6366f1;">
                 <h3>Who paid for materials?</h3>
                 <p style="color:#666;font-size:12px;margin:2px 0 10px;">Sets how the crew payout splits into labor vs. materials. Your profit comes out exact either way.</p>
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
                     <button type="button" id="materialModeNsp" onclick="setMaterialMode('nsp')" style="padding:10px 4px;border:2px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;font-size:12px;font-weight:500;cursor:pointer;line-height:1.25;text-align:center;">🏢<br>NSP bought<br>materials</button>
                     <button type="button" id="materialModeCrewKnown" onclick="setMaterialMode('crew_known')" style="padding:10px 4px;border:2px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;font-size:12px;font-weight:500;cursor:pointer;line-height:1.25;text-align:center;">👷<br>Crew paid<br>(I know cost)</button>
                     <button type="button" id="materialModeCrewUnknown" onclick="setMaterialMode('crew_unknown')" style="padding:10px 4px;border:2px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;font-size:12px;font-weight:500;cursor:pointer;line-height:1.25;text-align:center;">👷<br>Crew paid<br>(off our account)</button>
+                    <button type="button" id="materialModeAssumed" onclick="setMaterialMode('assumed')" style="padding:10px 4px;border:2px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;font-size:12px;font-weight:500;cursor:pointer;line-height:1.25;text-align:center;">📊<br>I don't know —<br>assume profit %</button>
                 </div>
                 <div id="materialModeHint" style="margin-top:8px;font-size:12px;color:#4b5563;line-height:1.5;"></div>
+                <!-- ASSUMED-PROFIT MODE (old/imported jobs): only the sale price is known.
+                     Profit = revenue × %; job is excluded from crew hourly/payout analytics. -->
+                <div id="assumedProfitField" style="display:none;margin-top:10px;">
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label>NSP profit on this job (%)</label>
+                        <input type="number" id="actualAssumedProfitPct" min="0" max="100" step="1" value="50" oninput="calculateProfit()">
+                        <p style="font-size:11px;color:#666;margin:3px 0 0;">Your best guess. Profit &amp; margin get logged; crew payout, hourly, and paint stats stay out of your analytics so they can't skew the real data.</p>
+                    </div>
+                </div>
             </div>
 
-            <div class="room-card">
+            <div class="room-card" id="actualsCrewCard">
                 <h3>Crew & Time</h3>
                 <div class="form-group">
                     <label>Crew Leader</label>
@@ -528,7 +539,7 @@
                 </div>
             </div>
 
-            <div class="room-card">
+            <div class="room-card" id="actualsMaterialsCard">
                 <h3>Materials</h3>
 
                 <!-- NSP-COVERED: paint + non-paint are NSP's own expense, tracked separately. -->
@@ -1064,7 +1075,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v116</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v117</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -1570,6 +1581,110 @@
             </div>
 
             <button class="btn btn-success btn-large" onclick="saveQuickProject()" style="width:100%;">Create Project</button>
+        </div>
+
+        <!-- IMPORT OLD PROPOSAL (QuickBooks / legacy PDF) -->
+        <div id="importProposalScreen" class="screen">
+            <button class="btn btn-back" onclick="showScreen('homeScreen')">← Back</button>
+            <h2 class="screen-title">Import Old Proposal</h2>
+            <p class="screen-subtitle" style="margin-bottom:15px;">Upload a QuickBooks or legacy proposal PDF — AI reads it and rebuilds it in the app.</p>
+
+            <div class="room-card" id="importPickCard">
+                <input type="file" id="importPdfInput" accept="application/pdf,.pdf" onchange="importPdfSelected(event)" style="display:none;">
+                <button class="btn btn-primary btn-large" onclick="document.getElementById('importPdfInput').click()" style="width:100%;">📄 Choose PDF…</button>
+                <div id="importStatus" style="display:none;margin-top:12px;padding:10px 12px;border-radius:8px;font-size:13px;line-height:1.5;"></div>
+            </div>
+
+            <div id="importReviewSection" style="display:none;">
+                <!-- Customer -->
+                <div class="room-card">
+                    <h3>Customer</h3>
+                    <div id="importCustomerMatch" style="display:none;margin-bottom:10px;"></div>
+                    <div id="importCustomerFields">
+                        <div class="form-group" style="margin-bottom:8px;"><label>Name *</label><input type="text" id="impCustName"></div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                            <div class="form-group" style="margin-bottom:8px;"><label>Phone</label><input type="tel" id="impCustPhone" oninput="formatPhoneInput(this)"></div>
+                            <div class="form-group" style="margin-bottom:8px;"><label>Email</label><input type="email" id="impCustEmail" autocapitalize="none"></div>
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;"><label>Address</label><input type="text" id="impCustAddress"></div>
+                    </div>
+                </div>
+
+                <!-- Project -->
+                <div class="room-card">
+                    <h3>Project</h3>
+                    <div class="form-group" style="margin-bottom:8px;"><label>Project Title *</label><input type="text" id="impTitle"></div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                        <div class="form-group" style="margin-bottom:8px;">
+                            <label>Job Type</label>
+                            <select id="impJobType" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
+                                <option value="Exterior">Exterior</option>
+                                <option value="Interior">Interior</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom:8px;"><label>Proposal Date</label><input type="date" id="impDate"></div>
+                    </div>
+                    <div class="form-group" style="margin-bottom:0;"><label>Original Ref # <span style="color:#999;font-weight:400;">(optional)</span></label><input type="text" id="impRef" placeholder="e.g., Estimate 1126"></div>
+                </div>
+
+                <!-- Scope blocks -->
+                <div class="room-card">
+                    <h3>Scope of Work</h3>
+                    <p style="color:#666;font-size:12px;margin-bottom:8px;">Each block becomes a section on the rebuilt proposal. Edit freely.</p>
+                    <div id="importScopeList"></div>
+                    <button class="btn btn-info btn-small" onclick="importAddScopeBlock()" style="width:100%;margin-top:4px;">+ Add Scope Block</button>
+                </div>
+
+                <!-- Pricing -->
+                <div class="room-card">
+                    <h3>Pricing</h3>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                        <div class="form-group" style="margin-bottom:8px;"><label>Subtotal ($)</label><input type="number" id="impSubtotal" step="0.01" min="0" oninput="importRecalcTotal()"></div>
+                        <div class="form-group" style="margin-bottom:8px;"><label>Final Total ($) *</label><input type="number" id="impTotal" step="0.01" min="0"></div>
+                    </div>
+                    <div id="importDiscountList"></div>
+                    <button class="btn btn-info btn-small" onclick="importAddDiscount()" style="width:100%;margin-top:4px;">+ Add Discount</button>
+                </div>
+
+                <!-- Import options -->
+                <div class="room-card" style="border-left:4px solid #6366f1;">
+                    <h3>Import As</h3>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px;">
+                        <button type="button" id="impStatusComplete" onclick="importSetStatus('Complete')" style="padding:10px 4px;border:2px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;font-size:12px;font-weight:500;cursor:pointer;">✅<br>Completed</button>
+                        <button type="button" id="impStatusLanded" onclick="importSetStatus('Landed Job')" style="padding:10px 4px;border:2px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;font-size:12px;font-weight:500;cursor:pointer;">🤝<br>Landed</button>
+                        <button type="button" id="impStatusLead" onclick="importSetStatus('New Lead')" style="padding:10px 4px;border:2px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;font-size:12px;font-weight:500;cursor:pointer;">📋<br>Lead</button>
+                    </div>
+
+                    <div id="impProfitSection" style="margin-bottom:12px;">
+                        <label style="font-weight:600;font-size:13px;">Profit on this job</label>
+                        <div style="display:grid;gap:6px;margin-top:6px;">
+                            <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;cursor:pointer;">
+                                <input type="radio" name="impProfitMode" value="assumed" checked style="margin-top:2px;">
+                                <span>📊 Assume NSP made <input type="number" id="impProfitPct" value="50" min="0" max="100" step="1" style="width:60px;padding:2px 6px;border:1px solid #d1d5db;border-radius:6px;">% profit<br><span style="color:#666;font-size:11px;">Logs profit &amp; margin; stays out of crew hourly/payout analytics.</span></span>
+                            </label>
+                            <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;cursor:pointer;">
+                                <input type="radio" name="impProfitMode" value="actuals" style="margin-top:2px;">
+                                <span>✍️ I know the real numbers<br><span style="color:#666;font-size:11px;">Opens Log Actuals after import — crew payout, materials, days, the works.</span></span>
+                            </label>
+                            <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;cursor:pointer;">
+                                <input type="radio" name="impProfitMode" value="skip" style="margin-top:2px;">
+                                <span>⏭️ Skip for now<br><span style="color:#666;font-size:11px;">No profit logged; you can Log Actuals later.</span></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div id="impQbSection">
+                        <label style="font-weight:600;font-size:13px;">Generate a QuickBooks invoice for this job?</label>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;">
+                            <button type="button" id="impQbNo" onclick="importSetQb('no')" style="padding:10px 4px;border:2px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;font-size:12px;font-weight:500;cursor:pointer;">🚫 No — already paid</button>
+                            <button type="button" id="impQbYes" onclick="importSetQb('yes')" style="padding:10px 4px;border:2px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;font-size:12px;font-weight:500;cursor:pointer;">🧾 Yes — invoice it</button>
+                        </div>
+                        <p style="font-size:11px;color:#666;margin:6px 0 0;">"No" keeps the QB invoicer agent away from this job forever.</p>
+                    </div>
+                </div>
+
+                <button class="btn btn-success btn-large" onclick="saveImportedProposal()" style="width:100%;" id="importSaveBtn">📥 Import Project</button>
+            </div>
         </div>
 
         <!-- TRASH / RECOVER DELETED -->
@@ -4428,6 +4543,417 @@ WRITING RULES:
                 alert('Project created: ' + jobNumber);
                 viewCustomerDetail(customerId);
             } catch(e) { alert('Error: ' + e.message); }
+        };
+
+        // ═══════════════════════════════════════
+        // IMPORT OLD PROPOSAL (QuickBooks / legacy PDF)
+        // AI reads the PDF → review screen → creates customer + project +
+        // landed proposal in the app's own format. Lump-sum only (no
+        // measurements): scope blocks render via svc.legacyScope.html and
+        // basePrice/grandTotal are authoritative (priceOverride).
+        // ═══════════════════════════════════════
+        window._importParsed = null;      // raw AI JSON
+        window._importBlocks = [];        // [{name, text, price}]
+        window._importDiscounts = [];     // [{name, type, value, amount}]
+        window._importStatus = 'Complete';
+        window._importQb = 'no';
+
+        window.openImportProposal = function() {
+            window._importParsed = null;
+            window._importBlocks = [];
+            window._importDiscounts = [];
+            const inp = document.getElementById('importPdfInput');
+            if (inp) inp.value = '';
+            document.getElementById('importReviewSection').style.display = 'none';
+            const st = document.getElementById('importStatus');
+            st.style.display = 'none';
+            importSetStatus('Complete');
+            importSetQb('no');
+            showScreen('importProposalScreen');
+        };
+
+        function _importShowStatus(msg, tone) {
+            const st = document.getElementById('importStatus');
+            if (!st) return;
+            const tones = {
+                info:  { bg: '#eff6ff', border: '#bfdbfe', color: '#1e40af' },
+                error: { bg: '#fef2f2', border: '#fecaca', color: '#991b1b' },
+                ok:    { bg: '#f0fdf4', border: '#86efac', color: '#166534' },
+            };
+            const t = tones[tone] || tones.info;
+            st.style.display = 'block';
+            st.style.background = t.bg;
+            st.style.border = '1px solid ' + t.border;
+            st.style.color = t.color;
+            st.innerHTML = msg;
+        }
+
+        window.importPdfSelected = async function(event) {
+            const file = event.target.files && event.target.files[0];
+            if (!file) return;
+            if (file.size > 20 * 1024 * 1024) {
+                _importShowStatus('❌ PDF is over 20MB. Export a smaller copy (or print-to-PDF without photos) and retry.', 'error');
+                return;
+            }
+            _importShowStatus('⏳ Reading <strong>' + file.name.replace(/</g, '&lt;') + '</strong> with AI… 30 seconds for small files, up to 3 minutes for big ones. Keep this tab open.', 'info');
+            document.getElementById('importReviewSection').style.display = 'none';
+            try {
+                const b64 = await new Promise((resolve, reject) => {
+                    const r = new FileReader();
+                    r.onload = () => resolve(String(r.result).split(',')[1] || '');
+                    r.onerror = () => reject(new Error('Could not read the file'));
+                    r.readAsDataURL(file);
+                });
+                const system = `You parse painting-contractor proposal/estimate PDFs (QuickBooks estimates, custom proposals, insurance scopes) into JSON for import into an estimating app. Return ONLY valid JSON, no markdown fences, matching exactly:
+{
+ "customer": {"name": string, "phone": string|null, "email": string|null, "address": string|null},
+ "documentRef": string|null,          // e.g. "Estimate 1126" or the proposal number
+ "date": "YYYY-MM-DD"|null,           // the document's date
+ "jobType": "Interior"|"Exterior",    // masonry/roofing/outdoor work counts as Exterior
+ "projectTitle": string,              // short, e.g. "Exterior Painting" or "Main Wall Repointing"
+ "summary": string|null,              // the project-summary paragraph if the doc has one, plain text
+ "scopeBlocks": [{"name": string, "text": string, "price": number|null}],
+ "subtotal": number|null,             // pre-discount price if shown
+ "discounts": [{"name": string, "type": "percentage"|"fixed", "value": number, "amount": number}],
+ "total": number                      // the final contract price the customer pays
+}
+RULES:
+- "customer" is the CLIENT the proposal is addressed to — never Northern Star Painters (that's the contractor).
+- scopeBlocks = the job-specific scope-of-work sections (surface prep, each surface/area block, what-we-do items). Keep their bullet lines, one per line starting with "• ". Do NOT include generic contract boilerplate: payment terms, warranties, misc, clean-up, color-selection policy, carpentry rate cards, signatures, insurance certificates.
+- "price" on a block only if the document itemizes a price for that specific block, else null.
+- For percentage discounts set value = the percent and amount = the dollar amount. If only one lump total exists, set subtotal = total and discounts = [].
+- Money values are plain numbers, no $ or commas.`;
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 240000);
+                const response = await fetch('https://damp-moon-203c.amirzreik7.workers.dev', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    signal: controller.signal,
+                    body: JSON.stringify({
+                        max_tokens: 6000,
+                        system,
+                        messages: [{
+                            role: 'user',
+                            content: [
+                                { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } },
+                                { type: 'text', text: 'Parse this proposal into the JSON schema. Return only the JSON.' }
+                            ]
+                        }]
+                    })
+                });
+                clearTimeout(timer);
+                const data = await response.json();
+                let text = data.content?.[0]?.text;
+                if (!text) throw new Error(data.error?.message || 'AI returned no content');
+                text = text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
+                const parsed = JSON.parse(text);
+                if (!parsed.customer?.name || !parsed.total) throw new Error('AI could not find a customer name and total in this PDF');
+                window._importParsed = parsed;
+                _importShowStatus('✅ Parsed! Review everything below, then import.', 'ok');
+                _importRenderReview(parsed);
+            } catch (e) {
+                _importShowStatus('❌ ' + (e.name === 'AbortError' ? 'Timed out reading the PDF — try again.' : e.message), 'error');
+            }
+        };
+
+        // Plain text (with "• " bullet lines) → safe scope HTML for the proposal.
+        window._importTextToHtml = function(text) {
+            const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const lines = String(text || '').split(/\n/).map(l => l.trim()).filter(Boolean);
+            let html = '', inList = false;
+            lines.forEach(l => {
+                const m = l.match(/^[•\-\*]\s*(.+)$/);
+                if (m) {
+                    if (!inList) { html += '<ul style="margin:2px 0 2px 16px;padding:0;">'; inList = true; }
+                    html += '<li style="margin:1px 0;">' + esc(m[1]) + '</li>';
+                } else {
+                    if (inList) { html += '</ul>'; inList = false; }
+                    html += '<div style="margin:2px 0;">' + esc(l) + '</div>';
+                }
+            });
+            if (inList) html += '</ul>';
+            return html;
+        };
+
+        function _importRenderReview(p) {
+            // Customer fields + existing-customer match
+            document.getElementById('impCustName').value = p.customer.name || '';
+            document.getElementById('impCustPhone').value = formatPhone(p.customer.phone || '');
+            document.getElementById('impCustEmail').value = (p.customer.email || '').toLowerCase();
+            document.getElementById('impCustAddress').value = p.customer.address || '';
+            const digits = String(p.customer.phone || '').replace(/\D/g, '').replace(/^1/, '');
+            const nameLc = (p.customer.name || '').trim().toLowerCase();
+            const emailLc = (p.customer.email || '').trim().toLowerCase();
+            const matches = (customers || []).filter(c => {
+                const cDigits = String(c.phone || '').replace(/\D/g, '').replace(/^1/, '');
+                return (nameLc && (c.name || '').trim().toLowerCase() === nameLc)
+                    || (digits && cDigits && cDigits === digits)
+                    || (emailLc && (c.email || '').trim().toLowerCase() === emailLc);
+            });
+            const matchEl = document.getElementById('importCustomerMatch');
+            if (matches.length > 0) {
+                matchEl.style.display = 'block';
+                matchEl.innerHTML = `<div style="padding:10px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:13px;">
+                    <strong>Looks like an existing customer:</strong>
+                    ${matches.map((c, i) => `<label style="display:flex;gap:8px;align-items:center;margin-top:6px;cursor:pointer;"><input type="radio" name="impCustChoice" value="${c.id}" ${i === 0 ? 'checked' : ''}> Link to <strong>${(c.name || '').replace(/</g, '&lt;')}</strong>${c.phone ? ' · ' + formatPhone(c.phone) : ''}</label>`).join('')}
+                    <label style="display:flex;gap:8px;align-items:center;margin-top:6px;cursor:pointer;"><input type="radio" name="impCustChoice" value="__new__"> Create a new customer anyway</label>
+                </div>`;
+            } else {
+                matchEl.style.display = 'none';
+                matchEl.innerHTML = '';
+            }
+
+            // Project fields
+            document.getElementById('impTitle').value = p.projectTitle || (p.jobType + ' Painting');
+            document.getElementById('impJobType').value = p.jobType === 'Interior' ? 'Interior' : 'Exterior';
+            document.getElementById('impDate').value = p.date || '';
+            document.getElementById('impRef').value = p.documentRef || '';
+
+            // Scope blocks + pricing
+            window._importBlocks = (p.scopeBlocks || []).map(b => ({ name: b.name || 'Scope', text: b.text || '', price: b.price ?? null }));
+            _importRenderBlocks();
+            window._importDiscounts = (p.discounts || []).map(d => ({ name: d.name || 'Discount', type: d.type === 'percentage' ? 'percentage' : 'fixed', value: +d.value || 0, amount: +d.amount || 0 }));
+            document.getElementById('impSubtotal').value = p.subtotal ?? p.total ?? '';
+            document.getElementById('impTotal').value = p.total ?? '';
+            _importRenderDiscounts();
+
+            document.getElementById('importReviewSection').style.display = 'block';
+        }
+
+        function _importRenderBlocks() {
+            const el = document.getElementById('importScopeList');
+            el.innerHTML = window._importBlocks.map((b, i) => `
+                <div style="border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:8px;">
+                    <div style="display:flex;gap:8px;margin-bottom:6px;">
+                        <input type="text" value="${(b.name || '').replace(/"/g, '&quot;')}" oninput="window._importBlocks[${i}].name=this.value" style="flex:1;font-weight:600;" placeholder="Section name">
+                        <button class="btn btn-danger btn-small" onclick="window._importBlocks.splice(${i},1);_importRenderBlocks()" style="padding:6px 10px;">✕</button>
+                    </div>
+                    <textarea rows="4" oninput="window._importBlocks[${i}].text=this.value" style="width:100%;font-size:13px;" placeholder="• bullet lines…">${(b.text || '').replace(/</g, '&lt;')}</textarea>
+                    <input type="number" value="${b.price ?? ''}" step="0.01" min="0" oninput="window._importBlocks[${i}].price=this.value===''?null:parseFloat(this.value)" style="width:140px;margin-top:4px;" placeholder="Price (optional)">
+                </div>`).join('') || '<p style="color:#999;font-size:13px;">No scope blocks — add one below.</p>';
+        }
+        window.importAddScopeBlock = function() {
+            window._importBlocks.push({ name: '', text: '', price: null });
+            _importRenderBlocks();
+        };
+
+        function _importRenderDiscounts() {
+            const el = document.getElementById('importDiscountList');
+            el.innerHTML = window._importDiscounts.map((d, i) => `
+                <div style="border:1px solid #e5e7eb;border-radius:8px;padding:8px 10px;margin-top:8px;display:grid;grid-template-columns:1fr auto;gap:6px;align-items:start;">
+                    <div>
+                        <input type="text" value="${(d.name || '').replace(/"/g, '&quot;')}" oninput="window._importDiscounts[${i}].name=this.value" style="width:100%;font-size:13px;" placeholder="Discount name">
+                        <div style="display:flex;gap:6px;margin-top:4px;">
+                            <select onchange="window._importDiscounts[${i}].type=this.value;importRecalcTotal()" style="padding:6px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;">
+                                <option value="percentage" ${d.type === 'percentage' ? 'selected' : ''}>%</option>
+                                <option value="fixed" ${d.type === 'fixed' ? 'selected' : ''}>$ fixed</option>
+                            </select>
+                            <input type="number" value="${d.value || ''}" step="0.01" min="0" oninput="window._importDiscounts[${i}].value=parseFloat(this.value)||0;importRecalcTotal()" style="width:80px;font-size:12px;" placeholder="Value">
+                            <input type="number" value="${d.amount || ''}" step="0.01" min="0" oninput="window._importDiscounts[${i}].amount=parseFloat(this.value)||0;importRecalcTotal(true)" style="width:100px;font-size:12px;" placeholder="$ amount">
+                        </div>
+                    </div>
+                    <button class="btn btn-danger btn-small" onclick="window._importDiscounts.splice(${i},1);_importRenderDiscounts();importRecalcTotal()" style="padding:6px 10px;">✕</button>
+                </div>`).join('');
+        }
+        window.importAddDiscount = function() {
+            window._importDiscounts.push({ name: 'Discount', type: 'fixed', value: 0, amount: 0 });
+            _importRenderDiscounts();
+        };
+        // Recompute % discount amounts from the subtotal, then total = subtotal − discounts.
+        // skipAmounts=true when the user hand-typed a $ amount (don't clobber it).
+        window.importRecalcTotal = function(skipAmounts) {
+            const subtotal = parseFloat(document.getElementById('impSubtotal').value) || 0;
+            window._importDiscounts.forEach(d => {
+                if (!skipAmounts && d.type === 'percentage' && subtotal > 0) d.amount = +(subtotal * d.value / 100).toFixed(2);
+            });
+            if (!skipAmounts) _importRenderDiscounts();
+            const discountSum = window._importDiscounts.reduce((s, d) => s + (d.amount || 0), 0);
+            if (subtotal > 0) document.getElementById('impTotal').value = +(subtotal - discountSum).toFixed(2);
+        };
+
+        window.importSetStatus = function(status) {
+            window._importStatus = status;
+            const map = { 'Complete': 'impStatusComplete', 'Landed Job': 'impStatusLanded', 'New Lead': 'impStatusLead' };
+            Object.entries(map).forEach(([s, id]) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const active = s === status;
+                el.style.background = active ? '#6366f1' : '#fff';
+                el.style.color = active ? '#fff' : '#374151';
+                el.style.borderColor = active ? '#6366f1' : '#d1d5db';
+                el.style.fontWeight = active ? '700' : '500';
+            });
+            const profitEl = document.getElementById('impProfitSection');
+            if (profitEl) profitEl.style.display = status === 'Complete' ? 'block' : 'none';
+            // Completed old jobs are usually already paid → default No; open jobs → Yes.
+            importSetQb(status === 'Complete' ? 'no' : 'yes');
+        };
+
+        window.importSetQb = function(choice) {
+            window._importQb = choice;
+            [['impQbNo', 'no'], ['impQbYes', 'yes']].forEach(([id, val]) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                const active = val === choice;
+                el.style.background = active ? (val === 'no' ? '#6b7280' : '#10b981') : '#fff';
+                el.style.color = active ? '#fff' : '#374151';
+                el.style.borderColor = active ? (val === 'no' ? '#6b7280' : '#10b981') : '#d1d5db';
+                el.style.fontWeight = active ? '700' : '500';
+            });
+        };
+
+        window.saveImportedProposal = async function() {
+            const custName = document.getElementById('impCustName').value.trim();
+            const title = document.getElementById('impTitle').value.trim();
+            const total = parseFloat(document.getElementById('impTotal').value) || 0;
+            if (!custName) { alert('Customer name is required'); return; }
+            if (!title) { alert('Project title is required'); return; }
+            if (total <= 0) { alert('Final total is required'); return; }
+            const btn = document.getElementById('importSaveBtn');
+            btn.disabled = true; btn.textContent = 'Importing…';
+            try {
+                const jobType = document.getElementById('impJobType').value;
+                const status = window._importStatus;
+                const isComplete = status === 'Complete';
+                const nowIso = new Date().toISOString();
+                // Proposal date → local-noon ISO (avoids UTC day-shift, same as v116).
+                const dateStr = document.getElementById('impDate').value;
+                let dateIso = nowIso;
+                if (dateStr) {
+                    const [y, mo, d] = dateStr.split('-').map(Number);
+                    if (y && mo && d) dateIso = new Date(y, mo - 1, d, 12, 0, 0).toISOString();
+                }
+
+                // 1) Customer — linked existing or new.
+                const choice = document.querySelector('input[name="impCustChoice"]:checked')?.value;
+                let customerId, customerName;
+                if (choice && choice !== '__new__') {
+                    customerId = choice;
+                    customerName = (customers.find(c => c.id === choice) || {}).name || custName;
+                } else {
+                    const custRef = await addDoc(collection(db, 'customers'), {
+                        userId: currentUser.uid,
+                        name: custName,
+                        email: document.getElementById('impCustEmail').value.trim().toLowerCase(),
+                        phone: formatPhone(document.getElementById('impCustPhone').value.trim()),
+                        address: document.getElementById('impCustAddress').value.trim()
+                    });
+                    customerId = custRef.id;
+                    customerName = custName;
+                }
+
+                // 2) Project.
+                const jobNumber = await generateJobNumber();
+                const ref = document.getElementById('impRef').value.trim();
+                const history = [{ status: 'New Lead', date: dateIso, note: 'Imported from old proposal' + (ref ? ' (' + ref + ')' : '') }];
+                if (status !== 'New Lead') history.push({ status, date: isComplete ? dateIso : nowIso, note: 'Set during import' });
+                const projectData = {
+                    userId: currentUser.uid,
+                    customerId, customerName,
+                    jobNumber, projectName: title,
+                    status,
+                    leadSource: '', appointmentDate: null, appointmentNotes: '',
+                    deadReason: '', landedProposalId: null,
+                    statusHistory: history,
+                    createdAt: nowIso, deleted: false,
+                    legacyImport: true,
+                    qbInvoiceExempt: window._importQb === 'no'
+                };
+
+                // Assumed-profit actuals, written at creation when chosen.
+                const profitMode = document.querySelector('input[name="impProfitMode"]:checked')?.value || 'assumed';
+                let actuals = null;
+                if (isComplete && profitMode === 'assumed') {
+                    const pctRaw = parseFloat(document.getElementById('impProfitPct').value);
+                    const pct = isNaN(pctRaw) ? 50 : Math.max(0, Math.min(100, pctRaw));
+                    const netProfit = total * pct / 100;
+                    actuals = {
+                        crewLeader: '', crewCount: 0, hoursPerDay: 8, totalHours: 0, totalManDays: 0,
+                        dailyLog: [], startDate: '', endDate: '', days: 0,
+                        crewPayout: 0, crewNetTake: 0,
+                        materialResponsibility: 'assumed', materialCostKnown: false,
+                        crewMaterialCost: 0, crewMaterialEstimated: false,
+                        paymentMode: 'labor_only', paintCost: 0, nonPaintCost: 0,
+                        nonPaintAbsorbed: false, materialCost: 0, gallonsUsed: 0,
+                        difficulty: 5, notesGood: '', notesBad: '', notesLearning: '',
+                        completionPhotos: { before: [], after: [] },
+                        totalCosts: total - netProfit, revenue: total,
+                        netProfit, profitMargin: pct, hourlyRate: 0, profitPerDay: 0,
+                        estimatedProfitMode: true, assumedProfitPct: pct,
+                        estLabor: 0, estMaterial: 0,
+                        linkedProjectIds: [], combined: false,
+                        lastSavedAt: nowIso, completedAt: dateIso
+                    };
+                    projectData.actuals = actuals;
+                }
+                const projectRef = await addDoc(collection(db, 'projects'), projectData);
+
+                // 3) Proposal job — scope blocks as legacyScope services, lump-sum price.
+                const services = window._importBlocks
+                    .filter(b => (b.name || '').trim() || (b.text || '').trim())
+                    .map(b => ({
+                        name: (b.name || 'Scope of Work').trim(),
+                        description: '',
+                        price: b.price || 0, qty: 1, total: b.price || 0,
+                        legacyScope: { html: _importTextToHtml(b.text) }
+                    }));
+                const discounts = window._importDiscounts.filter(d => (d.amount || 0) > 0);
+                const first = discounts[0];
+                const credits = discounts.slice(1).map(d => ({ name: d.name || 'Discount', amount: d.amount }));
+                const discountSum = discounts.reduce((s, d) => s + d.amount, 0);
+                const subtotal = parseFloat(document.getElementById('impSubtotal').value) || (total + discountSum);
+                const proposal = {
+                    userId: currentUser.uid,
+                    customerId, customerName,
+                    jobName: customerName + ' - ' + title,
+                    jobType, profileId: null,
+                    projectId: projectRef.id, proposalLabel: 'A',
+                    rooms: [{
+                        name: title, setupHours: 0, length: 0, width: 0, height: 0,
+                        photoData: null, photos: [], notes: '',
+                        surfaces: [], additionalServices: services
+                    }],
+                    basePrice: subtotal, priceOverride: true,
+                    discountType: first ? first.type : '', discountValue: first ? first.value : 0,
+                    discountName: first ? (first.name || 'Discount') : '', discountAmount: first ? first.amount : 0,
+                    credits,
+                    changeOrders: [], changeOrdersTotal: 0,
+                    projectSummaryNotes: (window._importParsed?.summary || '').trim(),
+                    totalLabor: 0, totalMaterials: 0,
+                    servicesTotal: services.reduce((s, v) => s + (v.total || 0), 0),
+                    grandTotal: total,
+                    companySignature: null, customerSignature: null,
+                    status, date: dateIso,
+                    legacyImport: true
+                };
+                if (ref) proposal.legacyRef = ref;
+                if (actuals) proposal.actuals = actuals;
+                const proposalRef = await addDoc(collection(db, 'jobs'), proposal);
+
+                // 4) Land the proposal on the project (leads stay unlanded).
+                if (status !== 'New Lead') {
+                    await updateDoc(doc(db, 'projects', projectRef.id), { landedProposalId: proposalRef.id });
+                }
+
+                await Promise.all([loadJobs(), loadProjects(), loadCustomers()]);
+
+                // Snapshot the proposal for the QB invoicer attachment (only if it'll be invoiced).
+                if (isComplete && window._importQb === 'yes' && typeof _captureProposalForCompletion === 'function') {
+                    try { _captureProposalForCompletion([projectRef.id]); } catch (e) { console.error(e); }
+                }
+
+                if (isComplete && profitMode === 'actuals') {
+                    alert('Imported as ' + jobNumber + '. Now enter the real numbers.');
+                    openProjectActuals(projectRef.id);
+                } else {
+                    alert('Imported as ' + jobNumber + '!');
+                    viewCustomerDetail(customerId);
+                }
+            } catch (e) {
+                alert('Import failed: ' + e.message);
+            } finally {
+                btn.disabled = false; btn.textContent = '📥 Import Project';
+            }
         };
 
         // ═══════════════════════════════════════
@@ -8583,7 +9109,10 @@ Only return JSON, no other text.`;
             //     with fallback to legacy materialCost.
             const advisorEl = document.getElementById('pricingAdvisorContent');
             if (advisorEl) {
-                const completed = jobs.filter(j => j.actuals && j.actuals.completedAt && j.jobType === currentEstimate.jobType);
+                // Legacy imports + assumed-profit records have no system-calculated price,
+                // so they'd poison the calculated-vs-actual comparison — exclude both.
+                const completed = jobs.filter(j => j.actuals && j.actuals.completedAt && j.jobType === currentEstimate.jobType
+                    && !j.legacyImport && !j.actuals.estimatedProfitMode);
                 const calculatedPrice = totalLabor + totalMaterials + servicesTotal;
                 const basePrice = currentEstimate.basePrice || calculatedPrice;
                 const isOverridden = currentEstimate.priceOverride && Math.abs(basePrice - calculatedPrice) > 0.01;
@@ -9358,6 +9887,8 @@ Only return JSON, no other text.`;
                 document.getElementById('actualCrewMaterialEst').value =
                     (!cmKnown && cm && Math.abs(cm - (window._actualsEstMaterial || 0)) > 0.5) ? cm : '';
                 document.getElementById('actualGallons').value = existingActuals.gallonsUsed || '';
+                const assumedPctEl = document.getElementById('actualAssumedProfitPct');
+                if (assumedPctEl) assumedPctEl.value = existingActuals.assumedProfitPct || 50;
                 document.getElementById('actualDifficulty').value = existingActuals.difficulty || 5;
                 document.getElementById('diffLabel').textContent = existingActuals.difficulty || 5;
                 document.getElementById('actualNotesGood').value = existingActuals.notesGood || '';
@@ -9382,6 +9913,8 @@ Only return JSON, no other text.`;
                 window._completionPhotos = { before: [], after: [] };
                 displayCompletionPhotos();
                 ['actualCrewPayout','actualMaterialCost','actualPaintCost','actualNonPaintCost','actualCrewMaterial','actualCrewMaterialEst','actualDays','actualGallons','actualStartDate','actualEndDate','actualNotesGood','actualNotesBad','actualNotesLearning'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+                const freshAssumedEl = document.getElementById('actualAssumedProfitPct');
+                if (freshAssumedEl) freshAssumedEl.value = 50;
                 document.getElementById('actualDifficulty').value = 5;
                 document.getElementById('diffLabel').textContent = '5';
                 const npAbsorb = document.getElementById('actualNonPaintAbsorbed');
@@ -9458,6 +9991,8 @@ Only return JSON, no other text.`;
         // then the record's legacy paymentMode, then the accepted crew proposal,
         // defaulting to NSP.
         window._deriveMaterialMode = function(project, actuals) {
+            // Assumed-profit records (imported/old jobs) — explicit flag wins over everything.
+            if (actuals && (actuals.estimatedProfitMode === true || actuals.materialResponsibility === 'assumed')) return 'assumed';
             if (actuals && actuals.materialResponsibility) {
                 if (actuals.materialResponsibility === 'nsp') return 'nsp';
                 return actuals.materialCostKnown === false ? 'crew_unknown' : 'crew_known';
@@ -9474,7 +10009,7 @@ Only return JSON, no other text.`;
         // relabel the payout, then recompute.
         window.setMaterialMode = function(mode) {
             window._materialMode = mode;
-            const buttons = { nsp: 'materialModeNsp', crew_known: 'materialModeCrewKnown', crew_unknown: 'materialModeCrewUnknown' };
+            const buttons = { nsp: 'materialModeNsp', crew_known: 'materialModeCrewKnown', crew_unknown: 'materialModeCrewUnknown', assumed: 'materialModeAssumed' };
             Object.values(buttons).forEach(id => {
                 const el = document.getElementById(id);
                 if (!el) return;
@@ -9488,7 +10023,11 @@ Only return JSON, no other text.`;
             show('nspMaterialFields', mode === 'nsp');
             show('crewMaterialField', mode === 'crew_known');
             show('crewUnknownField', mode === 'crew_unknown');
-            show('gallonsField', mode !== 'crew_unknown');   // gallons are unknown off-account
+            show('gallonsField', mode !== 'crew_unknown' && mode !== 'assumed');   // gallons are unknown off-account
+            // Assumed mode: only the % matters — crew/time + materials cards are meaningless.
+            show('assumedProfitField', mode === 'assumed');
+            show('actualsCrewCard', mode !== 'assumed');
+            show('actualsMaterialsCard', mode !== 'assumed');
             // Keep the hidden absorbed flag truthful: NSP eats non-paint in NSP mode.
             const npAbsorb = document.getElementById('actualNonPaintAbsorbed');
             if (npAbsorb) npAbsorb.checked = (mode === 'nsp');
@@ -9504,6 +10043,8 @@ Only return JSON, no other text.`;
                 if (lbl) lbl.textContent = 'Crew Payout — gross, incl. materials ($)';
                 if (help) help.textContent = 'The full lump you paid the crew, materials included. Enter the material amount below so we can back out the labor.';
                 if (hint) hint.innerHTML = '👷 <strong>Crew bought materials, cost known.</strong> We subtract it from the gross to show the crew\'s real labor &amp; hourly.';
+            } else if (mode === 'assumed') {
+                if (hint) hint.innerHTML = '📊 <strong>Old or imported job — costs unknown.</strong> Pick the profit % NSP made; profit &amp; margin get logged, but this job stays OUT of crew hourly/payout analytics.';
             } else {
                 if (lbl) lbl.textContent = 'Crew Payout — gross ($)';
                 if (help) help.textContent = 'Just the total you paid the crew. They bought materials off our account, so the exact split is unknown.';
@@ -9528,6 +10069,24 @@ Only return JSON, no other text.`;
             const crewEstField = num('actualCrewMaterialEst');
             const estMaterial  = window._actualsEstMaterial || 0;
             const revenue      = window._actualsRevenue || 0;
+
+            // ASSUMED-PROFIT MODE (old/imported jobs): only the sale price + a profit %
+            // guess are known. netProfit = revenue × %, totalCosts is the implied
+            // remainder. Everything crew/material-related is zeroed so this record
+            // can never leak into hourly / crew-payout / paint-variance analytics.
+            if (mode === 'assumed') {
+                const pctEl = document.getElementById('actualAssumedProfitPct');
+                const pctRaw = pctEl ? parseFloat(pctEl.value) : NaN;
+                const assumedPct = isNaN(pctRaw) ? 50 : Math.max(0, Math.min(100, pctRaw));
+                const netProfit = revenue * assumedPct / 100;
+                return {
+                    mode, assumedPct, crewPayout: 0, crewMaterialEmbedded: 0, materialEstimated: false,
+                    nspPaint: 0, nspNonPaint: 0, paintActual: 0, materialCost: 0, crewNetTake: 0,
+                    totalCosts: revenue - netProfit, hrsPerDay: 8, days: 0, crewCount: 0,
+                    totalManDays: 0, totalHours: 0, revenue, estMaterial: 0, netProfit,
+                    profitPct: revenue > 0 ? assumedPct : 0, hourlyRate: 0, profitPerDay: 0,
+                };
+            }
 
             let crewMaterialEmbedded = 0;   // material sitting inside the gross payout (crew modes)
             let materialEstimated = false;  // true when we proxied an unknown cost from the estimate
@@ -9574,6 +10133,32 @@ Only return JSON, no other text.`;
             // UI and the saved record can never disagree. See _computeActualsMath.
             const m = window._computeActualsMath();
             const mode = m.mode;
+
+            // ── ASSUMED-PROFIT MODE: simple two-tile card, no hourly/target read ──
+            if (mode === 'assumed') {
+                const netDisp = document.getElementById('crewNetTakeDisplay');
+                if (netDisp) netDisp.style.display = 'none';
+                const aColor = m.assumedPct >= 40 ? '#10b981' : m.assumedPct >= 25 ? '#f59e0b' : '#ef4444';
+                const aBody = document.getElementById('profitResultsBody');
+                if (aBody) aBody.innerHTML = `
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                        <div style="text-align:center;padding:14px 4px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;">
+                            <div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Assumed Margin</div>
+                            <strong style="font-size:24px;color:${aColor};display:block;margin-top:2px;">${m.assumedPct.toFixed(0)}%</strong>
+                        </div>
+                        <div style="text-align:center;padding:14px 4px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;">
+                            <div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Net Profit</div>
+                            <strong style="font-size:24px;color:${aColor};display:block;margin-top:2px;">$${Math.round(m.netProfit).toLocaleString()}</strong>
+                        </div>
+                    </div>
+                    <div style="margin-top:10px;padding:10px 12px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;line-height:1.55;color:#374151;">
+                        📊 Estimated: <strong>$${Math.round(m.revenue).toLocaleString()}</strong> revenue × ${m.assumedPct.toFixed(0)}% = <strong>$${Math.round(m.netProfit).toLocaleString()}</strong> profit. This job won't count toward crew hourly, payout, or paint stats.
+                    </div>`;
+                const aCard = document.getElementById('profitResultsCard');
+                if (aCard) aCard.style.display = 'block';
+                return;
+            }
+
             const crewPayout = m.crewPayout;            // gross (crew modes) or pure labor (NSP mode)
             const crewNetTake = m.crewNetTake;          // labor portion → drives hourly
             const paintCost = m.paintActual;            // material figure used for variance
@@ -9809,8 +10394,8 @@ Only return JSON, no other text.`;
             const paintCost = m.paintActual;
             const nonPaintCost = m.nspNonPaint;
             const materialCost = m.materialCost;
-            const materialResponsibility = mode === 'nsp' ? 'nsp' : 'crew';
-            const materialCostKnown = mode !== 'crew_unknown';
+            const materialResponsibility = mode === 'assumed' ? 'assumed' : (mode === 'nsp' ? 'nsp' : 'crew');
+            const materialCostKnown = mode !== 'crew_unknown' && mode !== 'assumed';
             const nonPaintAbsorbed = mode === 'nsp';     // NSP mode = NSP owns supplies
             const paymentMode = mode === 'nsp' ? 'labor_only' : 'labor_plus_materials';  // legacy label
             const revenue = m.revenue;
@@ -9819,7 +10404,7 @@ Only return JSON, no other text.`;
             const totalCosts = m.totalCosts;
 
             const actuals = {
-                crewLeader: document.getElementById('actualCrewLeader').value.trim(),
+                crewLeader: mode === 'assumed' ? '' : document.getElementById('actualCrewLeader').value.trim(),
                 crewCount, hoursPerDay: hrsPerDay,
                 totalHours,
                 totalManDays,
@@ -9838,7 +10423,7 @@ Only return JSON, no other text.`;
                 nonPaintCost,           // NSP non-paint spend (NSP mode only; 0 in crew modes)
                 nonPaintAbsorbed,       // Legacy flag — true whenever NSP owns the supplies
                 materialCost,           // Total material for this record (legacy compatibility)
-                gallonsUsed: mode === 'crew_unknown' ? 0 : (parseFloat(document.getElementById('actualGallons').value) || 0),
+                gallonsUsed: (mode === 'crew_unknown' || mode === 'assumed') ? 0 : (parseFloat(document.getElementById('actualGallons').value) || 0),
                 difficulty: parseInt(document.getElementById('actualDifficulty').value) || 5,
                 notesGood: document.getElementById('actualNotesGood')?.value?.trim() || '',
                 notesBad: document.getElementById('actualNotesBad')?.value?.trim() || '',
@@ -9851,8 +10436,12 @@ Only return JSON, no other text.`;
                 // hourlyRate uses NET take-home — what the crew actually earns per hour
                 hourlyRate: totalHours > 0 ? crewNetTake / totalHours : 0,
                 profitPerDay: days > 0 ? (revenue - totalCosts) / days : 0,
-                estLabor: window._actualsEstLabor || 0,
-                estMaterial: window._actualsEstMaterial || 0,
+                // Assumed mode: flag the record and zero the estimate anchors so no
+                // variance/rate analytics can ever pick this job up.
+                estimatedProfitMode: mode === 'assumed',
+                assumedProfitPct: mode === 'assumed' ? m.assumedPct : 0,
+                estLabor: mode === 'assumed' ? 0 : (window._actualsEstLabor || 0),
+                estMaterial: mode === 'assumed' ? 0 : (window._actualsEstMaterial || 0),
                 linkedProjectIds: window._actualsLinkedProjectIds || [],
                 combined: (window._actualsLinkedProjectIds || []).length > 1,
                 lastSavedAt: new Date().toISOString()
@@ -14625,7 +15214,13 @@ Generate JSON with these EXACT keys:
                         ? ((paintCost - actuals.estMaterial) / actuals.estMaterial * 100) : 0;
                     const hourlyRate = actuals.hourlyRate || 0;
                     const margin = actuals.profitMargin || 0;
+                    // Assumed-profit records (imported/old jobs): revenue/profit/margin are
+                    // real signals, but crew-rate numbers are fabricated zeros. Force
+                    // target to 0 so every existing `target > 0` guard drops them from
+                    // variance/rate analytics automatically.
+                    const isEstimated = actuals.estimatedProfitMode === true;
                     return {
+                        estimated: isEstimated,
                         project: p,                       // canonical project (click-through target)
                         proposal,
                         actuals,
@@ -14634,20 +15229,20 @@ Generate JSON with these EXACT keys:
                         customerName: p.customerName,
                         crewLeader: actuals.crewLeader || '',
                         paymentMode,
-                        target,
-                        variance,
-                        paintCost,
-                        paintVariance,
+                        target: isEstimated ? 0 : target,
+                        variance: isEstimated ? 0 : variance,
+                        paintCost: isEstimated ? 0 : paintCost,
+                        paintVariance: isEstimated ? 0 : paintVariance,
                         completedAt: new Date(actuals.completedAt),
-                        hourlyRate,
+                        hourlyRate: isEstimated ? 0 : hourlyRate,
                         margin,
                         profit: actuals.netProfit || 0,
                         revenue,
-                        crewPayout: actuals.crewPayout || 0,
-                        crewNetTake,
+                        crewPayout: isEstimated ? 0 : (actuals.crewPayout || 0),
+                        crewNetTake: isEstimated ? 0 : crewNetTake,
                         nonPaintAbsorbed: actuals.nonPaintAbsorbed === true,
                         groupSize: group.length,          // >1 means combined linked job
-                        qualityScore: _jobQualityScore(hourlyRate, margin, variance),
+                        qualityScore: isEstimated ? null : _jobQualityScore(hourlyRate, margin, variance),
                     };
                 })
                 .filter(Boolean)
@@ -14662,12 +15257,14 @@ Generate JSON with these EXACT keys:
             const total = data.length;
 
             // ── HOURLY signals (the operator's "binding" metric) ──
-            const avgHourly = data.reduce((s, j) => s + j.hourlyRate, 0) / total;
-            const lowHourlyJobs = data.filter(j => j.hourlyRate > 0 && j.hourlyRate < 22);
+            // Assumed-profit records carry no real crew numbers — exclude from rate reads.
+            const rateData = data.filter(j => !j.estimated);
+            const avgHourly = rateData.length > 0 ? rateData.reduce((s, j) => s + j.hourlyRate, 0) / rateData.length : 0;
+            const lowHourlyJobs = rateData.filter(j => j.hourlyRate > 0 && j.hourlyRate < 22);
             if (lowHourlyJobs.length > 0) {
                 out.push({
                     severity: 'high', icon: '🔴',
-                    text: `<strong>${lowHourlyJobs.length} of your last ${total} jobs ran below $22/hr</strong> for the crew — retention risk forming. Investigate ${lowHourlyJobs.slice(0, 2).map(j => j.jobNumber).join(', ')}.`,
+                    text: `<strong>${lowHourlyJobs.length} of your last ${rateData.length} jobs ran below $22/hr</strong> for the crew — retention risk forming. Investigate ${lowHourlyJobs.slice(0, 2).map(j => j.jobNumber).join(', ')}.`,
                 });
             } else if (avgHourly > 0 && avgHourly < 27) {
                 out.push({
@@ -14681,10 +15278,10 @@ Generate JSON with these EXACT keys:
                 });
             }
 
-            // Trend: last 3 vs prior 3 — only if we have 6+ jobs
-            if (data.length >= 6) {
-                const last3 = data.slice(0, 3);
-                const prior3 = data.slice(3, 6);
+            // Trend: last 3 vs prior 3 — only if we have 6+ jobs with real crew data
+            if (rateData.length >= 6) {
+                const last3 = rateData.slice(0, 3);
+                const prior3 = rateData.slice(3, 6);
                 const lastH = last3.reduce((s, j) => s + j.hourlyRate, 0) / 3;
                 const priorH = prior3.reduce((s, j) => s + j.hourlyRate, 0) / 3;
                 const drop = priorH - lastH;
@@ -14755,9 +15352,9 @@ Generate JSON with these EXACT keys:
                 }
             });
 
-            // ── CREW LEADER signals ──
+            // ── CREW LEADER signals ── (real-crew-data jobs only)
             const byLeader = {};
-            data.filter(j => j.crewLeader).forEach(j => {
+            rateData.filter(j => j.crewLeader).forEach(j => {
                 if (!byLeader[j.crewLeader]) byLeader[j.crewLeader] = [];
                 byLeader[j.crewLeader].push(j);
             });
@@ -14791,8 +15388,8 @@ Generate JSON with these EXACT keys:
                 }
             }
 
-            // ── HALL OF FAME ──
-            const best = [...data].sort((a, b) => b.qualityScore - a.qualityScore)[0];
+            // ── HALL OF FAME ── (assumed-profit rows have no quality score)
+            const best = [...rateData].sort((a, b) => b.qualityScore - a.qualityScore)[0];
             if (best && best.qualityScore >= 80) {
                 out.push({
                     severity: 'low', icon: '🏆',
@@ -14823,10 +15420,13 @@ Generate JSON with these EXACT keys:
             }
 
             // ── Aggregates ──
+            // rateData = jobs with real crew numbers. Assumed-profit records (imported
+            // old jobs) count for revenue/profit/margin but never for rate stats.
             const total = data.length;
+            const rateData = data.filter(j => !j.estimated);
             const totalRevenue = data.reduce((s, j) => s + j.revenue, 0);
             const totalProfit = data.reduce((s, j) => s + j.profit, 0);
-            const avgHourly = data.reduce((s, j) => s + j.hourlyRate, 0) / total;
+            const avgHourly = rateData.length > 0 ? rateData.reduce((s, j) => s + j.hourlyRate, 0) / rateData.length : 0;
             const avgMargin = data.reduce((s, j) => s + j.margin, 0) / total;
             const withTarget = data.filter(j => j.target > 0);
             const avgVariance = withTarget.length > 0
@@ -14843,7 +15443,7 @@ Generate JSON with these EXACT keys:
             };
             const last3 = data.slice(0, 3);
             const prior3 = data.slice(3, 6);
-            const hourlyArrow = arrow(last3.map(j => j.hourlyRate), prior3.map(j => j.hourlyRate), 0.5);
+            const hourlyArrow = arrow(rateData.slice(0, 3).map(j => j.hourlyRate), rateData.slice(3, 6).map(j => j.hourlyRate), 0.5);
             const marginArrow = arrow(last3.map(j => j.margin), prior3.map(j => j.margin), 1);
             const varArrow    = arrow(last3.map(j => j.variance), prior3.map(j => j.variance), 1);
 
@@ -14853,9 +15453,9 @@ Generate JSON with these EXACT keys:
             // ── Recent jobs (top 10) ──
             const recent = data.slice(0, 10);
 
-            // ── Crew leader breakdown ──
+            // ── Crew leader breakdown ── (real-crew-data jobs only)
             const byLeader = {};
-            data.filter(j => j.crewLeader).forEach(j => {
+            rateData.filter(j => j.crewLeader).forEach(j => {
                 if (!byLeader[j.crewLeader]) byLeader[j.crewLeader] = [];
                 byLeader[j.crewLeader].push(j);
             });
@@ -14877,7 +15477,8 @@ Generate JSON with these EXACT keys:
             });
             const typeRows = Object.entries(byType).map(([type, jobs]) => {
                 const n = jobs.length;
-                const avgH = jobs.reduce((s, j) => s + j.hourlyRate, 0) / n;
+                const rateJobs = jobs.filter(j => !j.estimated);
+                const avgH = rateJobs.length > 0 ? rateJobs.reduce((s, j) => s + j.hourlyRate, 0) / rateJobs.length : 0;
                 const avgM = jobs.reduce((s, j) => s + j.margin, 0) / n;
                 const withT = jobs.filter(j => j.target > 0);
                 const avgV = withT.length > 0 ? withT.reduce((s, j) => s + j.variance, 0) / withT.length : 0;
@@ -14953,8 +15554,21 @@ Generate JSON with these EXACT keys:
                     <h3>Recent Jobs</h3>
                     <p style="font-size:12px;color:#666;margin-bottom:8px;">Each job's <strong>Quality Score</strong> (0-100) blends hourly rate (40pts), margin (30pts), and target variance (30pts).</p>
                     ${recent.map(j => {
-                        const qc = _qualityColor(j.qualityScore);
                         const dateStr = j.completedAt.toLocaleDateString('en-US', {month: 'short', day: 'numeric'});
+                        if (j.estimated) {
+                            return `<div style="display:grid;grid-template-columns:48px 1fr;gap:10px;padding:8px 0;border-bottom:1px solid #e5e7eb;align-items:center;cursor:pointer;" onclick="viewProjectDetail('${j.project.id}')">
+                                <div style="width:42px;height:42px;border-radius:50%;background:#9ca3af;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;" title="Assumed profit — no crew data">📊</div>
+                                <div>
+                                    <div style="font-weight:600;font-size:13px;">${j.customerName} <span style="color:#6b7280;font-weight:400;">— ${j.jobNumber}</span></div>
+                                    <div style="font-size:11px;color:#6b7280;margin-top:2px;">
+                                        <span style="color:${_marginColor(j.margin)};">${j.margin.toFixed(0)}% margin (assumed)</span> ·
+                                        $${Math.round(j.profit).toLocaleString()} profit ·
+                                        ${j.jobType} · ${dateStr}
+                                    </div>
+                                </div>
+                            </div>`;
+                        }
+                        const qc = _qualityColor(j.qualityScore);
                         return `<div style="display:grid;grid-template-columns:48px 1fr;gap:10px;padding:8px 0;border-bottom:1px solid #e5e7eb;align-items:center;cursor:pointer;" onclick="viewProjectDetail('${j.project.id}')">
                             <div style="width:42px;height:42px;border-radius:50%;background:${qc};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;">${j.qualityScore}</div>
                             <div>
@@ -15492,11 +16106,15 @@ Generate JSON with these EXACT keys:
                         }
                         rows += `<tr><td style="padding:4px 4px 4px 14px;font-size:9pt">${surfaceLabel}</td><td style="padding:4px;font-size:9pt">${prodDisplay}</td><td style="padding:4px;font-size:9pt">${s.sheen}</td><td style="padding:4px;font-size:9pt">${s.color}</td><td style="padding:4px;font-size:9pt">${s.coats}/${primerCoats}</td></tr>`;
                     });
-                    const brands = [...new Set(room.surfaces.map(s=>{const p=products.find(pr=>pr.id===s.productId);return p?p.brand:'Brand'}))].join(', ');
-                    rows += `<tr><td colspan="5" style="padding:3px 6px;font-size:8.5pt;color:#666">Brands: ${brands}</td></tr>`;
+                    if (room.surfaces.length > 0) {
+                        const brands = [...new Set(room.surfaces.map(s=>{const p=products.find(pr=>pr.id===s.productId);return p?p.brand:'Brand'}))].join(', ');
+                        rows += `<tr><td colspan="5" style="padding:3px 6px;font-size:8.5pt;color:#666">Brands: ${brands}</td></tr>`;
+                    }
                     if (room.additionalServices?.length > 0) {
                         room.additionalServices.forEach(svc => {
-                            if (svc.cabinet && svc.cabinet.scopeHtml) {
+                            if (svc.legacyScope && svc.legacyScope.html) {
+                                rows += `<tr><td colspan="5" style="padding:8px 10px;font-size:9pt;background-color:#f8fafc;border-left:3px solid #1e3a8a;${pca}"><div style="font-weight:700;color:#1e3a8a;margin-bottom:2px">${svc.name}</div>${svc.legacyScope.html}</td></tr>`;
+                            } else if (svc.cabinet && svc.cabinet.scopeHtml) {
                                 rows += `<tr><td colspan="5" style="padding:8px 10px;font-size:9pt;background-color:#faf8ff;border-left:3px solid #7c3aed;${pca}"><div style="font-weight:700;color:#5b21b6;margin-bottom:2px">${svc.name}</div>${svc.cabinet.scopeHtml}</td></tr>`;
                             } else if (svc.shadowBox && svc.shadowBox.scopeHtml) {
                                 rows += `<tr><td colspan="5" style="padding:8px 10px;font-size:9pt;background-color:#f0fdff;border-left:3px solid #0e7490;${pca}"><div style="font-weight:700;color:#155e75;margin-bottom:2px">${svc.name}</div>${svc.shadowBox.scopeHtml}</td></tr>`;
