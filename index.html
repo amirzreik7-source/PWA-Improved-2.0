@@ -154,7 +154,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v119</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v120</span>
             </div>
 
             <!-- Global Search -->
@@ -1033,6 +1033,7 @@
             <div class="no-print" style="display:flex;gap:10px;margin-bottom:15px;flex-wrap:wrap;">
                 <button class="btn btn-back" onclick="exitProposalView()" style="flex:0 0 auto;">← Back</button>
                 <button class="btn btn-success" id="proposalSavePdfBtn" onclick="saveProposalAsPdf()" style="flex:1;min-width:140px;" title="Generate a clean PDF with no browser URL footer">📥 Save PDF</button>
+                <button class="btn btn-warning" id="proposalEditScopeBtn" onclick="openLegacyScopeEditor(window.editingJobId)" style="flex:0 0 auto;display:none;" title="Edit the imported scope blocks and add photos">✏️ Scope &amp; Photos</button>
                 <button class="btn btn-secondary" id="printPdfBtn" onclick="fastPrint()" style="flex:0 0 auto;" title="Use the browser print dialog (may include URL footer on phone)">🖨️ Print</button>
             </div>
             <div id="proposalContent" style="background:#fff;"></div>
@@ -1075,7 +1076,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v119</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v120</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -1627,25 +1628,8 @@
                     <div class="form-group" style="margin-bottom:0;"><label>Original Ref # <span style="color:#999;font-weight:400;">(optional)</span></label><input type="text" id="impRef" placeholder="e.g., Estimate 1126"></div>
                 </div>
 
-                <!-- Scope blocks -->
-                <div class="room-card">
-                    <h3>Scope of Work</h3>
-                    <p style="color:#666;font-size:12px;margin-bottom:8px;">Each block becomes a section on the rebuilt proposal. Edit freely.</p>
-                    <div id="importScopeList"></div>
-                    <button class="btn btn-info btn-small" onclick="importAddScopeBlock()" style="width:100%;margin-top:4px;">+ Add Scope Block</button>
-                </div>
-
-                <!-- AI edit across the whole proposal -->
-                <div class="room-card" style="border-left:4px solid #7c3aed;">
-                    <h3>🤖 AI Edit</h3>
-                    <p style="color:#666;font-size:12px;margin-bottom:8px;">Describe a change and AI rewrites the whole scope to match — products, prep steps, labor language, everything. e.g. "Change the decking from wood to Trex" or "Make the front door scope two coats of Advance instead".</p>
-                    <textarea id="impAiEditText" rows="2" placeholder="What should change?" style="width:100%;font-size:14px;"></textarea>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;">
-                        <button class="btn btn-primary btn-small" id="impAiEditBtn" onclick="importAiRevise(false)">✨ Apply Change</button>
-                        <button class="btn btn-info btn-small" id="impAiPolishBtn" onclick="importAiRevise(true)">🪄 Just Polish Wording</button>
-                    </div>
-                    <div id="impAiEditStatus" style="display:none;margin-top:8px;padding:8px 10px;border-radius:8px;font-size:12px;line-height:1.5;"></div>
-                </div>
+                <!-- Scope blocks + AI edit (shared cards, injected by _mountScopeCards) -->
+                <div id="scopeCardsMountImport"></div>
 
                 <!-- Pricing -->
                 <div class="room-card">
@@ -1697,6 +1681,16 @@
 
                 <button class="btn btn-success btn-large" onclick="saveImportedProposal()" style="width:100%;" id="importSaveBtn">📥 Import Project</button>
             </div>
+            <input type="file" id="impBlockPhotoInput" accept="image/*" onchange="importBlockPhotoSelected(event)" style="display:none;">
+        </div>
+
+        <!-- EDIT SCOPE & PHOTOS (imported proposals, after the fact) -->
+        <div id="legacyScopeScreen" class="screen">
+            <button class="btn btn-back" onclick="_scopeEditorBack()">← Back</button>
+            <h2 class="screen-title">Scope &amp; Photos</h2>
+            <p class="screen-subtitle" style="margin-bottom:15px;" id="legacyScopeSubtitle"></p>
+            <div id="scopeCardsMountEditor"></div>
+            <button class="btn btn-success btn-large" onclick="saveLegacyScopeEdits()" style="width:100%;" id="legacyScopeSaveBtn">💾 Save &amp; View Proposal</button>
         </div>
 
         <!-- TRASH / RECOVER DELETED -->
@@ -4574,14 +4568,45 @@ WRITING RULES:
             window._importParsed = null;
             window._importBlocks = [];
             window._importDiscounts = [];
+            window._editorJobId = null;
             const inp = document.getElementById('importPdfInput');
             if (inp) inp.value = '';
             document.getElementById('importReviewSection').style.display = 'none';
             const st = document.getElementById('importStatus');
             st.style.display = 'none';
+            _mountScopeCards('scopeCardsMountImport');
             importSetStatus('Complete');
             importSetQb('no');
             showScreen('importProposalScreen');
+        };
+
+        // The Scope-of-Work + AI Edit cards are shared between the import
+        // review and the post-import "Scope & Photos" editor. Only ONE mount
+        // holds them at a time (ids must stay unique in the DOM).
+        window._mountScopeCards = function(mountId) {
+            ['scopeCardsMountImport', 'scopeCardsMountEditor'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.innerHTML = '';
+            });
+            const mount = document.getElementById(mountId);
+            if (!mount) return;
+            mount.innerHTML = `
+                <div class="room-card">
+                    <h3>Scope of Work</h3>
+                    <p style="color:#666;font-size:12px;margin-bottom:8px;">Each block is a section on the proposal. Edit text freely, add photos where they belong.</p>
+                    <div id="importScopeList"></div>
+                    <button class="btn btn-info btn-small" onclick="importAddScopeBlock()" style="width:100%;margin-top:4px;">+ Add Scope Block</button>
+                </div>
+                <div class="room-card" style="border-left:4px solid #7c3aed;">
+                    <h3>🤖 AI Edit</h3>
+                    <p style="color:#666;font-size:12px;margin-bottom:8px;">Describe a change and AI rewrites the whole scope to match — products, prep steps, labor language, everything. e.g. "Change the decking from wood to Trex".</p>
+                    <textarea id="impAiEditText" rows="2" placeholder="What should change?" style="width:100%;font-size:14px;"></textarea>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;">
+                        <button class="btn btn-primary btn-small" id="impAiEditBtn" onclick="importAiRevise(false)">✨ Apply Change</button>
+                        <button class="btn btn-info btn-small" id="impAiPolishBtn" onclick="importAiRevise(true)">🪄 Just Polish Wording</button>
+                    </div>
+                    <div id="impAiEditStatus" style="display:none;margin-top:8px;padding:8px 10px;border-radius:8px;font-size:12px;line-height:1.5;"></div>
+                </div>`;
         };
 
         function _importShowStatus(msg, tone) {
@@ -4668,6 +4693,98 @@ RULES:
             }
         };
 
+        // Editor blocks → additionalServices entries (shared by the import
+        // save and the post-import Scope & Photos editor).
+        window._scopeBlocksToServices = function(blocks) {
+            return blocks
+                .filter(b => (b.name || '').trim() || (b.text || '').trim())
+                .map(b => ({
+                    name: (b.name || 'Scope of Work').trim(),
+                    description: '',
+                    price: b.price || 0, qty: 1, total: b.price || 0,
+                    legacyScope: {
+                        html: _importTextToHtml(b.text),
+                        photos: (b.photos || []).map(p => ({ url: p.url, path: p.path || '' }))
+                    }
+                }));
+        };
+
+        // Inverse of _importTextToHtml — turns stored scope HTML back into the
+        // editable "• bullet per line" plain text. Round-trip safe for HTML
+        // that _importTextToHtml produced.
+        window._importHtmlToText = function(html) {
+            let t = String(html || '');
+            t = t.replace(/<li[^>]*>/gi, '\n• ').replace(/<\/li>/gi, '');
+            t = t.replace(/<div[^>]*>/gi, '\n').replace(/<\/div>/gi, '');
+            t = t.replace(/<\/?ul[^>]*>/gi, '').replace(/<br\s*\/?>/gi, '\n');
+            t = t.replace(/<[^>]+>/g, '');
+            t = t.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+            return t.split('\n').map(l => l.trim()).filter(Boolean).join('\n');
+        };
+
+        // ── Post-import editor: change scope text / photos on an already-
+        // imported proposal, then re-render it. Opened from the 👁️ proposal
+        // viewer's "✏️ Scope & Photos" button (legacy jobs only).
+        window.openLegacyScopeEditor = function(jobId) {
+            const job = jobs.find(j => j.id === jobId);
+            if (!job) { alert('Could not find this proposal.'); return; }
+            const room = (job.rooms || []).find(r => (r.additionalServices || []).some(s => s.legacyScope));
+            if (!room) { alert('This proposal has no imported scope blocks.'); return; }
+            window._editorJobId = jobId;
+            window._editorJobMeta = { title: room.name || job.jobName || '', jobType: job.jobType || 'Exterior' };
+            window._importParsed = { summary: job.projectSummaryNotes || '' };
+            window._importBlocks = room.additionalServices.filter(s => s.legacyScope).map(s => ({
+                name: s.name || '',
+                text: _importHtmlToText(s.legacyScope.html),
+                price: (s.price || null),
+                photos: (s.legacyScope.photos || []).slice()
+            }));
+            const sub = document.getElementById('legacyScopeSubtitle');
+            if (sub) sub.textContent = (job.customerName ? job.customerName + ' — ' : '') + (room.name || '');
+            _mountScopeCards('scopeCardsMountEditor');
+            _importRenderBlocks();
+            showScreen('legacyScopeScreen');
+        };
+
+        window._scopeEditorBack = function() {
+            // Back = discard edits, re-render the proposal as stored.
+            if (window._editorJobId) regenerateProposal(window._editorJobId);
+            else showScreen('homeScreen');
+        };
+
+        window.saveLegacyScopeEdits = async function() {
+            const jobId = window._editorJobId;
+            const job = jobs.find(j => j.id === jobId);
+            if (!job) { alert('Could not find this proposal.'); return; }
+            const btn = document.getElementById('legacyScopeSaveBtn');
+            btn.disabled = true; btn.textContent = 'Saving…';
+            try {
+                const services = _scopeBlocksToServices(window._importBlocks);
+                if (!services.length) { alert('Add at least one scope block.'); return; }
+                const rooms = (job.rooms || []).map(r => {
+                    if (!(r.additionalServices || []).some(s => s.legacyScope)) return r;
+                    // Replace the legacy blocks; keep any non-legacy services.
+                    const others = (r.additionalServices || []).filter(s => !s.legacyScope);
+                    return { ...r, additionalServices: [...services, ...others] };
+                });
+                const summary = (window._importParsed?.summary || job.projectSummaryNotes || '');
+                const update = {
+                    rooms,
+                    servicesTotal: _servicesTotalOf(rooms),
+                    projectSummaryNotes: summary,
+                    updatedAt: new Date().toISOString()
+                };
+                await updateDoc(doc(db, 'jobs', jobId), update);
+                Object.assign(job, update);
+                if (window._reportToast) _reportToast('✅ Scope updated', 'success');
+                regenerateProposal(jobId);
+            } catch(e) {
+                alert('Could not save: ' + (e?.message || e));
+            } finally {
+                btn.disabled = false; btn.innerHTML = '💾 Save &amp; View Proposal';
+            }
+        };
+
         // Plain text (with "• " bullet lines) → safe scope HTML for the proposal.
         window._importTextToHtml = function(text) {
             const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -4734,19 +4851,62 @@ RULES:
 
         function _importRenderBlocks() {
             const el = document.getElementById('importScopeList');
-            el.innerHTML = window._importBlocks.map((b, i) => `
+            if (!el) return;
+            el.innerHTML = window._importBlocks.map((b, i) => {
+                const photos = b.photos || [];
+                const photoThumbs = photos.map((p, pi) => `
+                    <div style="position:relative;width:64px;height:64px;flex-shrink:0;">
+                        <img src="${p.url}" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb;display:block;">
+                        <button onclick="window._importBlocks[${i}].photos.splice(${pi},1);_importRenderBlocks()" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:none;background:#ef4444;color:#fff;font-size:11px;line-height:1;cursor:pointer;padding:0;">✕</button>
+                    </div>`).join('');
+                return `
                 <div style="border:1px solid #e5e7eb;border-radius:8px;padding:10px;margin-bottom:8px;">
                     <div style="display:flex;gap:8px;margin-bottom:6px;">
                         <input type="text" value="${(b.name || '').replace(/"/g, '&quot;')}" oninput="window._importBlocks[${i}].name=this.value" style="flex:1;font-weight:600;" placeholder="Section name">
                         <button class="btn btn-danger btn-small" onclick="window._importBlocks.splice(${i},1);_importRenderBlocks()" style="padding:6px 10px;">✕</button>
                     </div>
                     <textarea rows="4" oninput="window._importBlocks[${i}].text=this.value" style="width:100%;font-size:13px;" placeholder="• bullet lines…">${(b.text || '').replace(/</g, '&lt;')}</textarea>
-                    <input type="number" value="${b.price ?? ''}" step="0.01" min="0" oninput="window._importBlocks[${i}].price=this.value===''?null:parseFloat(this.value)" style="width:140px;margin-top:4px;" placeholder="Price (optional)">
-                </div>`).join('') || '<p style="color:#999;font-size:13px;">No scope blocks — add one below.</p>';
+                    <div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap;">
+                        <input type="number" value="${b.price ?? ''}" step="0.01" min="0" oninput="window._importBlocks[${i}].price=this.value===''?null:parseFloat(this.value)" style="width:130px;" placeholder="Price (optional)">
+                        ${photoThumbs}
+                        <button class="btn btn-info btn-small" onclick="importBlockAddPhoto(${i})" style="padding:8px 12px;" ${b._uploading ? 'disabled' : ''}>${b._uploading ? '⏳…' : '📷 + Photo'}</button>
+                    </div>
+                </div>`;
+            }).join('') || '<p style="color:#999;font-size:13px;">No scope blocks — add one below.</p>';
         }
         window.importAddScopeBlock = function() {
-            window._importBlocks.push({ name: '', text: '', price: null });
+            window._importBlocks.push({ name: '', text: '', price: null, photos: [] });
             _importRenderBlocks();
+        };
+
+        // Per-block photo upload → Firebase Storage (same compress + path
+        // convention as room photos). Photos render in the scope card on the
+        // proposal, right under their block's text.
+        window.importBlockAddPhoto = function(blockIdx) {
+            window._impPhotoBlockIdx = blockIdx;
+            const inp = document.getElementById('impBlockPhotoInput');
+            if (inp) { inp.value = ''; inp.click(); }
+        };
+        window.importBlockPhotoSelected = async function(event) {
+            const file = event.target.files && event.target.files[0];
+            const b = window._importBlocks[window._impPhotoBlockIdx];
+            if (!file || !b) return;
+            b._uploading = true;
+            _importRenderBlocks();
+            try {
+                const compressed = await compressImage(file, 1200, 0.75);
+                const path = `users/${currentUser.uid}/photos/scope_${Date.now()}.jpg`;
+                const sRef = ref(storage, path);
+                await uploadBytes(sRef, compressed);
+                const url = await getDownloadURL(sRef);
+                if (!b.photos) b.photos = [];
+                b.photos.push({ url, path });
+            } catch(e) {
+                alert('Photo upload failed: ' + (e?.message || e));
+            } finally {
+                delete b._uploading;
+                _importRenderBlocks();
+            }
         };
 
         function _importRenderDiscounts() {
@@ -4806,9 +4966,13 @@ RULES:
             btns.forEach(b => { if (b) b.disabled = true; });
             showAi('⏳ Rewriting the scope…');
             try {
+                // impTitle/impJobType only exist on the import screen — the
+                // post-import editor pulls the same info from the loaded job.
+                const titleEl = document.getElementById('impTitle');
+                const typeEl = document.getElementById('impJobType');
                 const payload = {
-                    projectTitle: document.getElementById('impTitle').value.trim(),
-                    jobType: document.getElementById('impJobType').value,
+                    projectTitle: titleEl ? titleEl.value.trim() : (window._editorJobMeta?.title || ''),
+                    jobType: typeEl ? typeEl.value : (window._editorJobMeta?.jobType || 'Exterior'),
                     summary: (window._importParsed?.summary || ''),
                     scopeBlocks: window._importBlocks.map(b => ({ name: b.name, text: b.text, price: b.price }))
                 };
@@ -4832,9 +4996,18 @@ RULES:
                 text = text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
                 const revised = JSON.parse(text);
                 if (!Array.isArray(revised.scopeBlocks) || revised.scopeBlocks.length === 0) throw new Error('AI response had no scope blocks');
-                window._importBlocks = revised.scopeBlocks.map(b => ({ name: b.name || 'Scope', text: b.text || '', price: b.price ?? null }));
+                // Photos survive the rewrite: match by block name first, then
+                // by position (AI keeps block order unless told otherwise).
+                const oldBlocks = window._importBlocks;
+                const photosFor = (b, idx) => {
+                    const byName = oldBlocks.find(o => (o.photos || []).length && (o.name || '').trim().toLowerCase() === (b.name || '').trim().toLowerCase());
+                    if (byName) return byName.photos;
+                    return (oldBlocks[idx]?.photos) || [];
+                };
+                window._importBlocks = revised.scopeBlocks.map((b, idx) => ({ name: b.name || 'Scope', text: b.text || '', price: b.price ?? null, photos: photosFor(b, idx) }));
                 _importRenderBlocks();
-                if (revised.projectTitle) document.getElementById('impTitle').value = revised.projectTitle;
+                const outTitleEl = document.getElementById('impTitle');
+                if (revised.projectTitle && outTitleEl) outTitleEl.value = revised.projectTitle;
                 if (window._importParsed) window._importParsed.summary = revised.summary || window._importParsed.summary;
                 showAi('✅ Done — review the blocks above. Edit anything by hand, or run another change.');
                 if (!polishOnly) document.getElementById('impAiEditText').value = '';
@@ -4963,14 +5136,7 @@ RULES:
                 const projectRef = await addDoc(collection(db, 'projects'), projectData);
 
                 // 3) Proposal job — scope blocks as legacyScope services, lump-sum price.
-                const services = window._importBlocks
-                    .filter(b => (b.name || '').trim() || (b.text || '').trim())
-                    .map(b => ({
-                        name: (b.name || 'Scope of Work').trim(),
-                        description: '',
-                        price: b.price || 0, qty: 1, total: b.price || 0,
-                        legacyScope: { html: _importTextToHtml(b.text) }
-                    }));
+                const services = _scopeBlocksToServices(window._importBlocks);
                 const discounts = window._importDiscounts.filter(d => (d.amount || 0) > 0);
                 const first = discounts[0];
                 const credits = discounts.slice(1).map(d => ({ name: d.name || 'Discount', amount: d.amount }));
@@ -16162,6 +16328,45 @@ Generate JSON with these EXACT keys:
         };
 
         // Generate Proposal — renders in-app (no popup, works in Safari PWA)
+        // SCOPE OF WORK section for imported/legacy proposals — replaces the
+        // painting details table (Surface/Sheen/Coats headers mean nothing for
+        // a flooring or masonry job). Each block is a card: name + optional
+        // price in the header strip, scope bullets in the body, photos in a
+        // grid underneath. Kept as a standalone helper so it can be rendered
+        // and visually verified outside the app.
+        window._legacyScopeSectionHTML = function(scopeRooms, pca) {
+            const money = v => '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            let html = '';
+            scopeRooms.forEach(room => {
+                if (room.name) {
+                    html += `<div style="background-color:#1e3a8a;color:#fff;padding:8px 14px;font-size:10.5pt;font-weight:700;letter-spacing:0.6px;border-radius:6px;margin:12px 0 2px;${pca}">${String(room.name).toUpperCase()}</div>`;
+                }
+                (room.additionalServices || []).forEach(svc => {
+                    const scope = svc.legacyScope || {};
+                    const photos = (scope.photos || []).filter(p => p && p.url);
+                    // Short cards and photo cards stay on one page; long prose
+                    // blocks are allowed to flow across the break.
+                    const keepTogether = photos.length > 0 || (scope.html || '').length < 900;
+                    const cols = photos.length >= 3 ? 3 : photos.length;
+                    const photoGrid = photos.length ? `
+                        <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:6px;padding:2px 12px 11px;page-break-inside:avoid;break-inside:avoid">
+                            ${photos.map(p => `<img src="${p.url}" style="width:100%;height:${photos.length === 1 ? '2.6in' : '1.7in'};object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;display:block">`).join('')}
+                        </div>` : '';
+                    html += `
+                    <div style="margin:9px 0;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;background-color:#fff;${keepTogether ? 'page-break-inside:avoid;break-inside:avoid;' : ''}${pca}">
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;background-color:#f8fafc;border-bottom:1px solid #e2e8f0;border-left:3px solid #f4a624;padding:7px 12px;${pca}">
+                            <span style="font-weight:700;font-size:10pt;color:#1e3a8a">${svc.name || 'Scope of Work'}</span>
+                            ${(svc.total || svc.price) ? `<span style="font-size:9.5pt;font-weight:700;color:#b8860b;white-space:nowrap">${money(svc.total || svc.price)}</span>` : ''}
+                        </div>
+                        <div style="padding:8px 12px 9px;font-size:9pt;line-height:1.6;color:#374151">${scope.html || ''}</div>
+                        ${photoGrid}
+                    </div>`;
+                });
+                if (room.notes) html += `<div style="padding:4px 6px;font-style:italic;color:#666;font-size:9pt">Note: ${room.notes}</div>`;
+            });
+            return html;
+        };
+
         window.generateProposal = async function(returnScreen, opts) {
             // `opts.silent` builds and RETURNS the proposal HTML string without
             // touching the DOM or navigating — used to snapshot a proposal to
@@ -16231,13 +16436,25 @@ Generate JSON with these EXACT keys:
                 formattedContract = formatContractTextForPDF(contractText);
             }
 
-            // Build project details table
+            // Build project details. Rooms whose content is entirely imported
+            // scope blocks (no measured surfaces) get the dedicated SCOPE OF
+            // WORK layout — the painting table's Surface/Sheen/Coats header is
+            // meaningless for them. Everything else keeps the classic table.
+            const _isScopeOnlyRoom = r => (r.surfaces || []).length === 0
+                && (r.additionalServices || []).length > 0
+                && r.additionalServices.every(s => s.legacyScope);
+            const scopeRooms = groupedRooms.filter(_isScopeOnlyRoom);
+            const tableRooms = groupedRooms.filter(r => !_isScopeOnlyRoom(r));
+
             let detailsHTML = '';
-            if (showBreakdown) {
+            if (showBreakdown && scopeRooms.length > 0) {
+                detailsHTML += `</div><div style="padding:0 0.25in">${sectionTitle('SCOPE OF WORK')}${_legacyScopeSectionHTML(scopeRooms, pca)}</div><div class="page-content">`;
+            }
+            if (showBreakdown && tableRooms.length > 0) {
                 const ths = `background-color:#1e3a8a;color:#fff;padding:6px;text-align:left;font-size:8.5pt;font-weight:600;${pca}`;
                 let rows = '';
                 let _lastSourceProjectId = null;
-                groupedRooms.forEach(room => {
+                tableRooms.forEach(room => {
                     // Combined mode: insert a section divider when we cross
                     // from one source project's rooms to the next, so the
                     // customer can clearly see "INTERIOR — NSP-2026-001" vs
@@ -16284,7 +16501,7 @@ Generate JSON with these EXACT keys:
                     }
                     if (room.notes) rows += `<tr><td colspan="5" style="padding:4px 6px;font-style:italic;color:#666;font-size:9pt">Note: ${room.notes}</td></tr>`;
                 });
-                detailsHTML = `</div><div style="padding:0 0.25in">${sectionTitle('PROJECT DETAILS')}<table style="width:100%;table-layout:fixed;border-collapse:collapse;border:1px solid #d1d5db;margin:8px 0"><thead><tr><th style="width:18%;${ths}">Surface</th><th style="width:22%;${ths}">Paint/Primer</th><th style="width:12%;${ths}">Sheen</th><th style="width:14%;${ths}">Color</th><th style="width:8%;${ths}">Coats</th><th style="width:26%;${ths}">Photo</th></tr></thead><tbody>${rows}</tbody></table></div><div class="page-content">`;
+                detailsHTML += `</div><div style="padding:0 0.25in">${sectionTitle('PROJECT DETAILS')}<table style="width:100%;table-layout:fixed;border-collapse:collapse;border:1px solid #d1d5db;margin:8px 0"><thead><tr><th style="width:18%;${ths}">Surface</th><th style="width:22%;${ths}">Paint/Primer</th><th style="width:12%;${ths}">Sheen</th><th style="width:14%;${ths}">Color</th><th style="width:8%;${ths}">Coats</th><th style="width:26%;${ths}">Photo</th></tr></thead><tbody>${rows}</tbody></table></div><div class="page-content">`;
             }
 
             // Discount row
@@ -16448,7 +16665,7 @@ ${sectionTitle('PREPARED BY')}
 <div style="display:flex;align-items:center;gap:12px;padding:8px 0;page-break-inside:avoid">
 ${co.consultantPhotoUrl ? '<img src="'+co.consultantPhotoUrl+'" style="width:55px;height:55px;border-radius:50%;object-fit:cover;border:2px solid #2563eb;flex-shrink:0">' : ''}
 <div style="flex:1"><p style="font-size:11pt;font-weight:700;margin:0">${co.consultantName||'Sales Consultant'}</p>${co.consultantTitle?'<p style="font-size:9pt;color:#666;margin:1px 0">'+co.consultantTitle+'</p>':''}</div>
-${(co.consultantPhone||co.consultantEmail)?'<div style="text-align:right;font-size:8.5pt;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:6px 10px;'+pca+'">'+(co.consultantPhone?'<p style="margin:2px 0"><span style="color:#2563eb">☎</span> '+co.consultantPhone+'</p>':'')+(co.consultantEmail?'<p style="margin:2px 0"><span style="color:#2563eb">✉</span> '+co.consultantEmail+'</p>':'')+'</div>':''}
+${(co.consultantPhone||co.consultantEmail)?'<div style="text-align:right;font-size:8.5pt;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:6px 10px;'+pca+'">'+(co.consultantPhone?'<p style="margin:2px 0"><span style="color:#2563eb">☎</span> '+formatPhone(co.consultantPhone)+'</p>':'')+(co.consultantEmail?'<p style="margin:2px 0"><span style="color:#2563eb">✉</span> '+co.consultantEmail+'</p>':'')+'</div>':''}
 </div>
 ${window._crewMode ? crewScheduleHTML : ''}
 ${window._crewMode ? '' : changeOrdersSectionHTML}
@@ -16519,6 +16736,13 @@ ${currentEstimate.customerSignature ? '<p>Signature:</p><img src="'+currentEstim
             // Replace img src with data-src for deferred loading
             const lazyHtml = html.replace(/<img\s+src="(data:[^"]+)"/g, '<img data-src="$1" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"');
             proposalEl.innerHTML = lazyHtml;
+            // "✏️ Scope & Photos" only makes sense for imported legacy jobs
+            // (scope-block rooms) viewed from a saved job (editingJobId set).
+            const editScopeBtn = document.getElementById('proposalEditScopeBtn');
+            if (editScopeBtn) {
+                const hasLegacy = (currentEstimate.rooms || []).some(r => (r.additionalServices || []).some(s => s.legacyScope));
+                editScopeBtn.style.display = (!window._crewMode && hasLegacy && window.editingJobId) ? '' : 'none';
+            }
             showScreen('proposalViewScreen');
             // Load images after paint
             requestAnimationFrame(() => {
