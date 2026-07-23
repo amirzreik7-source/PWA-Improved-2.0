@@ -154,7 +154,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v118</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v119</span>
             </div>
 
             <!-- Global Search -->
@@ -1075,7 +1075,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v118</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v119</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -5047,12 +5047,32 @@ RULES:
                 const projSnap = await getDocs(query(collection(db, 'projects'), where('userId', '==', currentUser.uid)));
                 const deletedProjects = projSnap.docs.map(d => ({id: d.id, ...d.data()})).filter(p => p.deleted);
 
-                if (deletedJobs.length === 0 && deletedProjects.length === 0) {
+                // Load ALL customers including deleted
+                const custSnap = await getDocs(query(collection(db, 'customers'), where('userId', '==', currentUser.uid)));
+                const deletedCustomers = custSnap.docs.map(d => ({id: d.id, ...d.data()})).filter(c => c.deleted);
+
+                if (deletedJobs.length === 0 && deletedProjects.length === 0 && deletedCustomers.length === 0) {
                     content.innerHTML = '<div style="text-align:center;padding:40px;color:#999;"><p style="font-size:36px;">🗑️</p><p>Trash is empty</p></div>';
                     return;
                 }
 
                 let html = '';
+
+                if (deletedCustomers.length > 0) {
+                    html += `<h3 style="margin:10px 0;">Deleted Customers (${deletedCustomers.length})</h3>`;
+                    deletedCustomers.forEach(c => {
+                        const delDate = c.deletedAt ? new Date(c.deletedAt).toLocaleDateString() : 'Unknown';
+                        html += `<div class="room-card" style="opacity:0.8;border-left:4px solid #6366f1;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <div>
+                                    <strong>${c.name || 'Customer'}</strong>
+                                    <p style="color:#666;font-size:12px;margin:2px 0;">${formatPhone(c.phone) || c.email || ''} • Deleted: ${delDate}</p>
+                                </div>
+                                <button class="btn btn-success btn-small" onclick="recoverCustomer('${c.id}')">Recover</button>
+                            </div>
+                        </div>`;
+                    });
+                }
 
                 if (deletedProjects.length > 0) {
                     html += `<h3 style="margin:10px 0;">Deleted Projects (${deletedProjects.length})</h3>`;
@@ -5114,17 +5134,30 @@ RULES:
             } catch(e) { alert('Error: ' + e.message); }
         };
 
+        window.recoverCustomer = async function(customerId) {
+            try {
+                await updateDoc(doc(db, 'customers', customerId), { deleted: false, deletedAt: null });
+                await loadCustomers();
+                alert('Customer recovered!');
+                showTrash();
+            } catch(e) { alert('Error: ' + e.message); }
+        };
+
         window.emptyTrash = async function() {
             if (!confirm('Permanently delete all items in trash? This cannot be undone.')) return;
             try {
                 const jobSnap = await getDocs(query(collection(db, 'jobs'), where('userId', '==', currentUser.uid)));
                 const projSnap = await getDocs(query(collection(db, 'projects'), where('userId', '==', currentUser.uid)));
+                const custSnap = await getDocs(query(collection(db, 'customers'), where('userId', '==', currentUser.uid)));
                 let count = 0;
                 for (const d of jobSnap.docs) {
                     if (d.data().deleted) { await deleteDoc(doc(db, 'jobs', d.id)); count++; }
                 }
                 for (const d of projSnap.docs) {
                     if (d.data().deleted) { await deleteDoc(doc(db, 'projects', d.id)); count++; }
+                }
+                for (const d of custSnap.docs) {
+                    if (d.data().deleted) { await deleteDoc(doc(db, 'customers', d.id)); count++; }
                 }
                 alert(`${count} items permanently deleted.`);
                 showTrash();
@@ -5687,7 +5720,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
         async function loadCustomers() {
             try {
                 const snapshot = await getDocs(query(collection(db, 'customers'), where('userId', '==', currentUser.uid)));
-                window.customers = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
+                window.customers = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()})).filter(c => !c.deleted);
                 displayCustomerList();
             } catch(e) { console.error('Error loading customers:', e); }
         }
@@ -5724,7 +5757,10 @@ Based on the journal entries, calculate and return this JSON (no other text):
             return `
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
                     <h2 style="margin:0 0 8px 0;">${_esc(customer.name)}</h2>
-                    <button class="btn btn-secondary btn-small" onclick="editCustomerInfo('${customer.id}')" style="flex-shrink:0;padding:6px 14px;font-size:13px;">✏️ Edit</button>
+                    <div style="display:flex;gap:6px;flex-shrink:0;">
+                        <button class="btn btn-secondary btn-small" onclick="editCustomerInfo('${customer.id}')" style="padding:6px 14px;font-size:13px;">✏️ Edit</button>
+                        <button class="btn btn-danger btn-small" onclick="deleteCustomer('${customer.id}')" style="padding:6px 10px;font-size:13px;">🗑️</button>
+                    </div>
                 </div>
                 <div style="display:flex;flex-direction:column;gap:7px;margin-top:2px;">
                     ${phone ? `<a href="tel:${phone.replace(/\D/g,'')}" style="color:#2563eb;text-decoration:none;font-size:14px;">📱 ${_esc(phone)}</a>` : ''}
@@ -5766,6 +5802,8 @@ Based on the journal entries, calculate and return this JSON (no other text):
             const phone = formatPhone(document.getElementById('editCustPhone').value);
             const email = document.getElementById('editCustEmail').value.trim();
             const address = document.getElementById('editCustAddress').value.trim();
+            const editDups = _findDuplicateCustomers(name, phone, email, customerId);
+            if (editDups.length > 0 && !confirm(_dupWarningText(editDups))) return;
             const btn = document.getElementById('saveCustEditBtn');
             if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
             try {
@@ -5797,6 +5835,29 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 alert('Could not save changes: ' + (e?.message || e));
                 if (btn) { btn.disabled = false; btn.textContent = '💾 Save'; }
             }
+        };
+
+        // Soft-delete a customer (recoverable from Trash). Built for cleaning up
+        // duplicate entries — warns hard when the customer still owns projects
+        // or proposals, since those stay behind and lose their customer page.
+        window.deleteCustomer = async function(customerId) {
+            const customer = customers.find(c => c.id === customerId);
+            if (!customer) return;
+            const liveProjects = (projects || []).filter(p => p.customerId === customerId && !p.deleted);
+            const liveJobs = (jobs || []).filter(j => j.customerId === customerId && !j.deleted);
+            let msg;
+            if (liveProjects.length || liveJobs.length) {
+                msg = '⚠️ "' + (customer.name || 'This customer') + '" still has ' + liveProjects.length + ' project(s) and ' + liveJobs.length + ' proposal(s).\n\nThose stay in the app but their customer page goes away until you recover the customer from Trash.\n\nIf this is a duplicate, the projects probably belong to the OTHER copy — check before deleting.\n\nDelete this customer?';
+            } else {
+                msg = 'Delete customer "' + (customer.name || '') + '"?\n\nThey have no projects or proposals. You can recover them from Settings → Trash.';
+            }
+            if (!confirm(msg)) return;
+            try {
+                await updateDoc(doc(db, 'customers', customerId), { deleted: true, deletedAt: new Date().toISOString() });
+                await loadCustomers();
+                if (window._reportToast) _reportToast('🗑️ Customer moved to Trash', 'success');
+                showScreen('customersScreen');
+            } catch(e) { alert('Could not delete: ' + (e?.message || e)); }
         };
 
         function displayCustomerList() {
@@ -6093,6 +6154,28 @@ Based on the journal entries, calculate and return this JSON (no other text):
             goToEstimateStep(2);
         };
 
+        // Duplicate detection: same name (case-insensitive), same 10-digit phone,
+        // or same email as an existing live customer. Used on create AND edit.
+        window._findDuplicateCustomers = function(name, phone, email, excludeId) {
+            const nameLc = (name || '').trim().toLowerCase();
+            const digits = (phone || '').replace(/\D/g, '').replace(/^1/, '');
+            const emailLc = (email || '').trim().toLowerCase();
+            return (customers || []).filter(c => {
+                if (c.id === excludeId) return false;
+                const cDigits = (c.phone || '').replace(/\D/g, '').replace(/^1/, '');
+                return (nameLc && (c.name || '').trim().toLowerCase() === nameLc)
+                    || (digits.length === 10 && cDigits === digits)
+                    || (emailLc && (c.email || '').trim().toLowerCase() === emailLc);
+            });
+        };
+
+        function _dupWarningText(dups) {
+            const list = dups.slice(0, 3).map(c =>
+                '• ' + (c.name || 'Unnamed') + (c.phone ? ' — ' + formatPhone(c.phone) : '') + (c.email ? ' — ' + c.email : '')
+            ).join('\n');
+            return '⚠️ POSSIBLE DUPLICATE\n\nThis matches ' + dups.length + ' existing customer' + (dups.length === 1 ? '' : 's') + ':\n' + list + '\n\nSave anyway?';
+        }
+
         window.saveCustomer = async function(event) {
             event.preventDefault();
             const customer = {
@@ -6102,6 +6185,8 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 phone: formatPhone(document.getElementById('customerPhone').value),
                 address: document.getElementById('customerAddress').value.trim()
             };
+            const dups = _findDuplicateCustomers(customer.name, customer.phone, customer.email, null);
+            if (dups.length > 0 && !confirm(_dupWarningText(dups))) return;
             await addDoc(collection(db, 'customers'), customer);
             document.getElementById('customerForm').reset();
             await loadCustomers();
