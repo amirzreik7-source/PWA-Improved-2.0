@@ -154,7 +154,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v120</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v121</span>
             </div>
 
             <!-- Global Search -->
@@ -1076,7 +1076,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v120</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v121</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -11318,7 +11318,12 @@ Only return JSON, no other text.`;
         function _submitPdfForm(html, kind, filename) {
             const form = document.createElement('form');
             form.method = 'POST';
-            form.action = NSP_PDF_WORKER;
+            // iOS Safari names a shared/saved inline PDF after the URL's last
+            // path segment (it ignores Content-Disposition for inline PDFs) —
+            // so the desired filename rides in the action path. The worker
+            // routes on method only and ignores the path entirely.
+            const urlName = String(filename || 'document.pdf').replace(/[\\/:*?"<>|#%&]/g, '').replace(/\s+/g, ' ').trim() || 'document.pdf';
+            form.action = NSP_PDF_WORKER + '/' + encodeURIComponent(urlName);
             form.target = '_blank';
             form.acceptCharset = 'UTF-8';
             form.style.display = 'none';
@@ -16262,10 +16267,15 @@ Generate JSON with these EXACT keys:
                 ? [...new Set((currentEstimate._combinedSources || []).map(s => s.jobType || ''))]
                 : [currentEstimate.jobType || ''];
             const lc = types.join(' ').toLowerCase();
-            const typeLabel = (lc.includes('interior') && lc.includes('exterior')) ? 'Interior & Exterior Painting'
+            let typeLabel = (lc.includes('interior') && lc.includes('exterior')) ? 'Interior & Exterior Painting'
                 : lc.includes('interior') ? 'Interior Painting'
                 : lc.includes('exterior') ? 'Exterior Painting'
                 : 'Painting';
+            // Imported jobs describe themselves better than the jobType does —
+            // "Hardwood Floor Refinishing & Installation" beats "Interior Painting".
+            const scopeRoom = (currentEstimate.rooms || []).find(r =>
+                (r.surfaces || []).length === 0 && (r.additionalServices || []).some(s => s.legacyScope));
+            if (scopeRoom && scopeRoom.name) typeLabel = scopeRoom.name;
             // Unique job number from the linked project (if the estimate is saved).
             const project = currentEstimate.projectId ? projects.find(p => p.id === currentEstimate.projectId) : null;
             const num = project?.jobNumber ? ` (${project.jobNumber})` : '';
