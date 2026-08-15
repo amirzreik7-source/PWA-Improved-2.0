@@ -154,7 +154,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v128</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v129</span>
             </div>
 
             <!-- Global Search -->
@@ -1107,7 +1107,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v128</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v129</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -2978,7 +2978,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                     jobNumber: jobNumber,
                     projectName: projectName.trim(),
                     status: 'New Lead',
-                    leadSource: '',
+                    leadSource: ((window.customers || []).find(c => c.id === customerId)?.leadSource) || '',
                     appointmentDate: null,
                     appointmentNotes: '',
                     deadReason: '',
@@ -3130,7 +3130,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                     </div>
                     <div class="form-group" style="margin-bottom:10px;">
                         <label>Lead Source</label>
-                        <select id="projectLeadSource" onchange="updateProjectField('${projectId}','leadSource',this.value)" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
+                        <select id="projectLeadSource" onchange="setProjectLeadSource('${projectId}', this.value)" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
                             <option value="">-- Select --</option>
                             ${['Website','Google','Referral','Yard Sign','Facebook','Repeat Customer','Nextdoor','Yelp','CertaPro Customer','Email List','Other'].map(s => `<option value="${s}" ${s === project.leadSource ? 'selected' : ''}>${s}</option>`).join('')}
                         </select>
@@ -4134,6 +4134,35 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             }
         }
 
+        // ─── Lead source lives with the CUSTOMER ───
+        // Set it once on any project: it saves to the customer and fills
+        // every other project of theirs that doesn't have one yet — you're
+        // never asked twice for the same person.
+        window.setProjectLeadSource = async function(projectId, value) {
+            const project = projects.find(p => p.id === projectId);
+            if (!project) return;
+            try {
+                await updateDoc(doc(db, 'projects', projectId), { leadSource: value });
+                project.leadSource = value;
+                if (value) {
+                    const cust = (window.customers || []).find(c => c.id === project.customerId);
+                    if (cust && cust.leadSource !== value) {
+                        await updateDoc(doc(db, 'customers', cust.id), { leadSource: value });
+                        cust.leadSource = value;
+                    }
+                    // Fill this customer's other projects that have no source yet
+                    const siblings = projects.filter(p => p.customerId === project.customerId && p.id !== projectId && !p.leadSource);
+                    for (const s of siblings) {
+                        await updateDoc(doc(db, 'projects', s.id), { leadSource: value });
+                        s.leadSource = value;
+                    }
+                    if (siblings.length > 0 && typeof _reportToast === 'function') {
+                        _reportToast(`Lead source saved for ${project.customerName} (${siblings.length + 1} projects)`, 'success');
+                    }
+                }
+            } catch (e) { console.error('Error saving lead source:', e); }
+        };
+
         // ─── Delete project (soft — Trash-recoverable) ───
         // Its live proposals move to Trash with it so they don't orphan
         // (a job with a deleted projectId is invisible everywhere).
@@ -4454,7 +4483,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                     jobNumber: jobNumber,
                     projectName: projectName.trim(),
                     status: 'New Lead',
-                    leadSource: '',
+                    leadSource: ((window.customers || []).find(c => c.id === customerId)?.leadSource) || '',
                     appointmentDate: null,
                     appointmentNotes: '',
                     deadReason: '',
@@ -5565,7 +5594,8 @@ RULES:
             // Search projects by job number or name
             projects.forEach(p => {
                 if ((p.jobNumber || '').toLowerCase().includes(q) || (p.projectName || '').toLowerCase().includes(q) || (p.customerName || '').toLowerCase().includes(q)) {
-                    matches.push({ type: 'project', label: `${p.jobNumber} — ${p.projectName}`, sub: p.customerName, action: `viewProjectDetail('${p.id}')` });
+                    const when = p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+                    matches.push({ type: 'project', label: `${p.jobNumber} — ${p.projectName}`, sub: [p.customerName, when].filter(Boolean).join(' · '), action: `viewProjectDetail('${p.id}')`, status: p.status });
                 }
             });
 
@@ -5574,8 +5604,11 @@ RULES:
             } else {
                 results.innerHTML = matches.slice(0, 8).map(m =>
                     `<div style="padding:10px;background:#f8f9fa;border-radius:6px;margin-bottom:4px;cursor:pointer;" onclick="${m.action};document.getElementById('globalSearchInput').value='';document.getElementById('globalSearchResults').innerHTML='';">
-                        <div style="display:flex;justify-content:space-between;"><strong style="font-size:14px;">${m.label}</strong><span style="font-size:11px;color:#667eea;text-transform:uppercase;">${m.type}</span></div>
-                        ${m.sub ? '<p style="margin:2px 0 0;font-size:12px;color:#666;">' + m.sub + '</p>' : ''}
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;"><strong style="font-size:14px;">${m.label}</strong><span style="font-size:11px;color:#667eea;text-transform:uppercase;flex-shrink:0;">${m.type}</span></div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:2px;">
+                            ${m.sub ? '<p style="margin:0;font-size:12px;color:#666;">' + m.sub + '</p>' : '<span></span>'}
+                            ${m.status ? getStatusBadge(m.status) : ''}
+                        </div>
                     </div>`
                 ).join('');
             }
