@@ -154,7 +154,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v121</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v122</span>
             </div>
 
             <!-- Global Search -->
@@ -1076,7 +1076,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v121</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v122</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -3068,7 +3068,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                         <label>Lead Source</label>
                         <select id="projectLeadSource" onchange="updateProjectField('${projectId}','leadSource',this.value)" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
                             <option value="">-- Select --</option>
-                            ${['Google','Referral','Yard Sign','Facebook','Repeat Customer','Nextdoor','Yelp','CertaPro Customer','Email List','Other'].map(s => `<option value="${s}" ${s === project.leadSource ? 'selected' : ''}>${s}</option>`).join('')}
+                            ${['Website','Google','Referral','Yard Sign','Facebook','Repeat Customer','Nextdoor','Yelp','CertaPro Customer','Email List','Other'].map(s => `<option value="${s}" ${s === project.leadSource ? 'selected' : ''}>${s}</option>`).join('')}
                         </select>
                     </div>
                 </div>
@@ -4024,33 +4024,8 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 ).join('');
             } else if (pipeline) { pipeline.innerHTML = ''; }
 
-            // Upcoming appointments
-            const apptDiv = document.getElementById('homeAppointments');
-            if (apptDiv) {
-                const upcoming = projects.filter(p => p.appointmentDate && p.status === 'Appointment Set')
-                    .sort((a, b) => new Date(a.appointmentDate) - new Date(b.appointmentDate))
-                    .slice(0, 5);
-                if (upcoming.length === 0) { apptDiv.innerHTML = ''; }
-                else {
-                    const today = new Date(); today.setHours(0,0,0,0);
-                    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
-                    apptDiv.innerHTML = `<div class="room-card" style="border-left:4px solid #8b5cf6;">
-                        <h3 style="margin:0 0 8px 0;">Upcoming Appointments (${upcoming.length})</h3>
-                        ${upcoming.map(p => {
-                            const d = new Date(p.appointmentDate);
-                            const isToday = d >= today && d < tomorrow;
-                            const label = isToday ? '<strong style="color:#ef4444;">TODAY</strong>' : d.toLocaleDateString();
-                            return `<div style="padding:8px;margin-bottom:6px;background:#f8f9fa;border-radius:6px;cursor:pointer;" onclick="viewProjectDetail('${p.id}')">
-                                <div style="display:flex;justify-content:space-between;">
-                                    <strong>${p.customerName}</strong>
-                                    <span style="font-size:12px;">${label} ${d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true})}</span>
-                                </div>
-                                <p style="margin:2px 0;font-size:12px;color:#666;">${p.projectName}${p.appointmentNotes ? ' — ' + p.appointmentNotes : ''}</p>
-                            </div>`;
-                        }).join('')}
-                    </div>`;
-                }
-            }
+            // My Appointments — day-browsable card (CertaPro-style)
+            _renderMyAppointments();
 
             // Today's action items
             const actionsDiv = document.getElementById('homeTodayActions');
@@ -4092,6 +4067,97 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                     actionsDiv.innerHTML = '';
                 }
             }
+        }
+
+        // ─── My Appointments card (day navigator) ───
+        // Shows one day at a time (default today) with ◀ ▶ to flip days —
+        // appointments come from projects.appointmentDate (set in the app
+        // or by the online-booking agent).
+        window._apptCardOffset = 0;
+
+        function _apptStatusesShown() { return ['New Lead', 'Appointment Set', 'Current Estimate']; }
+
+        function _apptsOnDay(dayStart) {
+            const dayEnd = new Date(dayStart); dayEnd.setDate(dayEnd.getDate() + 1);
+            return projects.filter(p => {
+                if (!p.appointmentDate || !_apptStatusesShown().includes(p.status)) return false;
+                const d = new Date(p.appointmentDate);
+                return d >= dayStart && d < dayEnd;
+            }).sort((a, b) => new Date(a.appointmentDate) - new Date(b.appointmentDate));
+        }
+
+        function _renderMyAppointments() {
+            const apptDiv = document.getElementById('homeAppointments');
+            if (!apptDiv) return;
+            const offset = window._apptCardOffset || 0;
+            const day = new Date(); day.setHours(0, 0, 0, 0); day.setDate(day.getDate() + offset);
+            const dayAppts = _apptsOnDay(day);
+
+            const dayLabel = offset === 0 ? 'TODAY' : offset === 1 ? 'TOMORROW' : offset === -1 ? 'YESTERDAY'
+                : day.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
+            const dateSub = day.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+            let body;
+            if (dayAppts.length === 0) {
+                // Point at the next upcoming appointment so an empty day is never a dead end
+                const dayEnd = new Date(day); dayEnd.setDate(dayEnd.getDate() + 1);
+                const next = projects.filter(p => p.appointmentDate && _apptStatusesShown().includes(p.status) && new Date(p.appointmentDate) >= dayEnd)
+                    .sort((a, b) => new Date(a.appointmentDate) - new Date(b.appointmentDate))[0];
+                let nextHtml = '';
+                if (next) {
+                    const nd = new Date(next.appointmentDate);
+                    const ndStart = new Date(nd); ndStart.setHours(0, 0, 0, 0);
+                    const today0 = new Date(); today0.setHours(0, 0, 0, 0);
+                    const nextOffset = Math.round((ndStart - today0) / 86400000);
+                    nextHtml = `<div style="margin-top:8px;text-align:center;">
+                        <button onclick="window._apptCardOffset=${nextOffset};_renderMyAppointments();" style="background:#f5f3ff;color:#7c3aed;border:1px solid #ddd6fe;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;">
+                            Next: ${nd.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} — ${nd.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })} ${next.customerName} →
+                        </button>
+                    </div>`;
+                }
+                body = `<div style="text-align:center;color:#9ca3af;padding:14px 8px 10px;font-size:14px;">No appointments</div>${nextHtml}`;
+            } else {
+                body = dayAppts.map(p => {
+                    const d = new Date(p.appointmentDate);
+                    const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+                    const cust = (window.customers || []).find(c => c.id === p.customerId);
+                    const addr = cust && cust.address ? cust.address : '';
+                    const note = (p.appointmentNotes || '').split('\n')[0];
+                    const notePreview = note.length > 70 ? note.slice(0, 70) + '…' : note;
+                    return `<div style="display:flex;gap:10px;padding:10px 8px;margin-bottom:6px;background:#f8f9fa;border-radius:8px;cursor:pointer;align-items:flex-start;" onclick="viewProjectDetail('${p.id}')">
+                        <div style="min-width:66px;text-align:center;">
+                            <div style="font-weight:700;font-size:15px;color:#1e293b;">${time}</div>
+                            <div style="font-size:10px;color:${getStatusColor(p.status)};font-weight:600;margin-top:2px;">${p.status === 'Appointment Set' ? 'SET' : p.status.toUpperCase()}</div>
+                        </div>
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-weight:700;color:#1e293b;">${p.customerName}</div>
+                            <div style="font-size:12px;color:#7c3aed;font-weight:600;">${p.projectName}${p.bookedOnline ? ' · 🌐 booked online' : ''}</div>
+                            ${addr ? `<div style="font-size:12px;color:#666;margin-top:2px;">📍 ${addr}</div>` : ''}
+                            ${notePreview ? `<div style="font-size:12px;color:#888;margin-top:2px;">${notePreview}</div>` : ''}
+                        </div>
+                        <div style="color:#cbd5e1;align-self:center;">›</div>
+                    </div>`;
+                }).join('');
+            }
+
+            apptDiv.innerHTML = `<div class="room-card" style="border-left:4px solid #8b5cf6;padding:12px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <h3 style="margin:0;font-size:16px;">📅 My Appointments</h3>
+                    <div style="display:flex;gap:6px;align-items:center;">
+                        ${offset !== 0 ? `<button onclick="window._apptCardOffset=0;_renderMyAppointments();" style="background:none;border:1px solid #e5e7eb;border-radius:6px;padding:4px 10px;font-size:12px;color:#6b7280;cursor:pointer;">Today</button>` : ''}
+                        <button onclick="showCalendar()" style="background:none;border:1px solid #e5e7eb;border-radius:6px;padding:4px 10px;font-size:14px;cursor:pointer;" title="Full calendar">🗓️</button>
+                    </div>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;background:#1e293b;border-radius:8px;padding:6px 8px;">
+                    <button onclick="window._apptCardOffset=(window._apptCardOffset||0)-1;_renderMyAppointments();" style="background:none;border:none;color:#fff;font-size:18px;padding:6px 14px;cursor:pointer;">‹</button>
+                    <div style="text-align:center;color:#fff;">
+                        <div style="font-weight:700;font-size:13px;letter-spacing:1px;">${dayLabel} <span style="background:#8b5cf6;border-radius:10px;padding:1px 8px;font-size:11px;margin-left:4px;">${dayAppts.length}</span></div>
+                        <div style="font-size:10px;color:#94a3b8;">${dateSub}</div>
+                    </div>
+                    <button onclick="window._apptCardOffset=(window._apptCardOffset||0)+1;_renderMyAppointments();" style="background:none;border:none;color:#fff;font-size:18px;padding:6px 14px;cursor:pointer;">›</button>
+                </div>
+                <div style="margin-top:8px;">${body}</div>
+            </div>`;
         }
 
         // Appointment setting
