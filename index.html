@@ -154,7 +154,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v127</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v128</span>
             </div>
 
             <!-- Global Search -->
@@ -1107,7 +1107,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v127</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v128</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -9215,19 +9215,26 @@ Based on the journal entries, calculate and return this JSON (no other text):
         }
 
         // Customer-facing process that auto-fills on the proposal.
+        // Written to SELL: every step says what we do AND why it protects
+        // the floor — nothing promised beyond the actual process.
         function _garageEpoxyScopeHtml(meta) {
             const flakes = meta.system !== 'solid';
-            const colorLine = meta.color ? ` — <strong>${meta.color}</strong>` : '';
-            return `<div style="font-size:8.5pt;color:#475569;margin:0 0 3px;">GarageGuard® 2-Part Waterborne Epoxy · ${flakes ? 'Decorative Flake Broadcast System' : 'Solid Color System'}</div>
-            <p style="margin:4px 0;">${(meta.sqft || 0).toLocaleString()} sq ft of concrete transformed into a sealed, showroom-quality floor${colorLine} — hot-tire resistant, easy to clean, and built for daily garage use.</p>
+            const chip = 'display:inline-block;padding:2px 10px;border:1px solid #cbd5e1;border-radius:10px;background:#f8fafc;color:#334155;font-size:8.5pt;font-weight:700;margin:2px 6px 2px 0;';
+            return `<div style="font-size:8.5pt;color:#475569;margin:0 0 4px;">GarageGuard® 2-Part Waterborne Epoxy · ${flakes ? 'Decorative Flake Broadcast System' : 'Solid Color System'}</div>
+            <div style="margin:2px 0 6px;">
+                <span style="${chip}">FLOOR AREA: ${(meta.sqft || 0).toLocaleString()} SQ FT</span>
+                <span style="${chip}">${flakes ? 'DECORATIVE FLAKE FINISH' : 'SOLID COLOR FINISH'}</span>
+                ${meta.color ? `<span style="${chip}">COLOR: ${meta.color.toUpperCase()}</span>` : ''}
+            </div>
+            <p style="margin:4px 0;">This is a full mechanical-prep coating system — not a paint-over. Most garage floors that peel were coated over dirty, sealed, or damp concrete; every step below exists to make sure yours never does. The result: a sealed, showroom-quality surface that shrugs off hot tires, oil, and road salt, and wipes clean with a mop.</p>
             <ol style="margin:4px 0;padding-left:18px;">
-            <li><strong>Diamond-grind the slab.</strong> The entire floor is machine-ground with dust-extraction equipment — stripping old sealers and contaminants and opening the concrete so the epoxy bonds <em>into</em> the slab, not just onto it.</li>
-            <li><strong>Moisture &amp; pH testing.</strong> After grinding, the slab is tested with a Tramex moisture meter and a rapid pH test. If moisture reads above 4%, we review it with you before coating — mitigation, if ever needed, is quoted separately.</li>
-            <li><strong>Detail prep.</strong> Vacuum and tack the floor dust-free, degrease any oil spots, and fill minor cracks and divots so the finish reads clean and uniform.</li>
-            <li><strong>Base coat.</strong> A full coat of GarageGuard® two-part waterborne epoxy is rolled across every specified area${flakes ? ', with decorative vinyl flakes broadcast evenly into the wet coat' : ''}.</li>
-            ${flakes ? '<li><strong>Flake dress-down.</strong> Once cured, loose flakes are scraped and vacuumed away, leaving an even, comfortable texture.</li>' : ''}
-            <li><strong>Finish coat.</strong> A second coat of GarageGuard® epoxy ${flakes ? 'locks the flakes in and builds the protective wear layer' : 'builds a uniform, durable wear layer'}.</li>
-            <li><strong>Joint detail.</strong> Polyurethane color sealant applied to the garage-to-driveway joint, blended to match the floor.</li>
+            <li><strong>Diamond-grind every square foot.</strong> We machine-grind the entire slab with commercial diamond-grinding equipment and dust extraction — stripping old sealers, contaminants, and weak surface paste, and opening the pores of the concrete so the epoxy bonds <em>into</em> the slab, not just onto it. This is the step DIY kits and budget installers skip, and it's the single biggest reason coatings fail.</li>
+            <li><strong>Test — don't guess.</strong> After grinding, we test the slab with a Tramex moisture meter and a rapid pH test. Moisture trapped under a coating is what causes bubbling and peeling later; if readings come back above 4%, we review the findings with you before a drop of epoxy goes down (mitigation, if ever needed, is quoted separately — never sprung on you).</li>
+            <li><strong>Detail prep.</strong> We vacuum and tack the floor dust-free, degrease any oil-stained areas, and fill minor cracks and divots — so the finished floor reads clean and uniform edge to edge.</li>
+            <li><strong>Base coat.</strong> We roll a full coat of GarageGuard® two-part waterborne epoxy — a professional catalyzed coating whose two components chemically cure into a film far harder than any off-the-shelf floor paint${flakes ? ' — and hand-broadcast decorative vinyl flakes evenly into the wet coat for consistent coverage wall to wall' : ''}.</li>
+            ${flakes ? '<li><strong>Flake dress-down.</strong> Once the base coat cures, we scrape and vacuum away every loose flake, leaving an even, comfortable texture that also helps hide everyday dust and tire marks.</li>' : ''}
+            <li><strong>Finish coat.</strong> A second full coat of GarageGuard® ${flakes ? 'locks the flakes in permanently and builds the protective wear layer' : 'builds a uniform, durable wear layer'} — this two-coat build is what stands up to hot-tire pickup and daily traffic year after year.</li>
+            <li><strong>The finishing touch.</strong> We seal the garage-to-driveway joint with a polyurethane color sealant blended to your floor — a detail most installers skip that keeps water and salt from working under the edge of the coating.</li>
             </ol>
             <p style="margin:4px 0;font-size:8.5pt;color:#555;"><em>Cure: light foot traffic in ~24 hours, vehicles after ~72 hours. Vertical stem walls not included unless listed. Customer provides: a cleared garage, clear access, power &amp; water, and no dust-producing activity nearby during coating and cure.</em></p>`;
         }
