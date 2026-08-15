@@ -154,7 +154,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v126</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v127</span>
             </div>
 
             <!-- Global Search -->
@@ -1107,7 +1107,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v126</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v127</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -2935,9 +2935,40 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             return jobNumber;
         }
 
-        window.createNewProject = async function(customerId, customerName) {
-            const projectName = prompt('Project name (e.g., "Whole House Interior"):');
-            if (!projectName || !projectName.trim()) return;
+        // CertaPro-style: pick a type — the project names itself. No free-text
+        // naming (standardized names keep project-level pipeline readable);
+        // "Something else…" stays for rare cases (renovations, HOA work).
+        window.createNewProject = function(customerId, customerName) {
+            window._projTypeCtx = { customerId, customerName };
+            const old = document.getElementById('projTypeSheet');
+            if (old) old.remove();
+            const sheet = document.createElement('div');
+            sheet.id = 'projTypeSheet';
+            sheet.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:flex-end;justify-content:center;';
+            sheet.addEventListener('click', e => { if (e.target === sheet) sheet.remove(); });
+            const btnStyle = 'display:block;width:100%;padding:15px;margin-bottom:10px;border:2px solid #e5e7eb;border-radius:12px;background:#f8f9fa;font-size:16px;font-weight:600;cursor:pointer;text-align:left;';
+            sheet.innerHTML = `
+                <div style="background:#fff;border-radius:16px 16px 0 0;padding:18px 16px 26px;width:100%;max-width:520px;">
+                    <h3 style="margin:0 0 4px;">New Project</h3>
+                    <p style="margin:0 0 14px;color:#666;font-size:13px;">Pick the type — the project names and numbers itself.</p>
+                    <button style="${btnStyle}" onclick="_createProjectOfType('Interior Painting')">🏠 Interior Painting</button>
+                    <button style="${btnStyle}" onclick="_createProjectOfType('Exterior Painting')">🌳 Exterior Painting</button>
+                    <button style="${btnStyle}" onclick="_createProjectOfType('__custom__')">✏️ Something else…</button>
+                    <button style="${btnStyle}text-align:center;background:#fff;color:#888;border-style:dashed;margin-bottom:0;" onclick="document.getElementById('projTypeSheet').remove()">Cancel</button>
+                </div>`;
+            document.body.appendChild(sheet);
+        };
+
+        window._createProjectOfType = async function(typeName) {
+            const ctx = window._projTypeCtx || {};
+            const customerId = ctx.customerId, customerName = ctx.customerName;
+            document.getElementById('projTypeSheet')?.remove();
+            if (!customerId) return;
+            let projectName = typeName;
+            if (typeName === '__custom__') {
+                projectName = prompt('Project name (e.g., "Deck Staining", "Renovation"):');
+                if (!projectName || !projectName.trim()) return;
+            }
             try {
                 const jobNumber = await generateJobNumber();
                 const projectData = {
@@ -6098,11 +6129,24 @@ Based on the journal entries, calculate and return this JSON (no other text):
                      : d;
         };
 
+        // True customer value: ONE effective proposal per project (landed one,
+        // else the latest) + standalone estimates. Never stacks A/B/C/D
+        // versions of the same job ($4,500 quoted 4 ways is $4,500, not $18k).
+        function _customerTrueValue(customerId) {
+            let sum = 0;
+            (projects || []).filter(p => p.customerId === customerId).forEach(p => {
+                const prop = (typeof getEffectiveProposal === 'function') ? getEffectiveProposal(p) : null;
+                sum += (prop && prop.grandTotal) || 0;
+            });
+            (jobs || []).filter(j => j.customerId === customerId && (!j.projectId || !projects.find(p => p.id === j.projectId)))
+                .forEach(j => { sum += j.grandTotal || 0; });
+            return sum;
+        }
+
         // ── Customer contact card (view + inline edit) ──────────────────────
         function _customerInfoCardHTML(customer) {
-            const custJobs = (jobs || []).filter(j => j.customerId === customer.id);
             const custProjects = (projects || []).filter(p => p.customerId === customer.id);
-            const totalValue = custJobs.reduce((sum, j) => sum + (j.grandTotal || 0), 0);
+            const totalValue = _customerTrueValue(customer.id);
             const phone = formatPhone(customer.phone);
             const hasContact = phone || customer.email || customer.address;
             return `
@@ -6255,7 +6299,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
 
             const customerJobs = jobs.filter(j => j.customerId === customerId);
             const customerProjects = projects.filter(p => p.customerId === customerId);
-            const totalValue = customerJobs.reduce((sum, j) => sum + (j.grandTotal || 0), 0);
+            const totalValue = _customerTrueValue(customerId);
             // Standalone estimates (not linked to a project)
             const standaloneJobs = customerJobs.filter(j => !j.projectId);
 
@@ -7035,23 +7079,36 @@ Based on the journal entries, calculate and return this JSON (no other text):
             } catch(e) { console.error('Error loading jobs:', e); }
         }
 
-        function updateLeadCounts() {
-            // Count unique customers per status from projects (source of truth)
-            const customersByStatus = {};
-            LEAD_STATUSES.forEach(s => customersByStatus[s] = new Set());
+        // One row per PROJECT (+ legacy standalone proposals) — the project is
+        // the unit of the pipeline; the customer is just the folder. A customer
+        // with a Complete exterior and an In Progress interior appears in BOTH
+        // buckets, once per project — that's correct, not a duplicate.
+        function _buildLeadRows() {
+            const rows = [];
+            projects.forEach(p => {
+                const prop = (typeof getEffectiveProposal === 'function') ? getEffectiveProposal(p) : null;
+                const versions = jobs.filter(j => j.projectId === p.id).length;
+                rows.push({ kind: 'project', id: p.id, customerId: p.customerId, name: p.customerName, label: p.projectName || 'Project', jobNumber: p.jobNumber || '', status: p.status || 'New Lead', value: (prop && prop.grandTotal) || 0, versions, date: p.createdAt });
+            });
+            // Legacy standalone proposals + proposals whose project is gone
+            jobs.filter(j => !j.projectId || !projects.find(p => p.id === j.projectId)).forEach(j => {
+                rows.push({ kind: 'job', id: j.id, customerId: j.customerId, name: j.customerName, label: j.jobName || 'Estimate', jobNumber: '', status: j.status || 'New Lead', value: j.grandTotal || 0, date: j.date });
+            });
+            return rows;
+        }
 
-            // Get all unique customer IDs
-            const allCustomerIds = new Set([...projects.map(p => p.customerId), ...jobs.map(j => j.customerId)]);
-            allCustomerIds.forEach(cid => {
-                const status = getCustomerLeadStatus(cid);
-                // Map expanded statuses to the 5 lead statuses
-                const mapped = mapToLeadStatus(status);
-                if (customersByStatus[mapped]) customersByStatus[mapped].add(cid);
+        function updateLeadCounts() {
+            // Count projects per bucket — matches the dashboard pipeline.
+            const countByStatus = {};
+            LEAD_STATUSES.forEach(s => countByStatus[s] = 0);
+            _buildLeadRows().forEach(r => {
+                const mapped = mapToLeadStatus(r.status);
+                if (mapped in countByStatus) countByStatus[mapped]++;
             });
 
             LEAD_STATUSES.forEach(s => {
                 const countEl = document.getElementById('count-' + s);
-                if (countEl) countEl.textContent = customersByStatus[s].size;
+                if (countEl) countEl.textContent = countByStatus[s];
 
                 const btnEl = document.getElementById('filterBtn-' + s);
                 if (btnEl) {
@@ -7123,23 +7180,9 @@ Based on the journal entries, calculate and return this JSON (no other text):
         function displayJobList() {
             const list = document.getElementById('jobList');
 
-            // Build customer list from projects + standalone jobs
-            const customerMap = {};
-            projects.forEach(p => {
-                if (!customerMap[p.customerId]) customerMap[p.customerId] = { name: p.customerName, id: p.customerId, projectCount: 0, totalValue: 0, status: '' };
-                customerMap[p.customerId].projectCount++;
-            });
-            jobs.forEach(j => {
-                if (!customerMap[j.customerId]) customerMap[j.customerId] = { name: j.customerName, id: j.customerId, projectCount: 0, totalValue: 0, status: '' };
-                customerMap[j.customerId].totalValue += (j.grandTotal || 0);
-            });
-            // Set status for each customer
-            Object.values(customerMap).forEach(c => { c.status = getCustomerLeadStatus(c.id); });
-
-            // Filter by status (map expanded project statuses to lead statuses for comparison)
-            let filtered = Object.values(customerMap);
+            let filtered = _buildLeadRows();
             if (window.currentJobFilter && window.currentJobFilter !== 'All') {
-                filtered = filtered.filter(c => mapToLeadStatus(c.status) === window.currentJobFilter);
+                filtered = filtered.filter(r => mapToLeadStatus(r.status) === window.currentJobFilter);
             }
 
             if (filtered.length === 0) {
@@ -7147,16 +7190,20 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 return;
             }
 
-            filtered.sort((a,b) => b.totalValue - a.totalValue);
-            list.innerHTML = filtered.map(c => `
-                <div class="selection-card" onclick="viewCustomerDetail('${c.id}')" style="cursor:pointer;padding:12px 15px;">
+            filtered.sort((a, b) => (b.value - a.value) || (new Date(b.date || 0) - new Date(a.date || 0)));
+            list.innerHTML = filtered.map(r => {
+                const open = r.kind === 'project' ? `viewProjectDetail('${r.id}')` : `viewJob('${r.id}')`;
+                const when = r.date ? new Date(r.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+                const sub = [r.label, r.jobNumber, r.value > 0 ? '$' + r.value.toFixed(2) + (r.versions > 1 ? ' (' + r.versions + ' versions)' : '') : '', when].filter(Boolean).join(' · ');
+                return `
+                <div class="selection-card" onclick="${open}" style="cursor:pointer;padding:12px 15px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;">
-                        <h3 style="margin:0;font-size:16px;">${c.name}</h3>
-                        ${getStatusBadge(c.status)}
+                        <h3 style="margin:0;font-size:16px;">${r.name}</h3>
+                        ${getStatusBadge(r.status)}
                     </div>
-                    <p style="margin:4px 0 0;font-size:13px;color:#666;">${c.projectCount > 0 ? c.projectCount + ' project(s) • ' : ''}$${c.totalValue.toFixed(2)}</p>
-                </div>
-            `).join('');
+                    <p style="margin:4px 0 0;font-size:13px;color:#666;">${sub}</p>
+                </div>`;
+            }).join('');
         }
 
         window.viewJob = function(jobId) {
