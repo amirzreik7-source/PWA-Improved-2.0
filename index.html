@@ -154,7 +154,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v124</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v125</span>
             </div>
 
             <!-- Global Search -->
@@ -355,6 +355,7 @@
                     <button class="btn btn-info btn-small" onclick="openAddServiceModal()">+ Add Service</button>
                     <button class="btn btn-info btn-small" onclick="openCabinetModal()" style="background:#7c3aed;">🚪 Cabinets &amp; Built-Ins</button>
                     <button class="btn btn-info btn-small" onclick="openShadowBoxModal()" style="background:#0e7490;">🖼️ Shadow Boxes</button>
+                    <button class="btn btn-info btn-small" onclick="openGarageEpoxyModal()" style="background:#334155;">🏁 Garage Floor Epoxy</button>
                 </div>
             </div>
 
@@ -765,6 +766,36 @@
             <button class="btn btn-success btn-large" onclick="saveShadowBox()">Save</button>
         </div>
 
+        <!-- GARAGE FLOOR EPOXY MODAL -->
+        <div id="garageEpoxyModal" class="screen">
+            <button class="btn btn-back" onclick="closeGarageEpoxyModal()">← Back to Room</button>
+            <h2 class="screen-title" id="garageEpoxyModalTitle">Garage Floor Epoxy</h2>
+            <div class="room-card">
+                <p style="color:#666;margin:0 0 12px;font-size:13px;">GarageGuard® 2-part waterborne epoxy system. Enter the floor square footage — grind, prep, coats, and joint sealant are all included in the rate.</p>
+                <div class="form-group">
+                    <label>Floor area (sq ft) *</label>
+                    <input type="number" id="garageEpoxySqft" min="0" step="1" inputmode="numeric" placeholder="e.g. 440" oninput="updateGarageEpoxyPreview()">
+                </div>
+                <div class="form-group">
+                    <label>System</label>
+                    <select id="garageEpoxySystem" onchange="updateGarageEpoxyPreview()">
+                        <option value="flakes">With decorative flakes (standard)</option>
+                        <option value="solid">Solid color — no flakes</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Color (optional)</label>
+                    <input type="text" id="garageEpoxyColor" placeholder="e.g. Slate Gray with black & white flake">
+                </div>
+                <div class="form-group">
+                    <label>Price override (optional)</label>
+                    <input type="number" id="garageEpoxyPriceOverride" step="0.01" min="0" placeholder="Leave blank to auto-calculate" oninput="updateGarageEpoxyPreview()">
+                </div>
+                <div id="garageEpoxyPricePreview" style="padding:12px;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;color:#334155;"></div>
+            </div>
+            <button class="btn btn-success btn-large" onclick="saveGarageEpoxy()">Save</button>
+        </div>
+
         <!-- BULK CHANGE MODAL -->
         <div id="bulkChangeModal" class="screen">
             <button class="btn btn-back" onclick="showScreen('estimateStep4Screen')">← Back</button>
@@ -1076,7 +1107,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v124</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v125</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -1819,6 +1850,7 @@
             ClosetFlatRate: 130,
             CabinetDoorPrice: 180,
             CabinetDrawerPrice: 80,
+            GarageEpoxyPricePerSqft: 6.5,
             ShadowBoxSmallPrice: 80,
             ShadowBoxBigPrice: 180,
             SpindlePricePerCoat: 10,
@@ -8814,11 +8846,13 @@ Based on the journal entries, calculate and return this JSON (no other text):
             container.innerHTML = services.map((svc, i) => {
                 const isCab = !!svc.cabinet;
                 const isShadow = !!svc.shadowBox;
-                const isBuilder = isCab || isShadow;
-                const edit = isCab ? `editCabinet(${i})` : isShadow ? `editShadowBox(${i})` : `editService(${i})`;
-                const icon = isCab ? '🚪' : isShadow ? '🖼️' : '✓';
+                const isEpoxy = !!svc.garageEpoxy;
+                const isBuilder = isCab || isShadow || isEpoxy;
+                const edit = isCab ? `editCabinet(${i})` : isShadow ? `editShadowBox(${i})` : isEpoxy ? `editGarageEpoxy(${i})` : `editService(${i})`;
+                const icon = isCab ? '🚪' : isShadow ? '🖼️' : isEpoxy ? '🏁' : '✓';
                 const a = isShadow ? { bg: '#ecfeff', border: '#0e7490', text: '#155e75' }
                         : isCab    ? { bg: '#f3f0ff', border: '#7c3aed', text: '#5b21b6' }
+                        : isEpoxy  ? { bg: '#f1f5f9', border: '#334155', text: '#1e293b' }
                                    : { bg: '#d4edda', border: '#28a745', text: '#155724' };
                 return `
                 <div style="padding:12px;margin-bottom:8px;border-radius:8px;background:${a.bg};border:2px solid ${a.border};position:relative;cursor:pointer;" onclick="${edit}">
@@ -9102,6 +9136,105 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 window.currentRoom.additionalServices.push(svc);
             }
             window._editingShadowBoxIndex = -1;
+            displayRoomDetail();
+            showScreen('roomDetailScreen');
+        };
+
+        // === GARAGE FLOOR EPOXY (GarageGuard® 2-part waterborne system) ===
+        // Flat-rate builder service like Cabinets/Shadow Boxes: operator only
+        // enters sq ft; process, product, and pricing are pre-baked.
+        function _garageEpoxyRate() {
+            return PRICING.GarageEpoxyPricePerSqft || 6.5;
+        }
+
+        function computeGarageEpoxyTotal(meta) {
+            return (meta.sqft || 0) * (_garageEpoxyRate());
+        }
+
+        function _garageEpoxySummary(meta) {
+            const sys = meta.system === 'solid' ? 'Solid color' : 'Decorative flake system';
+            return `${(meta.sqft || 0).toLocaleString()} sq ft · ${sys}${meta.color ? ' · ' + meta.color : ''}`;
+        }
+
+        // Customer-facing process that auto-fills on the proposal.
+        function _garageEpoxyScopeHtml(meta) {
+            const flakes = meta.system !== 'solid';
+            const colorLine = meta.color ? ` — <strong>${meta.color}</strong>` : '';
+            return `<div style="font-size:8.5pt;color:#475569;margin:0 0 3px;">GarageGuard® 2-Part Waterborne Epoxy · ${flakes ? 'Decorative Flake Broadcast System' : 'Solid Color System'}</div>
+            <p style="margin:4px 0;">${(meta.sqft || 0).toLocaleString()} sq ft of concrete transformed into a sealed, showroom-quality floor${colorLine} — hot-tire resistant, easy to clean, and built for daily garage use.</p>
+            <ol style="margin:4px 0;padding-left:18px;">
+            <li><strong>Diamond-grind the slab.</strong> The entire floor is machine-ground with dust-extraction equipment — stripping old sealers and contaminants and opening the concrete so the epoxy bonds <em>into</em> the slab, not just onto it.</li>
+            <li><strong>Moisture &amp; pH testing.</strong> After grinding, the slab is tested with a Tramex moisture meter and a rapid pH test. If moisture reads above 4%, we review it with you before coating — mitigation, if ever needed, is quoted separately.</li>
+            <li><strong>Detail prep.</strong> Vacuum and tack the floor dust-free, degrease any oil spots, and fill minor cracks and divots so the finish reads clean and uniform.</li>
+            <li><strong>Base coat.</strong> A full coat of GarageGuard® two-part waterborne epoxy is rolled across every specified area${flakes ? ', with decorative vinyl flakes broadcast evenly into the wet coat' : ''}.</li>
+            ${flakes ? '<li><strong>Flake dress-down.</strong> Once cured, loose flakes are scraped and vacuumed away, leaving an even, comfortable texture.</li>' : ''}
+            <li><strong>Finish coat.</strong> A second coat of GarageGuard® epoxy ${flakes ? 'locks the flakes in and builds the protective wear layer' : 'builds a uniform, durable wear layer'}.</li>
+            <li><strong>Joint detail.</strong> Polyurethane color sealant applied to the garage-to-driveway joint, blended to match the floor.</li>
+            </ol>
+            <p style="margin:4px 0;font-size:8.5pt;color:#555;"><em>Cure: light foot traffic in ~24 hours, vehicles after ~72 hours. Vertical stem walls not included unless listed. Customer provides: a cleared garage, clear access, power &amp; water, and no dust-producing activity nearby during coating and cure.</em></p>`;
+        }
+
+        function _readGarageEpoxyForm() {
+            return {
+                sqft: parseFloat(document.getElementById('garageEpoxySqft').value) || 0,
+                system: document.getElementById('garageEpoxySystem').value || 'flakes',
+                color: document.getElementById('garageEpoxyColor').value.trim()
+            };
+        }
+
+        window.updateGarageEpoxyPreview = function() {
+            const meta = _readGarageEpoxyForm();
+            const rate = _garageEpoxyRate();
+            const auto = computeGarageEpoxyTotal(meta);
+            const override = parseFloat(document.getElementById('garageEpoxyPriceOverride').value);
+            const total = (override > 0) ? override : auto;
+            document.getElementById('garageEpoxyPricePreview').innerHTML =
+                `<div>${(meta.sqft || 0).toLocaleString()} sq ft × $${rate.toFixed(2)}/sq ft</div><div style="font-weight:700;font-size:16px;margin-top:4px;">Total: $${total.toFixed(2)}${override > 0 ? ' (override)' : ''}</div>`;
+        };
+
+        window.openGarageEpoxyModal = function(editIndex) {
+            window._editingGarageEpoxyIndex = (typeof editIndex === 'number') ? editIndex : -1;
+            const editing = window._editingGarageEpoxyIndex >= 0;
+            const svc = editing ? window.currentRoom.additionalServices[window._editingGarageEpoxyIndex] : null;
+            // Pre-fill sq ft from the room's L×W when starting fresh.
+            const dimSqft = Math.round((window.currentRoom?.length || 0) * (window.currentRoom?.width || 0));
+            const meta = svc?.garageEpoxy || { sqft: dimSqft || '', system: 'flakes', color: '' };
+            document.getElementById('garageEpoxyModalTitle').textContent = editing ? 'Edit Garage Floor Epoxy' : 'Garage Floor Epoxy';
+            document.getElementById('garageEpoxySqft').value = meta.sqft || '';
+            document.getElementById('garageEpoxySystem').value = meta.system || 'flakes';
+            document.getElementById('garageEpoxyColor').value = meta.color || '';
+            document.getElementById('garageEpoxyPriceOverride').value = (editing && svc.garageEpoxy?.priceOverride) ? svc.garageEpoxy.priceOverride : '';
+            updateGarageEpoxyPreview();
+            showScreen('garageEpoxyModal');
+        };
+
+        window.editGarageEpoxy = function(index) { openGarageEpoxyModal(index); };
+
+        window.closeGarageEpoxyModal = function() {
+            displayRoomDetail();
+            showScreen('roomDetailScreen');
+        };
+
+        window.saveGarageEpoxy = function() {
+            markUnsaved();
+            const meta = _readGarageEpoxyForm();
+            if (meta.sqft <= 0) { alert('Enter the floor square footage.'); return; }
+
+            meta.rate = _garageEpoxyRate();
+            const override = parseFloat(document.getElementById('garageEpoxyPriceOverride').value);
+            if (override > 0) meta.priceOverride = override;
+            meta.scopeHtml = _garageEpoxyScopeHtml(meta);
+
+            const total = (override > 0) ? override : computeGarageEpoxyTotal(meta);
+            const svc = { name: 'Garage Floor Epoxy — GarageGuard® System', description: _garageEpoxySummary(meta), price: total, qty: 1, total, garageEpoxy: meta };
+
+            if (!window.currentRoom.additionalServices) window.currentRoom.additionalServices = [];
+            if (window._editingGarageEpoxyIndex >= 0) {
+                window.currentRoom.additionalServices[window._editingGarageEpoxyIndex] = svc;
+            } else {
+                window.currentRoom.additionalServices.push(svc);
+            }
+            window._editingGarageEpoxyIndex = -1;
             displayRoomDetail();
             showScreen('roomDetailScreen');
         };
@@ -16671,6 +16804,8 @@ Generate JSON with these EXACT keys:
                                 rows += `<tr><td colspan="5" style="padding:8px 10px;font-size:9pt;background-color:#faf8ff;border-left:3px solid #7c3aed;${pca}"><div style="font-weight:700;color:#5b21b6;margin-bottom:2px">${svc.name}</div>${svc.cabinet.scopeHtml}</td></tr>`;
                             } else if (svc.shadowBox && svc.shadowBox.scopeHtml) {
                                 rows += `<tr><td colspan="5" style="padding:8px 10px;font-size:9pt;background-color:#f0fdff;border-left:3px solid #0e7490;${pca}"><div style="font-weight:700;color:#155e75;margin-bottom:2px">${svc.name}</div>${svc.shadowBox.scopeHtml}</td></tr>`;
+                            } else if (svc.garageEpoxy && svc.garageEpoxy.scopeHtml) {
+                                rows += `<tr><td colspan="5" style="padding:8px 10px;font-size:9pt;background-color:#f8fafc;border-left:3px solid #334155;${pca}"><div style="font-weight:700;color:#1e293b;margin-bottom:2px;letter-spacing:0.3px;">${svc.name}</div>${svc.garageEpoxy.scopeHtml}</td></tr>`;
                             } else {
                                 rows += `<tr><td style="padding:4px 4px 4px 14px;font-size:9pt">${svc.name}</td><td colspan="3" style="font-size:9pt">${svc.description||''}</td><td style="padding:4px;font-size:9pt"></td></tr>`;
                             }
