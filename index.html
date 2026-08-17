@@ -154,7 +154,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v130</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v131</span>
             </div>
 
             <!-- Global Search -->
@@ -461,6 +461,12 @@
                             <option value="2">2 Coats</option>
                         </select>
                     </div>
+                </div>
+                <div class="form-group" style="margin-top:15px;padding:12px;border:2px dashed #f59e0b;border-radius:10px;background:#fffbeb;">
+                    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin:0;">
+                        <input type="checkbox" id="surfaceOptional" style="width:20px;height:20px;">
+                        <span><strong>⭐ Optional add-on</strong><br><span style="font-size:12px;color:#92400e;">Not in the project price — offered separately on the proposal for the customer to add.</span></span>
+                    </label>
                 </div>
             </div>
 
@@ -1107,7 +1113,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v130</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v131</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -7775,13 +7781,13 @@ Based on the journal entries, calculate and return this JSON (no other text):
             // Setup hours
             total += (room.setupHours || 0) * PRICING.LaborRate;
 
-            // All surfaces
+            // All surfaces (optional add-ons are priced but NOT in the total)
             room.surfaces.forEach(surface => {
                 const cost = calculateSurfaceCost(surface);
                 surface.laborCost = cost.laborCost;
                 surface.materialCost = cost.materialCost;
                 surface.total = cost.total;
-                total += cost.total;
+                if (!surface.optional) total += cost.total;
             });
 
             // Additional services
@@ -7870,13 +7876,14 @@ Based on the journal entries, calculate and return this JSON (no other text):
                     const coatsDisplay = surface.usePrimer ? `${surface.coats}/${surface.primerCoats}` : `${surface.coats}`;
                     box.innerHTML = `
                         <div style="padding-right:35px;">
-                            <h4 style="margin:0 0 5px 0;color:#155724;">✓ ${_surfaceDisplayName(surface)}</h4>
+                            <h4 style="margin:0 0 5px 0;color:#155724;">✓ ${_surfaceDisplayName(surface)}${surface.optional ? ' <span style="background:#f59e0b;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;vertical-align:middle;">⭐ OPTIONAL</span>' : ''}</h4>
                             ${surface.sidingType ? '<p style="margin:2px 0;font-size:9pt;color:#155724;">' + (surface.applicationMethod || 'Spray & Backroll') + '</p>' : ''}
                             <p style="margin:2px 0;font-size:10pt;color:#155724;">${surface.color} • ${surface.sheen} • ${coatsDisplay} coat(s)</p>
                             ${primerInfo}
-                            <p style="margin:2px 0;font-weight:bold;color:#155724;">$${(cost.total || 0).toFixed(2)}</p>
+                            <p style="margin:2px 0;font-weight:bold;color:#155724;">$${(cost.total || 0).toFixed(2)}${surface.optional ? ' <span style="font-weight:600;font-size:10pt;color:#b45309;">(not in total)</span>' : ''}</p>
                         </div>
                     `;
+                    if (surface.optional) { box.style.background = '#fffbeb'; box.style.border = '2px dashed #f59e0b'; }
                     
                     // Small delete button
                     const deleteBtn = document.createElement('button');
@@ -7923,11 +7930,12 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 const coatsDisplay = surface.usePrimer ? `${surface.coats}/${surface.primerCoats}` : `${surface.coats}`;
                 box.innerHTML = `
                     <div style="padding-right:35px;">
-                        <h4 style="margin:0 0 5px 0;color:#155724;">✓ ${surface.surfaceType}</h4>
+                        <h4 style="margin:0 0 5px 0;color:#155724;">✓ ${surface.surfaceType}${surface.optional ? ' <span style="background:#f59e0b;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;vertical-align:middle;">⭐ OPTIONAL</span>' : ''}</h4>
                         <p style="margin:2px 0;font-size:10pt;color:#155724;">${surface.color || ''} • ${surface.sheen || ''} • ${coatsDisplay} coat(s)</p>
-                        <p style="margin:2px 0;font-weight:bold;color:#155724;">$${(cost.total || 0).toFixed(2)}</p>
+                        <p style="margin:2px 0;font-weight:bold;color:#155724;">$${(cost.total || 0).toFixed(2)}${surface.optional ? ' <span style="font-weight:600;font-size:10pt;color:#b45309;">(not in total)</span>' : ''}</p>
                     </div>
                 `;
+                if (surface.optional) { box.style.background = '#fffbeb'; box.style.border = '2px dashed #f59e0b'; }
                 box.addEventListener('click', () => openSurfaceConfig(surface.surfaceType));
                 // Delete button
                 const delBtn = document.createElement('button');
@@ -8013,8 +8021,10 @@ Based on the journal entries, calculate and return this JSON (no other text):
             let materialTotal = 0;
             let servicesTotal = 0;
 
+            let optionalTotal = 0;
             window.currentRoom.surfaces.forEach(surface => {
                 const cost = calculateSurfaceCost(surface);
+                if (surface.optional) { optionalTotal += cost.total || 0; return; }
                 laborTotal += cost.laborCost || 0;
                 materialTotal += cost.materialCost || 0;
             });
@@ -8027,7 +8037,19 @@ Based on the journal entries, calculate and return this JSON (no other text):
             document.getElementById('roomMaterialTotal').textContent = `$${materialTotal.toFixed(2)}`;
             const svcEl = document.getElementById('roomServicesTotal');
             if (svcEl) svcEl.textContent = `$${servicesTotal.toFixed(2)}`;
-            document.getElementById('roomGrandTotal').textContent = `$${(laborTotal + materialTotal + servicesTotal).toFixed(2)}`;
+            const grandEl = document.getElementById('roomGrandTotal');
+            grandEl.textContent = `$${(laborTotal + materialTotal + servicesTotal).toFixed(2)}`;
+            // Optional add-ons ride along, never inside the total
+            let optEl = document.getElementById('roomOptionalNote');
+            if (optionalTotal > 0) {
+                if (!optEl) {
+                    optEl = document.createElement('div');
+                    optEl.id = 'roomOptionalNote';
+                    optEl.style.cssText = 'font-size:12px;color:#b45309;font-weight:600;margin-top:4px;text-align:right;';
+                    grandEl.parentElement.appendChild(optEl);
+                }
+                optEl.textContent = `⭐ + $${optionalTotal.toFixed(2)} optional add-ons (not in total)`;
+            } else if (optEl) { optEl.remove(); }
         }
 
         window.handleRoomPhotoUpload = async function(event) {
@@ -8409,8 +8431,10 @@ Based on the journal entries, calculate and return this JSON (no other text):
                     document.getElementById('usePrimer').checked = false;
                     document.getElementById('primerSection').classList.add('hidden');
                 }
+                document.getElementById('surfaceOptional').checked = !!existingSurface.optional;
             } else {
                 // New surface — check profile for defaults
+                document.getElementById('surfaceOptional').checked = false;
                 if (canAutoCalc) {
                     document.getElementById('surfaceQuantity').value = autoCalcQty.toFixed(2);
                     document.getElementById('autoCalcNote').classList.remove('hidden');
@@ -8742,8 +8766,10 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 updateSurfaceSheenDropdown(existingSurface.productId, existingSurface.sheen);
                 document.getElementById('surfaceColor').value = existingSurface.color || '';
                 document.getElementById('surfaceCoats').value = existingSurface.coats || 2;
+                document.getElementById('surfaceOptional').checked = !!existingSurface.optional;
             } else {
                 // New surface — check profile for defaults
+                document.getElementById('surfaceOptional').checked = false;
                 const profile = currentEstimate.profileId ? (window.profiles || []).find(p => p.id === currentEstimate.profileId) : null;
                 const mapping = profile?.surfaceMapping?.[surfaceType];
                 const profileProductId = mapping ? (typeof mapping === 'string' ? mapping : mapping.productId) : '';
@@ -8827,6 +8853,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
             surface.usePrimer = usePrimer;
             surface.primerProductId = usePrimer ? primerProductId : '';
             surface.primerCoats = usePrimer ? primerCoats : 0;
+            surface.optional = !!document.getElementById('surfaceOptional')?.checked;
 
             // Siding material + application method (exterior Siding only).
             if (surfaceType === 'Siding' && currentEstimate.jobType === 'Exterior') {
@@ -9659,6 +9686,7 @@ Only return JSON, no other text.`;
             let totalLabor = 0;
             let totalMaterials = 0;
             let servicesTotal = 0;   // cabinets, shadow boxes, etc. (flat price)
+            let optionalTotal = 0;   // ⭐ optional add-ons — NEVER in the price
 
             const roomsHTML = currentEstimate.rooms.map(room => {
                 const roomTotal = calculateRoomTotal(room);
@@ -9666,6 +9694,7 @@ Only return JSON, no other text.`;
                 let roomMaterials = 0;
 
                 room.surfaces.forEach(s => {
+                    if (s.optional) { optionalTotal += s.total || 0; return; }
                     roomLabor += s.laborCost || 0;
                     roomMaterials += s.materialCost || 0;
                 });
@@ -9689,10 +9718,10 @@ Only return JSON, no other text.`;
                             ${room.surfaces.map(s => {
                                 const product = products.find(p => p.id === s.productId);
                                 return `
-                                    <div style="margin:4px 0;padding:8px;background:#f8f9fa;border-radius:6px;font-size:13px;">
-                                        <strong>${s.surfaceType}</strong>: ${s.quantity} ${s.unit} •
+                                    <div style="margin:4px 0;padding:8px;background:${s.optional ? '#fffbeb' : '#f8f9fa'};border-radius:6px;font-size:13px;${s.optional ? 'border:1px dashed #f59e0b;' : ''}">
+                                        <strong>${s.surfaceType}</strong>${s.optional ? ' <span style="background:#f59e0b;color:#fff;font-size:10px;font-weight:700;padding:1px 7px;border-radius:8px;">⭐ OPTIONAL</span>' : ''}: ${s.quantity} ${s.unit} •
                                         ${product ? product.brand + ' ' + product.name : ''} ${s.sheen} ${s.color} • ${s.coats} coat(s)
-                                        ${showRoomPrices ? `<span style="float:right;color:#11998e;font-weight:600;">$${s.total.toFixed(2)}</span>` : ''}
+                                        ${showRoomPrices ? `<span style="float:right;color:${s.optional ? '#b45309' : '#11998e'};font-weight:600;">$${s.total.toFixed(2)}</span>` : ''}
                                     </div>
                                 `;
                             }).join('')}
@@ -9707,6 +9736,7 @@ Only return JSON, no other text.`;
             currentEstimate.totalLabor = totalLabor;
             currentEstimate.totalMaterials = totalMaterials;
             currentEstimate.servicesTotal = servicesTotal;
+            currentEstimate.optionalTotal = optionalTotal;
             // Only set basePrice from calculation if user hasn't manually overridden it
             if (!currentEstimate.priceOverride) {
                 currentEstimate.basePrice = totalLabor + totalMaterials + servicesTotal;
@@ -9722,6 +9752,7 @@ Only return JSON, no other text.`;
 
                 currentEstimate.rooms.forEach(r => {
                     r.surfaces.forEach(surf => {
+                        if (surf.optional) return;   // not sold yet — exclude from gallons
                         const qty = surf.quantity || 0;
                         const coats = surf.coats || 1;
                         // Get actual coverage rate for this surface type
@@ -10004,6 +10035,18 @@ Only return JSON, no other text.`;
                 creditsContainer.innerHTML = credits.map(c =>
                     `<p><strong>${c.name}:</strong> <span style="color:#e74c3c;">-$${c.amount.toFixed(2)}</span></p>`
                 ).join('');
+                // Optional add-ons info row (never in the totals)
+                const optTotal = currentEstimate.optionalTotal || 0;
+                let optRow = document.getElementById('reviewOptionalRow');
+                if (optTotal > 0) {
+                    if (!optRow) {
+                        optRow = document.createElement('p');
+                        optRow.id = 'reviewOptionalRow';
+                        optRow.style.cssText = 'color:#b45309;font-size:13px;font-weight:600;';
+                        creditsContainer.parentElement.insertBefore(optRow, creditsContainer.nextSibling);
+                    }
+                    optRow.innerHTML = `⭐ Optional add-ons offered: $${optTotal.toFixed(2)} <span style="font-weight:400;">(shown separately on proposal, not in total)</span>`;
+                } else if (optRow) { optRow.remove(); }
             }
 
             // Show change order rows + subtotal line in price summary
@@ -16431,6 +16474,7 @@ Generate JSON with these EXACT keys:
                 totalLabor: currentEstimate.totalLabor,
                 totalMaterials: currentEstimate.totalMaterials,
                 servicesTotal: currentEstimate.servicesTotal != null ? currentEstimate.servicesTotal : _servicesTotalOf(currentEstimate.rooms),
+                optionalTotal: currentEstimate.optionalTotal || 0,
                 grandTotal: currentEstimate.grandTotal,
                 companySignature: currentEstimate.companySignature || null,
                 customerSignature: currentEstimate.customerSignature || null,
@@ -16476,6 +16520,7 @@ Generate JSON with these EXACT keys:
                         projectSummaryNotes: job.projectSummaryNotes,
                         totalLabor: job.totalLabor,
                         totalMaterials: job.totalMaterials,
+                        optionalTotal: job.optionalTotal || 0,
                         grandTotal: job.grandTotal,
                         companySignature: job.companySignature,
                         customerSignature: job.customerSignature,
@@ -16872,13 +16917,14 @@ Generate JSON with these EXACT keys:
                         _lastSourceProjectId = room._sourceProjectId;
                     }
                     const svcCount = (room.additionalServices || []).length;
-                    const rowCount = room.surfaces.length + svcCount + 1;
+                    const _includedSurfaces = room.surfaces.filter(s => !s.optional);
+                    const rowCount = _includedSurfaces.length + svcCount + 1;
                     const photos = room.photos || (room.photoData ? [room.photoData] : []);
                     const photoCell = photos.length > 0
                         ? `<td rowspan="${rowCount+1}" style="padding:4px;vertical-align:top;page-break-inside:avoid;break-inside:avoid"><div style="display:grid;grid-template-columns:${photos.length>1?'1fr 1fr':'1fr'};gap:3px;page-break-inside:avoid;break-inside:avoid">${photos.map(p=>'<img src="'+getPhotoSrc(p)+'" style="width:100%;max-height:150px;border-radius:3px;object-fit:cover;page-break-inside:avoid;break-inside:avoid">').join('')}</div></td>`
                         : `<td rowspan="${rowCount+1}"></td>`;
                     rows += `<tr><td colspan="5" style="font-weight:700;font-size:9.5pt;color:#1e3a8a;padding:6px;background-color:#eff6ff;border-left:3px solid #2563eb;${pca}">${room.name.toUpperCase()}</td>${photoCell}</tr>`;
-                    room.surfaces.forEach(s => {
+                    _includedSurfaces.forEach(s => {
                         const product = products.find(p=>p.id===s.productId);
                         const primerCoats = s.usePrimer ? s.primerCoats : 0;
                         let prodDisplay = product ? product.name : 'Product';
@@ -16889,8 +16935,8 @@ Generate JSON with these EXACT keys:
                         }
                         rows += `<tr><td style="padding:4px 4px 4px 14px;font-size:9pt">${surfaceLabel}</td><td style="padding:4px;font-size:9pt">${prodDisplay}</td><td style="padding:4px;font-size:9pt">${s.sheen}</td><td style="padding:4px;font-size:9pt">${s.color}</td><td style="padding:4px;font-size:9pt">${s.coats}/${primerCoats}</td></tr>`;
                     });
-                    if (room.surfaces.length > 0) {
-                        const brands = [...new Set(room.surfaces.map(s=>{const p=products.find(pr=>pr.id===s.productId);return p?p.brand:'Brand'}))].join(', ');
+                    if (_includedSurfaces.length > 0) {
+                        const brands = [...new Set(_includedSurfaces.map(s=>{const p=products.find(pr=>pr.id===s.productId);return p?p.brand:'Brand'}))].join(', ');
                         rows += `<tr><td colspan="5" style="padding:3px 6px;font-size:8.5pt;color:#666">Brands: ${brands}</td></tr>`;
                     }
                     if (room.additionalServices?.length > 0) {
@@ -16973,6 +17019,50 @@ Generate JSON with these EXACT keys:
                     'Change Orders',
                     `<span style="color:${summaryColor};">${summarySign}$${Math.abs(changeOrdersTotal).toFixed(2)}</span>`
                 );
+            }
+
+            // ─── OPTIONAL ADD-ONS — offered separately, never in the price.
+            // Own box (clone of the Change Orders look, amber accent) placed
+            // right before the price summary. Percentage discounts are
+            // honored so the customer sees their real add-on price.
+            let optionalSectionHTML = '';
+            if (!window._crewMode) {
+                const optItems = [];
+                (currentEstimate.rooms || []).forEach(room => {
+                    (room.surfaces || []).forEach(s => {
+                        if (!s.optional) return;
+                        const product = products.find(p => p.id === s.productId);
+                        optItems.push({
+                            name: s.surfaceType || 'Add-on',
+                            room: room.name || '',
+                            spec: [product ? product.brand + ' ' + product.name : '', s.color, s.sheen, s.coats ? s.coats + ' coat(s)' : ''].filter(Boolean).join(' · '),
+                            price: s.total || 0
+                        });
+                    });
+                });
+                if (optItems.length > 0) {
+                    const hasPctDiscount = currentEstimate.discountType === 'percentage' && (currentEstimate.discountValue || 0) > 0;
+                    const dvVal = currentEstimate.discountValue || 0;
+                    const optRows = optItems.map(it => {
+                        const net = hasPctDiscount ? it.price * (1 - dvVal / 100) : it.price;
+                        const priceCell = hasPctDiscount
+                            ? `<span style="text-decoration:line-through;color:#9ca3af;font-weight:400;font-size:9pt;">$${it.price.toFixed(2)}</span> $${net.toFixed(2)}`
+                            : `$${net.toFixed(2)}`;
+                        return `<tr style="border-bottom:1px solid #fde68a;">
+                            <td style="padding:8px 10px;vertical-align:top;">
+                                <strong style="font-size:10pt;color:#111;">${it.name}</strong>${it.room ? ` <span style="font-size:8.5pt;color:#92400e;">· ${it.room}</span>` : ''}
+                                ${it.spec ? `<div style="font-size:9pt;color:#374151;margin-top:3px;line-height:1.45;">${it.spec}</div>` : ''}
+                            </td>
+                            <td style="padding:8px 10px;vertical-align:top;text-align:right;font-size:10pt;color:#92400e;font-weight:700;white-space:nowrap;">${priceCell}</td>
+                        </tr>`;
+                    }).join('');
+                    optionalSectionHTML = `</div><div style="padding:0 0.3in">${sectionTitle('OPTIONAL ADD-ONS')}
+                        <div style="font-size:9pt;color:#555;margin:2px 0 4px;">Available on request — priced separately and <strong>not included in your project total below</strong>${hasPctDiscount ? `. Your ${dvVal}% discount is already applied to these prices` : ''}.</div>
+                        <table style="width:100%;border-collapse:collapse;margin:8px 0;border:1px solid #f59e0b;background-color:#fffbeb;">
+                            ${optRows}
+                        </table>
+                    </div><div class="page-content">`;
+                }
             }
 
             // Crew mode: build schedule and pricing
@@ -17078,6 +17168,7 @@ ${(co.consultantPhone||co.consultantEmail)?'<div style="text-align:right;font-si
 </div>
 ${window._crewMode ? crewScheduleHTML : ''}
 ${window._crewMode ? '' : changeOrdersSectionHTML}
+${optionalSectionHTML}
 ${window._crewMode ? crewPricingHTML : `${sectionTitle('PRICE SUMMARY')}
 <div style="margin:8px 0">
 ${roomPriceSummary}
@@ -17092,7 +17183,7 @@ ${priceRow('Balance','$'+balanceAmount.toFixed(2))}
 </div>`}
 ${sectionTitle('PROJECT SUMMARY')}
 <p><strong>Included in the price above:</strong></p>
-<ul>${groupedRooms.map(r=>{const parts=[...r.surfaces.map(s=>(s.surfaceType==='Siding'&&s.sidingType)?('Siding — '+s.sidingType):(s.surfaceType||'Surface')),...(r.additionalServices||[]).map(svc=>svc.name)];return '<li><strong>'+r.name+'</strong>'+(parts.length?' ('+parts.join(', ')+')':'')+'</li>';}).join('')}</ul>
+<ul>${groupedRooms.map(r=>{const parts=[...r.surfaces.filter(s=>!s.optional).map(s=>(s.surfaceType==='Siding'&&s.sidingType)?('Siding — '+s.sidingType):(s.surfaceType||'Surface')),...(r.additionalServices||[]).map(svc=>svc.name)];return parts.length?'<li><strong>'+r.name+'</strong> ('+parts.join(', ')+')</li>':'<li><strong>'+r.name+'</strong></li>';}).join('')}</ul>
 ${projectNotes ? '<p style="margin-top:8px">'+projectNotes+'</p>' : ''}
 ${detailsHTML}
 ${window._crewMode ? '' : sectionTitle((_isCombined ? 'PAINTING' : currentEstimate.jobType.toUpperCase()+' PAINTING')+' CONTRACT TERMS')}
