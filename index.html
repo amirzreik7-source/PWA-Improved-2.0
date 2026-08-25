@@ -154,7 +154,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v131</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v132</span>
             </div>
 
             <!-- Global Search -->
@@ -1113,7 +1113,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v131</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v132</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -11733,6 +11733,50 @@ Only return JSON, no other text.`;
         // client html2pdf path if the worker is unreachable/errors.
         const NSP_PDF_WORKER = 'https://nsp-pdf.amirzreik7.workers.dev';
 
+        // ── Image inlining for the PDF worker ───────────────────────────────
+        // The worker's headless Chrome INTERMITTENTLY fails to download the
+        // Firebase Storage images (logo, consultant headshot, room photos)
+        // at render time → PDFs with broken-image icons even though the
+        // on-screen proposal is fine. Fix: never make the worker fetch them.
+        // As soon as a proposal/report is displayed we fetch every remote
+        // <img> into a base64 cache (CORS on Storage is `*`, and the images
+        // are already loading on-screen so this is fast + SW-cached). At Save
+        // PDF time we swap the cached data URLs into the HTML SYNCHRONOUSLY
+        // (iOS blocks the new tab if we await before form.submit). Anything
+        // not cached yet falls back to its URL, exactly as before.
+        window._pdfImgCache = window._pdfImgCache || new Map();
+        function _warmPdfImageCache(rootEl) {
+            if (!rootEl) return;
+            rootEl.querySelectorAll('img').forEach(img => {
+                const src = img.getAttribute('src') || '';
+                if (!/^https?:\/\//i.test(src) || window._pdfImgCache.has(src)) return;
+                window._pdfImgCache.set(src, null); // in-flight marker
+                fetch(src)
+                    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+                    .then(blob => new Promise((res, rej) => {
+                        const fr = new FileReader();
+                        fr.onload = () => res(fr.result);
+                        fr.onerror = rej;
+                        fr.readAsDataURL(blob);
+                    }))
+                    .then(dataUrl => { if (dataUrl && dataUrl.startsWith('data:')) window._pdfImgCache.set(src, dataUrl); else window._pdfImgCache.delete(src); })
+                    .catch(e => { window._pdfImgCache.delete(src); console.warn('PDF image cache miss:', src.slice(0, 80), e?.message || e); });
+            });
+        }
+        function _inlineCachedImages(html) {
+            let total = 0, inlined = 0;
+            const out = String(html || '').replace(/<img\b([^>]*?)\ssrc="([^"]+)"/gi, (m, pre, src) => {
+                if (!/^https?:\/\//i.test(src)) return m;
+                total++;
+                const dataUrl = window._pdfImgCache.get(src.replace(/&amp;/g, '&'));
+                if (!dataUrl) return m;
+                inlined++;
+                return '<img' + pre + ' src="' + dataUrl + '"';
+            });
+            if (total && inlined < total) console.warn(`PDF: ${total - inlined}/${total} images not cached yet — sent as URLs`);
+            return out;
+        }
+
         // PRIMARY Save-PDF path: submit a real <form> straight to the render
         // worker with target="_blank". The browser navigates a new tab to the
         // worker and displays the returned PDF (Content-Disposition: inline) —
@@ -14480,6 +14524,7 @@ Generate JSON with these EXACT keys:
             _backfillReportStats(project, project.completionReport);
             const html = _renderReportHTML(project, project.completionReport);
             document.getElementById('reportContent').innerHTML = html;
+            _warmPdfImageCache(document.getElementById('reportContent'));
             showScreen('reportViewScreen');
             window.scrollTo(0, 0);
         };
@@ -15690,7 +15735,7 @@ Generate JSON with these EXACT keys:
             // Direct form submit to the render worker (see _submitPdfForm).
             const reportEl = document.querySelector('#reportContent .report-doc');
             if (!reportEl) { alert('Open the report first, then tap Save PDF.'); return; }
-            const html = document.getElementById('reportContent').innerHTML;
+            const html = _inlineCachedImages(document.getElementById('reportContent').innerHTML);
             const project = projects.find(p => p.id === window._reportProjectId);
             const filename = _buildReportFilename(project) + '.pdf';
             _submitPdfForm(html, 'report', filename);
@@ -16735,7 +16780,7 @@ Generate JSON with these EXACT keys:
             // Direct form submit to the render worker (see _submitPdfForm).
             const proposalEl = document.querySelector('#proposalContent .proposal-doc') || document.getElementById('proposalContent');
             if (!proposalEl) { alert('Open the proposal first, then tap Save PDF.'); return; }
-            const html = proposalEl.outerHTML;
+            const html = _inlineCachedImages(proposalEl.outerHTML);
             _submitPdfForm(html, 'proposal', _buildProposalFilename() + '.pdf');
         };
 
@@ -17250,6 +17295,9 @@ ${currentEstimate.customerSignature ? '<p>Signature:</p><img src="'+currentEstim
                     img.src = img.getAttribute('data-src');
                     img.removeAttribute('data-src');
                 });
+                // Pre-fetch remote images into the PDF base64 cache now, so
+                // Save PDF can inline them synchronously (see _warmPdfImageCache).
+                _warmPdfImageCache(proposalEl);
             });
         };
 
