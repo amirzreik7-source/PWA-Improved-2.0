@@ -157,7 +157,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v135</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v136</span>
             </div>
 
             <!-- Global Search -->
@@ -1116,7 +1116,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v135</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v136</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -1261,6 +1261,7 @@
             <button class="btn btn-back" onclick="showScreen('homeScreen')">← Back</button>
             <h2 class="screen-title">Product Profiles</h2>
             <button class="btn btn-success" onclick="showScreen('newProfileScreen')" style="margin-bottom: 12px;">➕ Create Profile</button>
+            <button class="btn btn-info" onclick="setupBmExteriorTiers(this)" style="margin-bottom: 12px;" title="Create or refresh the Budget / Mid / Premium Benjamin Moore exterior profiles">✨ Set up / refresh BM exterior tiers</button>
             <button class="btn btn-info" onclick="setupBmInteriorTiers(this)" style="margin-bottom: 20px;" title="Create or refresh the Budget / Mid / Premium Benjamin Moore interior profiles">✨ Set up / refresh BM interior tiers</button>
             <div id="profileList"></div>
         </div>
@@ -2900,6 +2901,45 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             { name: 'Regal Select',   brand: 'Benjamin Moore', category: 'Paint', sheen: 'Matte', type: 'Interior' }
         ];
 
+        // ── EXTERIOR tiers (v136) ─────────────────────────────────────
+        // "Match existing color" defaults: siding is the one thing that
+        // changes (TBD / 2 coats); every other surface is a trim-color
+        // Match at 1 coat. The Step 3 "Color change" mode flips everything
+        // to TBD / 2 coats at fill time (see _applyColorMode).
+        const EXT_TIER_SHARED_DEFAULTS = {
+            'Siding':            { sheen: 'Low Luster', coats: 2, color: 'TBD' },
+            'Soffit':            { sheen: 'Low Luster', coats: 1, color: 'Match' },
+            'Fascia':            { sheen: 'Low Luster', coats: 1, color: 'Match' },
+            'Windows':           { sheen: 'Low Luster', coats: 1, color: 'Match' },
+            'Front Door':        { sheen: 'Low Luster', coats: 1, color: 'Match' },
+            'Front Door Frame':  { sheen: 'Low Luster', coats: 1, color: 'Match' },
+            'Doors':             { sheen: 'Low Luster', coats: 1, color: 'Match' },
+            'Garage Door':       { sheen: 'Low Luster', coats: 1, color: 'Match' },
+            'Garage Door Frame': { sheen: 'Low Luster', coats: 1, color: 'Match' },
+            'Shutters':          { sheen: 'Low Luster', coats: 1, color: 'Match' },
+            'Bay Windows':       { sheen: 'Low Luster', coats: 1, color: 'Match' },
+            'Railings':          { sheen: 'Semi-Gloss', coats: 1, color: 'Match' }
+        };
+        const BM_EXT_DTM = 'Ultra Spec HP DTM Acrylic'; // metal railings — always DTM, every tier
+        // One product for the whole house; railings always get the DTM.
+        function _extTierMap(product) {
+            const m = {};
+            Object.keys(EXT_TIER_SHARED_DEFAULTS).forEach(s => { m[s] = s === 'Railings' ? BM_EXT_DTM : product; });
+            return m;
+        }
+        // Benjamin Moore — Exterior ladder: Ultra Spec Exterior → Element Guard → Aura.
+        const BM_EXTERIOR_TIERS = [
+            { tierKey: 'bm-ext-budget',  tier: 'Budget',  brand: 'Benjamin Moore', type: 'Exterior', name: 'Benjamin Moore — Essential (Budget)',  defaults: EXT_TIER_SHARED_DEFAULTS, products: _extTierMap('Ultra Spec Exterior') },
+            { tierKey: 'bm-ext-mid',     tier: 'Mid',     brand: 'Benjamin Moore', type: 'Exterior', name: 'Benjamin Moore — Signature (Mid)',     defaults: EXT_TIER_SHARED_DEFAULTS, products: _extTierMap('Element Guard Acrylic') },
+            { tierKey: 'bm-ext-premium', tier: 'Premium', brand: 'Benjamin Moore', type: 'Exterior', name: 'Benjamin Moore — Luxury (Premium)',    defaults: EXT_TIER_SHARED_DEFAULTS, products: _extTierMap('Aura Exterior') }
+        ];
+        const TIER_REQUIRED_PRODUCTS_EXT = [
+            { name: 'Ultra Spec Exterior',   brand: 'Benjamin Moore', category: 'Paint', sheen: 'Low Luster', type: 'Exterior' },
+            { name: 'Element Guard Acrylic', brand: 'Benjamin Moore', category: 'Paint', sheen: 'Low Luster', type: 'Exterior' },
+            { name: 'Aura Exterior',         brand: 'Benjamin Moore', category: 'Paint', sheen: 'Low Luster', type: 'Exterior' },
+            { name: BM_EXT_DTM,              brand: 'Benjamin Moore', category: 'Paint', sheen: 'Semi-Gloss', type: 'Exterior' }
+        ];
+
         function _findProduct(name, brand, type) {
             return (window.products || []).find(p =>
                 p.brand === brand && p.name === name && (p.type === type || p.type === 'Both'));
@@ -2920,7 +2960,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             for (const def of definitions) {
                 const surfaceMapping = {};
                 for (const [surface, prodName] of Object.entries(def.products)) {
-                    const d = TIER_SHARED_DEFAULTS[surface] || { sheen: '', coats: 2, color: 'TBD' };
+                    const d = (def.defaults || TIER_SHARED_DEFAULTS)[surface] || { sheen: '', coats: 2, color: 'TBD' };
                     const prod = _findProduct(prodName, def.brand, def.type || 'Interior');
                     surfaceMapping[surface] = { productId: prod ? prod.id : '', sheen: d.sheen, color: d.color, coats: d.coats };
                 }
@@ -2945,6 +2985,22 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 if (typeof displayProfileSelection === 'function') displayProfileSelection();
                 if (typeof displayProfileList === 'function') displayProfileList();
                 alert(`Benjamin Moore interior tiers ready (${res.created} created, ${res.updated} updated).`);
+            } catch (e) {
+                alert('Tier setup failed: ' + (e?.message || e));
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = orig; }
+            }
+        };
+
+        // One-tap setup for the Benjamin Moore exterior tiers.
+        window.setupBmExteriorTiers = async function(btn) {
+            const orig = btn ? btn.textContent : '';
+            if (btn) { btn.disabled = true; btn.textContent = 'Setting up…'; }
+            try {
+                const res = await setupTierProfiles(BM_EXTERIOR_TIERS, TIER_REQUIRED_PRODUCTS_EXT);
+                if (typeof displayProfileSelection === 'function') displayProfileSelection();
+                if (typeof displayProfileList === 'function') displayProfileList();
+                alert(`Benjamin Moore exterior tiers ready (${res.created} created, ${res.updated} updated).`);
             } catch (e) {
                 alert('Tier setup failed: ' + (e?.message || e));
             } finally {
@@ -7567,6 +7623,16 @@ Based on the journal entries, calculate and return this JSON (no other text):
         // Short "Walls · Trim · Ceiling" product summary for a tier card.
         function _tierSummary(profile) {
             const m = profile.surfaceMapping || {};
+            if (profile.type === 'Exterior') {
+                const body = _productName(m['Siding']?.productId);
+                const trim = _productName(m['Soffit']?.productId) || _productName(m['Windows']?.productId);
+                const rail = _productName(m['Railings']?.productId);
+                const parts = [];
+                if (body) parts.push(`Body: ${body}`);
+                if (trim && trim !== body) parts.push(`Trim: ${trim}`);
+                if (rail) parts.push(`Railings: ${rail}`);
+                return parts.join(' · ');
+            }
             const walls = _productName(m['Walls']?.productId);
             const trim = _productName(m['Doors']?.productId) || _productName(m['Baseboards']?.productId);
             const ceiling = _productName(m['Ceiling']?.productId);
@@ -7629,12 +7695,13 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 </div>`;
             });
 
-            // Offer one-tap setup of the BM interior tiers when they're not yet present.
-            const hasBmInteriorTiers = brands.includes('Benjamin Moore');
-            if (jobType === 'Interior' && !hasBmInteriorTiers) {
-                html += `<div class="selection-card" style="border:1px dashed #2563eb;background:#f0f6ff;" onclick="setupBmInteriorTiers(this)">
+            // Offer one-tap setup of the BM tiers for this job type when absent.
+            const hasBmTiers = brands.includes('Benjamin Moore');
+            if (!hasBmTiers && (jobType === 'Interior' || jobType === 'Exterior')) {
+                const fn = jobType === 'Exterior' ? 'setupBmExteriorTiers' : 'setupBmInteriorTiers';
+                html += `<div class="selection-card" style="border:1px dashed #2563eb;background:#f0f6ff;" onclick="${fn}(this)">
                     <h3>✨ Set up Benjamin Moore tiers</h3>
-                    <p style="color:#555;">Creates the Budget / Mid / Premium interior profiles.</p>
+                    <p style="color:#555;">Creates the Budget / Mid / Premium ${jobType.toLowerCase()} profiles.</p>
                 </div>`;
             }
 
@@ -7654,6 +7721,8 @@ Based on the journal entries, calculate and return this JSON (no other text):
             list.innerHTML = html;
         }
 
+        window.displayProfileSelection = displayProfileSelection; // used by inline onclick in the color-mode chooser
+
         window.selectProfileBrand = function(brand) {
             window._profileBrand = brand;
             displayProfileSelection(true);
@@ -7666,7 +7735,47 @@ Based on the journal entries, calculate and return this JSON (no other text):
 
         window.selectProfile = function(profileId) {
             currentEstimate.profileId = profileId;
+            const profile = profileId ? (window.profiles || []).find(p => p.id === profileId) : null;
+            // Tier profiles get one more tap: are we matching the existing
+            // colors (trim Match / 1 coat) or changing them (all TBD / 2 coats)?
+            if (profile && profile.tierKey) { _showColorModeChooser(profile); return; }
+            currentEstimate.colorMode = null;
             goToEstimateStep(4);
+        };
+
+        function _showColorModeChooser(profile) {
+            const list = document.getElementById('profileSelectionList');
+            const subtitle = document.querySelector('#estimateStep3Screen .screen-subtitle');
+            const isExt = currentEstimate.jobType === 'Exterior';
+            if (subtitle) subtitle.textContent = `${TIER_BADGE[profile.tier] || profile.tier} — keeping the colors, or changing them?`;
+            const matchDesc = isExt
+                ? 'Siding TBD · 2 coats. Trim, doors, frames, garage, shutters, railings all <b>Match · 1 coat</b>.'
+                : 'Walls &amp; closets TBD · 2 coats. Ceilings, doors, windows, trim all <b>Match · 1 coat</b>.';
+            list.innerHTML = `
+                <div class="selection-card" style="background:#f8f9fa;border-style:dashed;" onclick="displayProfileSelection(true)">
+                    <h3 style="margin:0;color:#555;">← Choose a different tier</h3>
+                </div>
+                <div class="selection-card" onclick="selectColorMode('match')">
+                    <h3>🎯 Match existing colors</h3>
+                    <p style="color:#555;">${matchDesc}</p>
+                </div>
+                <div class="selection-card" onclick="selectColorMode('change')">
+                    <h3>🎨 Color change</h3>
+                    <p style="color:#555;">Every surface <b>TBD · 2 coats</b>. You pick the colors as you go.</p>
+                </div>
+                <p style="font-size:12px;color:#888;margin:6px 4px 0;">Just a pre-fill — every surface stays editable.</p>`;
+        }
+
+        window.selectColorMode = function(mode) {
+            currentEstimate.colorMode = mode === 'change' ? 'change' : 'match';
+            goToEstimateStep(4);
+        };
+
+        // Color-mode override on profile pre-fills. 'match' = the profile's own
+        // defaults (trim Match/1, body TBD/2). 'change' = everything TBD/2.
+        window._applyColorMode = function(mapping, color, coats) {
+            if (mapping && currentEstimate?.colorMode === 'change') return { color: 'TBD', coats: 2 };
+            return { color, coats };
         };
 
 
@@ -8554,8 +8663,11 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 // Support old format (string) and new format (object)
                 const profileProductId = mapping ? (typeof mapping === 'string' ? mapping : mapping.productId) : '';
                 const profileSheen = (mapping && typeof mapping === 'object') ? mapping.sheen : '';
-                const profileColor = (mapping && typeof mapping === 'object') ? mapping.color : '';
-                const profileCoats = (mapping && typeof mapping === 'object') ? mapping.coats : 2;
+                const _cm = window._applyColorMode(mapping,
+                    (mapping && typeof mapping === 'object') ? mapping.color : '',
+                    (mapping && typeof mapping === 'object') ? mapping.coats : 2);
+                const profileColor = _cm.color;
+                const profileCoats = _cm.coats;
 
                 // Industry-standard fallbacks when no profile mapping exists.
                 // Ceiling → Flat / 1 coat; trim-family → Semi-Gloss interior or
@@ -8879,8 +8991,11 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 const mapping = profile?.surfaceMapping?.[surfaceType];
                 const profileProductId = mapping ? (typeof mapping === 'string' ? mapping : mapping.productId) : '';
                 const profileSheen = (mapping && typeof mapping === 'object') ? mapping.sheen : '';
-                const profileColor = (mapping && typeof mapping === 'object') ? mapping.color : '';
-                const profileCoats = (mapping && typeof mapping === 'object') ? mapping.coats : 2;
+                const _cm = window._applyColorMode(mapping,
+                    (mapping && typeof mapping === 'object') ? mapping.color : '',
+                    (mapping && typeof mapping === 'object') ? mapping.coats : 2);
+                const profileColor = _cm.color;
+                const profileCoats = _cm.coats;
 
                 document.getElementById('surfaceQuantity').value = '';
                 // Industry-standard fallbacks layered under profile overrides.
