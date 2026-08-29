@@ -12,6 +12,9 @@
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; overflow-x: hidden; }
         body::after { content: ''; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); z-index: -1; }
         script { display: none !important; }
+        /* ⚠️ Hides ANY element that lands in <body> after the module <script>.
+           Dynamic overlays MUST attach via _overlayRoot() (#appContainer),
+           never document.body.appendChild — they'd be invisible (v133 bug). */
         body > script ~ * { display: none !important; }
         .container { max-width: 800px; margin: 0 auto; background: white; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); overflow: hidden; }
         .header { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; padding: 30px; text-align: center; }
@@ -154,7 +157,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v132</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v133</span>
             </div>
 
             <!-- Global Search -->
@@ -1113,7 +1116,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v132</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v133</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -2941,6 +2944,13 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             return jobNumber;
         }
 
+        // Where dynamically-created overlays/sheets/toasts must be attached.
+        // The stylesheet has `body > script ~ * { display:none !important }`,
+        // so anything appended to <body> after the module script is invisible.
+        window._overlayRoot = function() {
+            return document.getElementById('appContainer') || document.body;
+        };
+
         // CertaPro-style: pick a type — the project names itself. No free-text
         // naming (standardized names keep project-level pipeline readable);
         // "Something else…" stays for rare cases (renovations, HOA work).
@@ -2962,7 +2972,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                     <button style="${btnStyle}" onclick="_createProjectOfType('__custom__')">✏️ Something else…</button>
                     <button style="${btnStyle}text-align:center;background:#fff;color:#888;border-style:dashed;margin-bottom:0;" onclick="document.getElementById('projTypeSheet').remove()">Cancel</button>
                 </div>`;
-            document.body.appendChild(sheet);
+            window._overlayRoot().appendChild(sheet);
         };
 
         window._createProjectOfType = async function(typeName) {
@@ -11879,7 +11889,7 @@ Only return JSON, no other text.`;
                 </div>
                 <button onclick="document.getElementById('_pdfOverlay').remove()" style="margin-top:22px;background:none;border:none;color:#aaa;font-size:14px;cursor:pointer;">Cancel</button>
               </div>`;
-            document.body.appendChild(ov);
+            window._overlayRoot().appendChild(ov);
             return ov;
         }
 
@@ -12145,7 +12155,7 @@ Rules:
                 stack = document.createElement('div');
                 stack.id = 'reportToastStack';
                 stack.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:99999;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;';
-                document.body.appendChild(stack);
+                window._overlayRoot().appendChild(stack);
             }
             const colors = {
                 info:    { bg: '#1A2B4A', fg: '#fff' },
@@ -12989,7 +12999,7 @@ RULES:
                         <button id="surfaceEditSave" style="flex:2;padding:12px;background:#10b981;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;">Save</button>
                     </div>
                 </div>`;
-            document.body.appendChild(overlay);
+            window._overlayRoot().appendChild(overlay);
 
             const close = () => overlay.remove();
             const captureFromInputs = () => ({
@@ -13538,7 +13548,7 @@ RULES:
                 <div id="reportPreviewBody" style="flex:1;overflow-y:auto;overflow-x:hidden;background:#0f172a;padding:20px 0;">
                     <div style="margin:0 auto;background:#fff;transform-origin:top center;" id="reportPreviewInner">${html}</div>
                 </div>`;
-            document.body.appendChild(overlay);
+            window._overlayRoot().appendChild(overlay);
 
             // Scale the rendered report (8.5in wide ~ 816px) to fit the
             // overlay's viewport. Use transform:scale so layout is preserved.
