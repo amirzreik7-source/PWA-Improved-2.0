@@ -157,7 +157,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v136</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v137</span>
             </div>
 
             <!-- Global Search -->
@@ -1116,7 +1116,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v136</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v137</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -3042,40 +3042,12 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             return document.getElementById('appContainer') || document.body;
         };
 
-        // CertaPro-style: pick a type — the project names itself. No free-text
-        // naming (standardized names keep project-level pipeline readable);
-        // "Something else…" stays for rare cases (renovations, HOA work).
-        window.createNewProject = function(customerId, customerName) {
-            window._projTypeCtx = { customerId, customerName };
-            const old = document.getElementById('projTypeSheet');
-            if (old) old.remove();
-            const sheet = document.createElement('div');
-            sheet.id = 'projTypeSheet';
-            sheet.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:flex-end;justify-content:center;';
-            sheet.addEventListener('click', e => { if (e.target === sheet) sheet.remove(); });
-            const btnStyle = 'display:block;width:100%;padding:15px;margin-bottom:10px;border:2px solid #e5e7eb;border-radius:12px;background:#f8f9fa;font-size:16px;font-weight:600;cursor:pointer;text-align:left;';
-            sheet.innerHTML = `
-                <div style="background:#fff;border-radius:16px 16px 0 0;padding:18px 16px 26px;width:100%;max-width:520px;">
-                    <h3 style="margin:0 0 4px;">New Project</h3>
-                    <p style="margin:0 0 14px;color:#666;font-size:13px;">Pick the type — the project names and numbers itself.</p>
-                    <button style="${btnStyle}" onclick="_createProjectOfType('Interior Painting')">🏠 Interior Painting</button>
-                    <button style="${btnStyle}" onclick="_createProjectOfType('Exterior Painting')">🌳 Exterior Painting</button>
-                    <button style="${btnStyle}" onclick="_createProjectOfType('__custom__')">✏️ Something else…</button>
-                    <button style="${btnStyle}text-align:center;background:#fff;color:#888;border-style:dashed;margin-bottom:0;" onclick="document.getElementById('projTypeSheet').remove()">Cancel</button>
-                </div>`;
-            window._overlayRoot().appendChild(sheet);
-        };
-
-        window._createProjectOfType = async function(typeName) {
-            const ctx = window._projTypeCtx || {};
-            const customerId = ctx.customerId, customerName = ctx.customerName;
-            document.getElementById('projTypeSheet')?.remove();
+        // New Project → straight into the estimate flow. The project is
+        // created with a placeholder name and names itself ("Interior
+        // Painting" / "Exterior Painting") the moment the job type is
+        // picked in Step 2 (see selectJobType). No extra picker screen.
+        window.createNewProject = async function(customerId, customerName) {
             if (!customerId) return;
-            let projectName = typeName;
-            if (typeName === '__custom__') {
-                projectName = prompt('Project name (e.g., "Deck Staining", "Renovation"):');
-                if (!projectName || !projectName.trim()) return;
-            }
             try {
                 const jobNumber = await generateJobNumber();
                 const projectData = {
@@ -3083,7 +3055,8 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                     customerId: customerId,
                     customerName: customerName,
                     jobNumber: jobNumber,
-                    projectName: projectName.trim(),
+                    projectName: 'Painting Project',
+                    autoName: true, // cleared once Step 2 names it
                     status: 'New Lead',
                     leadSource: ((window.customers || []).find(c => c.id === customerId)?.leadSource) || '',
                     appointmentDate: null,
@@ -3096,9 +3069,19 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 };
                 const projectRef = await addDoc(collection(db, 'projects'), projectData);
                 await loadProjects();
-                // Go straight to creating first proposal
-                startProposalForProject(projectRef.id, projectData, customerId, customerName);
+                // Go straight to creating first proposal (Step 2 = job type)
+                startProposalForProject(projectRef.id, { id: projectRef.id, ...projectData }, customerId, customerName);
             } catch(e) { alert('Error creating project: ' + e.message); }
+        };
+
+        // Name an auto-created project from the job type picked in Step 2.
+        window._autoNameProjectFromJobType = async function(projectId, jobType) {
+            const project = (window.projects || []).find(p => p.id === projectId);
+            if (!project || !project.autoName) return;
+            const name = jobType + ' Painting';
+            project.projectName = name; project.autoName = false;
+            try { await updateDoc(doc(db, 'projects', projectId), { projectName: name, autoName: false }); }
+            catch(e) { console.warn('auto-name failed', e); }
         };
 
         window.startProposalForProject = function(projectId, project, customerId, customerName) {
@@ -7578,6 +7561,10 @@ Based on the journal entries, calculate and return this JSON (no other text):
         window.selectJobType = function(type) {
             markUnsaved();
             currentEstimate.jobType = type;
+            if (currentEstimate.projectId) {
+                window._autoNameProjectFromJobType(currentEstimate.projectId, type);
+                if (/Painting Project$/.test(currentEstimate.jobName || '')) currentEstimate.jobName = currentEstimate.customerName + ' - ' + type + ' Painting';
+            }
             // Auto-name: "Customer - Exterior 1" (incrementing)
             const custJobs = jobs.filter(j => j.customerId === currentEstimate.customerId && j.jobType === type);
             const num = custJobs.length + 1;
