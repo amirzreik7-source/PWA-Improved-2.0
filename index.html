@@ -157,7 +157,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v134</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v135</span>
             </div>
 
             <!-- Global Search -->
@@ -1116,7 +1116,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v134</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v135</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -1436,6 +1436,12 @@
                     <div class="form-group">
                         <label>Exterior Paint Price ($/gallon)</label>
                         <input type="number" id="exteriorPaintPrice" step="1" min="0" placeholder="45">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Extra-Coat Labor (%) — per-count surfaces only</label>
+                        <input type="number" id="extraCoatLaborPct" step="1" min="0" max="100" placeholder="70">
+                        <div style="font-size:11px;color:#888;margin-top:3px;">Doors, frames, garage doors, shutters, windows: coats after the first bill labor at this % (prep is in coat 1). Sq-ft surfaces (siding, walls, trim) are unaffected.</div>
                     </div>
                     
                     <div class="form-group">
@@ -1837,8 +1843,18 @@
             FasciaPaintCoverage: 150,
             WindowLaborRate: 4,
             WindowPaintCoverage: 40,
-            DoorLaborHours: 0.25,
-            DoorPaintCoverage: 18,
+            DoorLaborHours: 0.25,        // legacy (pre-v135) — no longer used by the engine
+            DoorPaintCoverage: 18,       // legacy (pre-v135)
+            // v135: per-COUNT exterior surfaces — units per labor hour + units per gallon.
+            // Extra coats on per-count surfaces bill labor at ExtraCoatLaborPct
+            // (first coat carries the prep). Sq-ft surfaces are NOT affected.
+            FrontDoorPerHour: 0.5,        FrontDoorPerGallon: 8,
+            FrontDoorFramePerHour: 0.875, FrontDoorFramePerGallon: 12,
+            GarageDoorPerHour: 0.5,       GarageDoorPerGallon: 8,
+            GarageDoorFramePerHour: 0.875, GarageDoorFramePerGallon: 12,
+            ExtDoorPerHour: 3,            ExtDoorPerGallon: 14,   // side/back doors, frame included
+            ShutterPerHour: 4,            ShutterPerGallon: 18,
+            ExtraCoatLaborPct: 70,
             BayWindowLaborHours: 1,
             RailingLaborHours: 1,
             RailingPaintCost: 15,
@@ -1850,7 +1866,8 @@
             WallCeilingPaintCoverage: 400,
             WallStandardCoats: 2,
             CeilingStandardCoats: 2,
-            InteriorDoorLaborHours: 0.25,
+            InteriorDoorLaborHours: 0.25, // legacy (pre-v135) — engine now uses InteriorDoorsPerHour
+            InteriorDoorsPerHour: 4,      // door + frame, one count
             InteriorDoorPaintCoverage: 18,
             InteriorWindowLaborRate: 4,
             InteriorWindowPaintCoverage: 40,
@@ -1871,7 +1888,7 @@
         };
 
         // Surface definitions
-        const EXTERIOR_SURFACES_DEFAULT = ['Siding', 'Soffit', 'Fascia', 'Windows', 'Front Door', 'Front Door Frame',
+        const EXTERIOR_SURFACES_DEFAULT = ['Siding', 'Soffit', 'Fascia', 'Windows', 'Front Door', 'Front Door Frame', 'Doors',
                                     'Garage Door', 'Garage Door Frame', 'Shutters', 'Bay Windows', 'Railings'];
         const INTERIOR_SURFACES_DEFAULT = ['Walls', 'Ceiling', 'Doors', 'Windows', 'Baseboards', 'Crown Molding', 'Chair Rail', 'Closets',
                                    'Cabinet Doors', 'Cabinet Drawers', 'Spindles'];
@@ -2139,6 +2156,8 @@
             document.getElementById('globalLaborRate').value = PRICING.LaborRate || '';
             document.getElementById('exteriorPaintPrice').value = PRICING.PaintPricePerGallon || '';
             document.getElementById('interiorPaintPrice').value = PRICING.InteriorPaintPricePerGallon || '';
+            const ecEl = document.getElementById('extraCoatLaborPct');
+            if (ecEl) ecEl.value = (PRICING.ExtraCoatLaborPct ?? 70);
             // Crew pay targets — stored as fractions (0-1), displayed as percentages
             const crewLaborShareEl = document.getElementById('crewLaborShareInput');
             const crewMaterialShareEl = document.getElementById('crewMaterialShareInput');
@@ -2180,8 +2199,13 @@
                 { name: 'Siding', laborKey: 'SidingLaborRate', coverageKey: 'SidingPaintCoverage', unit: 'sq ft/hour' },
                 { name: 'Soffit', laborKey: 'SoffitLaborRate', coverageKey: 'SoffitPaintCoverage', unit: 'sq ft/hour' },
                 { name: 'Fascia', laborKey: 'FasciaLaborRate', coverageKey: 'FasciaPaintCoverage', unit: 'sq ft/hour' },
-                { name: 'Windows', laborKey: 'WindowLaborRate', coverageKey: 'WindowPaintCoverage', unit: 'sq ft/hour' },
-                { name: 'Doors', laborKey: 'DoorLaborHours', coverageKey: 'DoorPaintCoverage', unit: 'hours/door' },
+                { name: 'Windows', laborKey: 'WindowLaborRate', coverageKey: 'WindowPaintCoverage', unit: 'windows per hour', spreadUnit: 'windows per gallon' },
+                { name: 'Front Door', laborKey: 'FrontDoorPerHour', coverageKey: 'FrontDoorPerGallon', unit: 'doors per hour', spreadUnit: 'doors per gallon' },
+                { name: 'Front Door Frame', laborKey: 'FrontDoorFramePerHour', coverageKey: 'FrontDoorFramePerGallon', unit: 'frames per hour', spreadUnit: 'frames per gallon' },
+                { name: 'Doors (side/back — frame included)', laborKey: 'ExtDoorPerHour', coverageKey: 'ExtDoorPerGallon', unit: 'doors per hour', spreadUnit: 'doors per gallon' },
+                { name: 'Garage Door', laborKey: 'GarageDoorPerHour', coverageKey: 'GarageDoorPerGallon', unit: 'doors per hour', spreadUnit: 'doors per gallon' },
+                { name: 'Garage Door Frame', laborKey: 'GarageDoorFramePerHour', coverageKey: 'GarageDoorFramePerGallon', unit: 'frames per hour', spreadUnit: 'frames per gallon' },
+                { name: 'Shutters', laborKey: 'ShutterPerHour', coverageKey: 'ShutterPerGallon', unit: 'shutters per hour', spreadUnit: 'shutters per gallon' },
                 { name: 'Bay Windows', laborKey: 'BayWindowLaborHours', unit: 'hours each' },
                 { name: 'Railings', laborKey: 'RailingLaborHours', coverageKey: 'RailingPaintCost', unit: 'hours each' }
             ];
@@ -2197,7 +2221,7 @@
                 html += '</div>';
                 if (surface.coverageKey) {
                     html += '<div>';
-                    html += '<label style="font-size:10pt;color:#666;">Spread Rate (sq ft/gal)</label>';
+                    html += '<label style="font-size:10pt;color:#666;">Spread Rate (' + (surface.spreadUnit || 'sq ft/gal') + ')</label>';
                     html += '<input type="number" id="' + surface.coverageKey + '" value="' + (PRICING[surface.coverageKey] || '') + '" step="1" min="0" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;background:#fff;">';
                     html += '</div>';
                 } else {
@@ -2216,8 +2240,8 @@
             const surfaces = [
                 { name: 'Walls', laborKey: 'WallCeilingLaborRate', coverageKey: 'WallCeilingPaintCoverage', unit: 'sq ft/hour' },
                 { name: 'Ceiling', laborKey: 'WallCeilingLaborRate', coverageKey: 'WallCeilingPaintCoverage', unit: 'sq ft/hour' },
-                { name: 'Doors', laborKey: 'InteriorDoorLaborHours', coverageKey: 'InteriorDoorPaintCoverage', unit: 'hours/door' },
-                { name: 'Windows', laborKey: 'InteriorWindowLaborRate', coverageKey: 'InteriorWindowPaintCoverage', unit: 'sq ft/hour' },
+                { name: 'Doors (frame included)', laborKey: 'InteriorDoorsPerHour', coverageKey: 'InteriorDoorPaintCoverage', unit: 'doors per hour', spreadUnit: 'doors per gallon' },
+                { name: 'Windows', laborKey: 'InteriorWindowLaborRate', coverageKey: 'InteriorWindowPaintCoverage', unit: 'windows per hour', spreadUnit: 'windows per gallon' },
                 { name: 'Baseboards', laborKey: 'BaseboardLaborRate', coverageKey: 'BaseboardPaintCoverage', unit: 'linear ft/hour' },
                 { name: 'Closets', laborKey: 'ClosetFlatRate', unit: '$ flat rate' },
                 { name: 'Cabinet Doors', laborKey: 'CabinetDoorPrice', unit: '$ per door' },
@@ -2236,7 +2260,7 @@
                 html += '</div>';
                 if (surface.coverageKey) {
                     html += '<div>';
-                    html += '<label style="font-size:10pt;color:#666;">Spread Rate (sq ft/gal)</label>';
+                    html += '<label style="font-size:10pt;color:#666;">Spread Rate (' + (surface.spreadUnit || 'sq ft/gal') + ')</label>';
                     html += '<input type="number" id="' + surface.coverageKey + '" value="' + (PRICING[surface.coverageKey] || '') + '" step="1" min="0" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;background:#fff;">';
                     html += '</div>';
                 } else {
@@ -2269,7 +2293,7 @@
                 html += '</div>';
                 if (surface.calcType === 'area') {
                     html += '<div>';
-                    html += '<label style="font-size:10pt;color:#666;">Spread Rate (sq ft/gal)</label>';
+                    html += '<label style="font-size:10pt;color:#666;">Spread Rate (' + (surface.spreadUnit || 'sq ft/gal') + ')</label>';
                     html += '<input type="number" id="custom_' + type + '_coverage_' + idx + '" value="' + (surface.coverage || '') + '" step="1" min="0" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;background:#fff;">';
                     html += '</div>';
                 } else {
@@ -2449,8 +2473,19 @@
                     FasciaPaintCoverage: getVal('FasciaPaintCoverage', PRICING.FasciaPaintCoverage),
                     WindowLaborRate: getVal('WindowLaborRate', PRICING.WindowLaborRate),
                     WindowPaintCoverage: getVal('WindowPaintCoverage', PRICING.WindowPaintCoverage),
-                    DoorLaborHours: getVal('DoorLaborHours', PRICING.DoorLaborHours),
-                    DoorPaintCoverage: getVal('DoorPaintCoverage', PRICING.DoorPaintCoverage),
+                    FrontDoorPerHour: getVal('FrontDoorPerHour', PRICING.FrontDoorPerHour),
+                    FrontDoorPerGallon: getVal('FrontDoorPerGallon', PRICING.FrontDoorPerGallon),
+                    FrontDoorFramePerHour: getVal('FrontDoorFramePerHour', PRICING.FrontDoorFramePerHour),
+                    FrontDoorFramePerGallon: getVal('FrontDoorFramePerGallon', PRICING.FrontDoorFramePerGallon),
+                    ExtDoorPerHour: getVal('ExtDoorPerHour', PRICING.ExtDoorPerHour),
+                    ExtDoorPerGallon: getVal('ExtDoorPerGallon', PRICING.ExtDoorPerGallon),
+                    GarageDoorPerHour: getVal('GarageDoorPerHour', PRICING.GarageDoorPerHour),
+                    GarageDoorPerGallon: getVal('GarageDoorPerGallon', PRICING.GarageDoorPerGallon),
+                    GarageDoorFramePerHour: getVal('GarageDoorFramePerHour', PRICING.GarageDoorFramePerHour),
+                    GarageDoorFramePerGallon: getVal('GarageDoorFramePerGallon', PRICING.GarageDoorFramePerGallon),
+                    ShutterPerHour: getVal('ShutterPerHour', PRICING.ShutterPerHour),
+                    ShutterPerGallon: getVal('ShutterPerGallon', PRICING.ShutterPerGallon),
+                    ExtraCoatLaborPct: Math.max(0, Math.min(100, getVal('extraCoatLaborPct', PRICING.ExtraCoatLaborPct ?? 70))),
                     BayWindowLaborHours: getVal('BayWindowLaborHours', PRICING.BayWindowLaborHours),
                     RailingLaborHours: getVal('RailingLaborHours', PRICING.RailingLaborHours),
                     RailingPaintCost: getVal('RailingPaintCost', PRICING.RailingPaintCost),
@@ -2458,7 +2493,7 @@
                     // Interior surfaces
                     WallCeilingLaborRate: getVal('WallCeilingLaborRate', PRICING.WallCeilingLaborRate),
                     WallCeilingPaintCoverage: getVal('WallCeilingPaintCoverage', PRICING.WallCeilingPaintCoverage),
-                    InteriorDoorLaborHours: getVal('InteriorDoorLaborHours', PRICING.InteriorDoorLaborHours),
+                    InteriorDoorsPerHour: getVal('InteriorDoorsPerHour', PRICING.InteriorDoorsPerHour || 4),
                     InteriorDoorPaintCoverage: getVal('InteriorDoorPaintCoverage', PRICING.InteriorDoorPaintCoverage),
                     InteriorWindowLaborRate: getVal('InteriorWindowLaborRate', PRICING.InteriorWindowLaborRate),
                     InteriorWindowPaintCoverage: getVal('InteriorWindowPaintCoverage', PRICING.InteriorWindowPaintCoverage),
@@ -7636,11 +7671,28 @@ Based on the journal entries, calculate and return this JSON (no other text):
 
 
         // Calculation Functions (needed by all steps)
+        // Per-COUNT surface pricing (doors, frames, garage doors, shutters,
+        // windows). Labor = qty ÷ (units per hour) × rate; coats beyond the
+        // first bill labor at ExtraCoatLaborPct (prep lives in coat 1).
+        // Material = qty ÷ (units per gallon) × $/gal, every coat.
+        function _countCost(qty, perHour, perGallon, gallonPrice, coats) {
+            const c = Math.max(1, parseInt(coats) || 1);
+            const pct = (PRICING.ExtraCoatLaborPct ?? 70) / 100;
+            const laborPerCoat = (qty / (perHour || 1)) * PRICING.LaborRate;
+            return {
+                labor: laborPerCoat * (1 + pct * (c - 1)),
+                material: (qty / (perGallon || 1)) * gallonPrice * c
+            };
+        }
+
+        window.calculateSurfaceCost = calculateSurfaceCost; // exposed for pricing checks/tests
         function calculateSurfaceCost(surface) {
             const qty = surface.quantity;
             const coats = surface.coats;
             let labor = 0, material = 0;
-            
+            const G = PRICING.PaintPricePerGallon, GI = PRICING.InteriorPaintPricePerGallon;
+            const cc = (perHour, perGallon, gp) => { const r = _countCost(qty, perHour, perGallon, gp, coats); labor = r.labor; material = r.material; };
+
             if (currentEstimate.jobType === 'Exterior') {
                 switch(surface.surfaceType) {
                     case 'Siding':
@@ -7653,13 +7705,13 @@ Based on the journal entries, calculate and return this JSON (no other text):
                         material = (qty / (surface.surfaceType === 'Soffit' ? PRICING.SoffitPaintCoverage : PRICING.FasciaPaintCoverage)) * PRICING.PaintPricePerGallon * coats;
                         break;
                     case 'Windows':
-                        labor = (qty / PRICING.WindowLaborRate) * PRICING.LaborRate * coats;
-                        material = (qty / PRICING.WindowPaintCoverage) * PRICING.PaintPricePerGallon * coats;
+                        cc(PRICING.WindowLaborRate, PRICING.WindowPaintCoverage, G);
                         break;
                     case 'Front Door':
-                    case 'Doors':
-                        labor = qty * PRICING.DoorLaborHours * PRICING.LaborRate * coats;
-                        material = (qty / PRICING.DoorPaintCoverage) * PRICING.PaintPricePerGallon * coats;
+                        cc(PRICING.FrontDoorPerHour, PRICING.FrontDoorPerGallon, G);
+                        break;
+                    case 'Doors': // side/back/basement doors — frame included
+                        cc(PRICING.ExtDoorPerHour, PRICING.ExtDoorPerGallon, G);
                         break;
                     case 'Bay Windows':
                         labor = qty * PRICING.BayWindowLaborHours * PRICING.LaborRate;
@@ -7670,11 +7722,16 @@ Based on the journal entries, calculate and return this JSON (no other text):
                         material = qty * PRICING.RailingPaintCost;
                         break;
                     case 'Shutters':
+                        cc(PRICING.ShutterPerHour, PRICING.ShutterPerGallon, G);
+                        break;
                     case 'Front Door Frame':
+                        cc(PRICING.FrontDoorFramePerHour, PRICING.FrontDoorFramePerGallon, G);
+                        break;
                     case 'Garage Door':
+                        cc(PRICING.GarageDoorPerHour, PRICING.GarageDoorPerGallon, G);
+                        break;
                     case 'Garage Door Frame':
-                        labor = qty * PRICING.DoorLaborHours * PRICING.LaborRate * coats;
-                        material = (qty / PRICING.DoorPaintCoverage) * PRICING.PaintPricePerGallon * coats;
+                        cc(PRICING.GarageDoorFramePerHour, PRICING.GarageDoorFramePerGallon, G);
                         break;
                     default: {
                         // Try exact match first, then case-insensitive
@@ -7703,13 +7760,11 @@ Based on the journal entries, calculate and return this JSON (no other text):
                         labor = (qty / PRICING.WallCeilingLaborRate) * PRICING.LaborRate * coats;
                         material = (qty / PRICING.WallCeilingPaintCoverage) * PRICING.InteriorPaintPricePerGallon * coats;
                         break;
-                    case 'Doors':
-                        labor = qty * PRICING.InteriorDoorLaborHours * PRICING.LaborRate * coats;
-                        material = (qty / PRICING.InteriorDoorPaintCoverage) * PRICING.InteriorPaintPricePerGallon * coats;
+                    case 'Doors': // door + frame, one count
+                        cc(PRICING.InteriorDoorsPerHour || (1 / (PRICING.InteriorDoorLaborHours || 0.25)), PRICING.InteriorDoorPaintCoverage, GI);
                         break;
                     case 'Windows':
-                        labor = (qty / PRICING.InteriorWindowLaborRate) * PRICING.LaborRate * coats;
-                        material = (qty / PRICING.InteriorWindowPaintCoverage) * PRICING.InteriorPaintPricePerGallon * coats;
+                        cc(PRICING.InteriorWindowLaborRate, PRICING.InteriorWindowPaintCoverage, GI);
                         break;
                     case 'Baseboards':
                     case 'Crown Molding':
@@ -17486,7 +17541,7 @@ ${productList || 'No products configured yet — set productName to null'}
 SURFACE TYPES:
 Interior built-in: Walls, Ceiling, Doors, Windows, Baseboards, Crown Molding, Chair Rail, Closets, Cabinet Doors, Cabinet Drawers, Spindles
 ${customInt ? 'Interior custom: ' + customInt : ''}
-Exterior built-in: Siding, Soffit, Fascia, Windows, Front Door, Front Door Frame, Garage Door, Garage Door Frame, Shutters, Bay Windows, Railings
+Exterior built-in: Siding, Soffit, Fascia, Windows, Front Door, Front Door Frame, Doors (side/back/basement doors, frame included), Garage Door, Garage Door Frame, Shutters, Bay Windows, Railings
 ${customExt ? 'Exterior custom: ' + customExt : ''}
 
 ═══ CRITICAL RULES ═══
