@@ -157,7 +157,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v133</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v134</span>
             </div>
 
             <!-- Global Search -->
@@ -380,7 +380,7 @@
         <div id="sidingTypeModal" class="screen">
             <button class="btn btn-back" onclick="closeSidingTypeChooser()">← Back to Room</button>
             <h2 class="screen-title">What type of siding?</h2>
-            <p class="screen-subtitle">Pick the material — it shows on the customer's proposal.</p>
+            <p class="screen-subtitle">Pick the material — it shows on the customer's proposal. A side can have more than one (e.g. Brick + Vinyl): tap a ✓ material to edit it, or any other to add it.</p>
             <div id="sidingTypeList" class="selection-grid"></div>
         </div>
 
@@ -1116,7 +1116,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v133</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v134</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -7862,16 +7862,25 @@ Based on the journal entries, calculate and return this JSON (no other text):
             
             container.innerHTML = ''; // Clear first
             
+            const isExteriorJob = currentEstimate.jobType === 'Exterior';
             surfaces.forEach(surfaceType => {
-                const surface = window.currentRoom.surfaces.find(s => s.surfaceType === surfaceType);
-                
+                // Exterior Siding may exist several times on one side (Brick +
+                // Vinyl…): one green card per material + an "add another" card.
+                const isMultiSiding = surfaceType === 'Siding' && isExteriorJob;
+                const matches = isMultiSiding
+                    ? window._roomSidings(window.currentRoom)
+                    : [window.currentRoom.surfaces.find(s => s.surfaceType === surfaceType)].filter(Boolean);
+                const slots = matches.length ? matches.slice() : [null];
+                if (isMultiSiding && matches.length) slots.push(null); // trailing "add another" card
+
+                slots.forEach(surface => {
                 const box = document.createElement('div');
                 box.style.padding = '15px';
                 box.style.marginBottom = '10px';
                 box.style.borderRadius = '8px';
                 box.style.cursor = 'pointer';
                 box.style.position = 'relative';
-                
+
                 if (surface) {
                     // FILLED BOX - Green with details
                     box.style.background = '#d4edda';
@@ -7910,22 +7919,30 @@ Based on the journal entries, calculate and return this JSON (no other text):
                     deleteBtn.textContent = '×';
                     deleteBtn.addEventListener('click', function(e) {
                         e.stopPropagation();
-                        deleteSurfaceFromRoom(surfaceType);
+                        deleteSurfaceFromRoom(surfaceType, isMultiSiding ? surface.sidingType : undefined);
                     });
                     box.appendChild(deleteBtn);
-                    
+
                 } else {
                     // EMPTY BOX - White, clickable
                     box.style.background = '#fff';
                     box.style.border = '2px solid #ddd';
-                    box.innerHTML = `<h4 style="margin:0;color:#666;">${surfaceType}</h4>`;
+                    const addAnother = isMultiSiding && matches.length;
+                    if (addAnother) box.style.borderStyle = 'dashed';
+                    box.innerHTML = `<h4 style="margin:0;color:#666;">${addAnother ? '➕ Add another siding material' : surfaceType}</h4>${addAnother ? '<p style="margin:3px 0 0;font-size:9pt;color:#888;">Same side has brick + vinyl, wood + Hardie, etc.</p>' : ''}`;
                 }
-                
+
                 box.addEventListener('click', function() {
-                    openSurfaceOrSidingChooser(surfaceType);
+                    if (isMultiSiding && surface) {
+                        // Edit THIS material directly (skip the chooser).
+                        pickSidingType(surface.sidingType || 'Brick', surface.applicationMethod || 'Spray & Backroll');
+                    } else {
+                        openSurfaceOrSidingChooser(surfaceType);
+                    }
                 });
 
                 container.appendChild(box);
+                }); // slots
             });
 
             // Also show surfaces that exist on the room but aren't in the predefined list
@@ -7959,10 +7976,11 @@ Based on the journal entries, calculate and return this JSON (no other text):
         }
 
         // Delete surface from current room
-        function deleteSurfaceFromRoom(surfaceType) {
+        function deleteSurfaceFromRoom(surfaceType, sidingType) {
             if (!confirm('Delete this surface?')) return;
-            
-            const index = window.currentRoom.surfaces.findIndex(s => s.surfaceType === surfaceType);
+
+            const index = window.currentRoom.surfaces.findIndex(s => s.surfaceType === surfaceType
+                && (surfaceType !== 'Siding' || !sidingType || s.sidingType === sidingType));
             if (index >= 0) {
                 window.currentRoom.surfaces.splice(index, 1);
                 displaySurfaceButtons();
@@ -8329,14 +8347,30 @@ Based on the journal entries, calculate and return this JSON (no other text):
             }
         };
 
+        // A side can carry several Siding surfaces (Brick + Vinyl on the same
+        // elevation). They all keep surfaceType 'Siding' (pricing/profiles/
+        // reports unchanged) and are told apart by sidingType.
+        window._roomSidings = function(room) {
+            return ((room || window.currentRoom)?.surfaces || []).filter(s => s.surfaceType === 'Siding');
+        };
+        // Locate one surface in a room. For Siding, sidingType picks WHICH one;
+        // without it, fall back to the first Siding (legacy single-siding data).
+        window._findRoomSurface = function(room, surfaceType, sidingType) {
+            const list = (room || window.currentRoom)?.surfaces || [];
+            if (surfaceType === 'Siding' && sidingType) {
+                return list.find(s => s.surfaceType === 'Siding' && s.sidingType === sidingType) || null;
+            }
+            return list.find(s => s.surfaceType === surfaceType) || null;
+        };
+
         window.openSidingTypeChooser = function() {
-            const existing = window.currentRoom.surfaces.find(s => s.surfaceType === 'Siding');
+            const existingTypes = new Set(window._roomSidings().map(s => s.sidingType));
             const list = document.getElementById('sidingTypeList');
             list.innerHTML = SIDING_TYPES.map(s => {
-                const sel = existing && existing.sidingType === s.type;
+                const sel = existingTypes.has(s.type);
                 return `<div class="selection-card" style="${sel ? 'border:2px solid #2563eb;background:#f0f6ff;' : ''}" onclick="pickSidingType('${s.type.replace(/'/g, "\\'")}','${s.method.replace(/'/g, "\\'")}')">
                     <h3 style="margin:0;">${s.type}${sel ? ' ✓' : ''}</h3>
-                    <p style="color:#555;margin:4px 0 0;">${s.method}</p>
+                    <p style="color:#555;margin:4px 0 0;">${sel ? 'Already on this side — tap to edit' : s.method}</p>
                 </div>`;
             }).join('');
             showScreen('sidingTypeModal');
@@ -8349,9 +8383,9 @@ Based on the journal entries, calculate and return this JSON (no other text):
 
         // Chosen siding material → stash and open the config modal.
         window.pickSidingType = function(type, method) {
-            const existing = window.currentRoom.surfaces.find(s => s.surfaceType === 'Siding');
+            const existing = window._findRoomSurface(window.currentRoom, 'Siding', type);
             window._pendingSidingType = type;
-            window._pendingApplicationMethod = (existing && existing.sidingType === type && existing.applicationMethod)
+            window._pendingApplicationMethod = (existing && existing.applicationMethod)
                 ? existing.applicationMethod : method;
             openSurfaceConfig('Siding');
         };
@@ -8359,11 +8393,17 @@ Based on the journal entries, calculate and return this JSON (no other text):
         // Open surface config from room detail screen
         window.openSurfaceConfig = function(surfaceType) {
             window.currentSurfaceType = surfaceType;
-            const existingSurface = window.currentRoom.surfaces.find(s => s.surfaceType === surfaceType);
+            const isSiding = surfaceType === 'Siding' && currentEstimate.jobType === 'Exterior';
+            // Siding: the material picked in the chooser decides WHICH siding
+            // surface we're editing (a side may carry Brick + Vinyl). No
+            // pending type (legacy entry) → first Siding, as before.
+            const existingSurface = isSiding
+                ? window._findRoomSurface(window.currentRoom, 'Siding', window._pendingSidingType || null)
+                : window._findRoomSurface(window.currentRoom, surfaceType);
+            window._editingSidingType = (isSiding && existingSurface) ? (existingSurface.sidingType || null) : null;
 
             // Siding detail card (type + application method) — exterior Siding only.
             const sidingCard = document.getElementById('sidingDetailCard');
-            const isSiding = surfaceType === 'Siding' && currentEstimate.jobType === 'Exterior';
             if (sidingCard) sidingCard.classList.toggle('hidden', !isSiding);
             if (isSiding) {
                 const chosenType = window._pendingSidingType || existingSurface?.sidingType || 'Brick';
@@ -8847,8 +8887,24 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 }
             }
 
-            // Find or create surface in currentRoom
-            let surface = window.currentRoom.surfaces.find(s => s.surfaceType === surfaceType);
+            // Find or create surface in currentRoom. Siding is keyed by
+            // material too (several sidings may live on one side).
+            const isSidingSave = surfaceType === 'Siding' && currentEstimate.jobType === 'Exterior';
+            let surface;
+            if (isSidingSave) {
+                const newType = document.getElementById('surfaceSidingType')?.value || window._pendingSidingType || 'Brick';
+                const editingType = window._editingSidingType || window._pendingSidingType || null;
+                surface = editingType ? window._findRoomSurface(window.currentRoom, 'Siding', editingType) : null;
+                if (!surface && !editingType) surface = window._findRoomSurface(window.currentRoom, 'Siding'); // legacy single-siding edit
+                // Changing the material to one this side already has would silently merge two sidings.
+                const clash = window._findRoomSurface(window.currentRoom, 'Siding', newType);
+                if (clash && clash !== surface) {
+                    alert(`This side already has "Siding — ${newType}". Edit that one instead, or pick a different material.`);
+                    return;
+                }
+            } else {
+                surface = window._findRoomSurface(window.currentRoom, surfaceType);
+            }
             if (!surface) {
                 surface = { surfaceType: surfaceType };
                 window.currentRoom.surfaces.push(surface);
@@ -8872,6 +8928,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
             }
             window._pendingSidingType = null;
             window._pendingApplicationMethod = null;
+            window._editingSidingType = null;
 
             console.log('Surface saved:', surface);
 
@@ -8884,6 +8941,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
         window.closeSurfaceConfig = function() {
             window._pendingSidingType = null;
             window._pendingApplicationMethod = null;
+            window._editingSidingType = null;
             showScreen('roomDetailScreen');
         };
 
@@ -12247,7 +12305,10 @@ Rules:
                 if (!s || !s.surfaceType) return;
                 const product = (window.products || []).find(p => p.id === s.productId);
                 const defaults = window._industryDefaults(s.surfaceType, effectiveJobType) || {};
-                surfaces[s.surfaceType] = {
+                // Two sidings on one side (Brick + Vinyl) must not collapse
+                // into a single "Siding" key — carry the material in the name.
+                const key = (s.surfaceType === 'Siding' && s.sidingType) ? `Siding — ${s.sidingType}` : s.surfaceType;
+                surfaces[key] = {
                     color: s.color || '',
                     code: '',
                     brand: product?.brand || '',
