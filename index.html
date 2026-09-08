@@ -157,7 +157,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v137</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v138</span>
             </div>
 
             <!-- Global Search -->
@@ -1116,7 +1116,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v137</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v138</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -4304,9 +4304,56 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
             }).sort((a, b) => new Date(a.appointmentDate) - new Date(b.appointmentDate));
         }
 
+        // Online-booking sync heartbeat. The appointments agent (launchd on
+        // the office Mac) stamps agentHeartbeat_appointments onto the company
+        // settings doc after every run. launchd does not fire while the Mac
+        // sleeps, so this line is how the operator learns that web bookings
+        // may be sitting unsynced (v138).
+        const APPT_SYNC_STALE_MIN = 45;
+        window._apptHeartbeat = null;
+        let _apptHeartbeatFetchedAt = 0;
+
+        function _apptAgo(ms) {
+            const m = Math.round(ms / 60000);
+            if (m < 1) return 'just now';
+            if (m < 60) return `${m} min ago`;
+            const h = Math.round(m / 60);
+            if (h < 48) return `${h} hr ago`;
+            return `${Math.round(h / 24)} days ago`;
+        }
+
+        function _apptSyncLineHtml() {
+            const hb = window._apptHeartbeat || (window.companySettings && window.companySettings.agentHeartbeat_appointments);
+            if (!hb || !hb.lastRunAt) return '';
+            const ageMs = Date.now() - new Date(hb.lastRunAt).getTime();
+            const ago = _apptAgo(ageMs);
+            const stale = ageMs > APPT_SYNC_STALE_MIN * 60000;
+            if (hb.status === 'failed') {
+                return `<div style="margin-top:8px;font-size:11px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:6px 8px;">⚠️ Online-booking sync failed ${ago}${hb.error ? ` — ${hb.error}` : ''}. New web bookings may be missing.</div>`;
+            }
+            if (stale) {
+                return `<div style="margin-top:8px;font-size:11px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px 8px;">⚠️ Online bookings last synced <b>${ago}</b>. The office Mac is probably asleep or offline — new web bookings may be missing until it wakes.</div>`;
+            }
+            return `<div style="margin-top:6px;font-size:11px;color:#9ca3af;text-align:right;">🌐 Online bookings synced ${ago}</div>`;
+        }
+
+        async function _refreshApptHeartbeat() {
+            // At most one Firestore read per minute; repaint only the sync line.
+            if (!currentUser || Date.now() - _apptHeartbeatFetchedAt < 60000) return;
+            _apptHeartbeatFetchedAt = Date.now();
+            try {
+                const snap = await getDocs(query(collection(db, 'settings'), where('userId', '==', currentUser.uid)));
+                if (snap.empty) return;
+                window._apptHeartbeat = snap.docs[0].data().agentHeartbeat_appointments || null;
+                const line = document.getElementById('apptSyncLine');
+                if (line) line.innerHTML = _apptSyncLineHtml();
+            } catch (e) { console.warn('heartbeat read failed', e); }
+        }
+
         window._renderMyAppointments = function() {
             const apptDiv = document.getElementById('homeAppointments');
             if (!apptDiv) return;
+            _refreshApptHeartbeat();
             const offset = window._apptCardOffset || 0;
             const day = new Date(); day.setHours(0, 0, 0, 0); day.setDate(day.getDate() + offset);
             const dayAppts = _apptsOnDay(day);
@@ -4375,6 +4422,7 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                     <button onclick="window._apptCardOffset=(window._apptCardOffset||0)+1;_renderMyAppointments();" style="background:none;border:none;color:#fff;font-size:18px;padding:6px 14px;cursor:pointer;">›</button>
                 </div>
                 <div style="margin-top:8px;">${body}</div>
+                <div id="apptSyncLine">${_apptSyncLineHtml()}</div>
             </div>`;
         };
 
