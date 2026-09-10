@@ -157,7 +157,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v138</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v139</span>
             </div>
 
             <!-- Global Search -->
@@ -796,6 +796,24 @@
                     <label>Color (optional)</label>
                     <input type="text" id="garageEpoxyColor" placeholder="e.g. Slate Gray with black & white flake">
                 </div>
+                <div style="margin:14px 0 6px;font-weight:700;color:#334155;font-size:14px;">Add-ons <span style="font-weight:400;color:#64748b;font-size:12px;">(folded into the total — no separate price on the proposal)</span></div>
+                <div class="form-group">
+                    <label>Epoxy primer coat — garage size</label>
+                    <select id="garageEpoxyPrimerCars" onchange="updateGarageEpoxyPreview()">
+                        <option value="0">No primer coat</option>
+                        <option value="1">1-car garage</option>
+                        <option value="2">2-car garage</option>
+                        <option value="3">3-car garage</option>
+                        <option value="4">4-car garage</option>
+                    </select>
+                    <div style="font-size:12px;color:#64748b;margin-top:4px;">Benjamin Moore HP1550 Concrete &amp; Metal Epoxy Primer (formerly Corotech® V155). Priced per car bay.</div>
+                </div>
+                <div class="form-group">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                        <input type="checkbox" id="garageEpoxyCrackRepair" onchange="updateGarageEpoxyPreview()" style="width:20px;height:20px;"> Crack &amp; hole repair
+                    </label>
+                    <input type="number" id="garageEpoxyCrackRepairPrice" step="1" min="0" placeholder="Flat amount" oninput="updateGarageEpoxyPreview()" style="margin-top:6px;">
+                </div>
                 <div class="form-group">
                     <label>Price override (optional)</label>
                     <input type="number" id="garageEpoxyPriceOverride" step="0.01" min="0" placeholder="Leave blank to auto-calculate" oninput="updateGarageEpoxyPreview()">
@@ -1116,7 +1134,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v138</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v139</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -1878,6 +1896,8 @@
             CabinetDoorPrice: 180,
             CabinetDrawerPrice: 80,
             GarageEpoxyPricePerSqft: 6.5,
+            GarageEpoxyPrimerPerCar: 350,     // epoxy primer coat add-on, flat per car bay
+            GarageEpoxyCrackRepairFlat: 250,  // crack & hole repair add-on, flat (editable per job)
             ShadowBoxSmallPrice: 80,
             ShadowBoxBigPrice: 180,
             SpindlePricePerCoat: 10,
@@ -9538,13 +9558,30 @@ Based on the journal entries, calculate and return this JSON (no other text):
             return PRICING.GarageEpoxyPricePerSqft || 6.5;
         }
 
+        function _garageEpoxyPrimerPerCar() {
+            return PRICING.GarageEpoxyPrimerPerCar || 350;
+        }
+
+        // Add-on pricing is folded into the single service total — the
+        // proposal never itemizes it (same idea as per-count doors/windows).
+        function _garageEpoxyAddonTotals(meta) {
+            const primer = (meta.primerCars || 0) * _garageEpoxyPrimerPerCar();
+            const crack = meta.crackRepair ? (meta.crackRepairPrice || 0) : 0;
+            return { primer, crack };
+        }
+
         function computeGarageEpoxyTotal(meta) {
-            return (meta.sqft || 0) * (_garageEpoxyRate());
+            const a = _garageEpoxyAddonTotals(meta);
+            return (meta.sqft || 0) * (_garageEpoxyRate()) + a.primer + a.crack;
         }
 
         function _garageEpoxySummary(meta) {
             const sys = meta.system === 'solid' ? 'Solid color' : 'Decorative flake system';
-            return `${(meta.sqft || 0).toLocaleString()} sq ft · ${sys}${meta.color ? ' · ' + meta.color : ''}`;
+            const bits = [`${(meta.sqft || 0).toLocaleString()} sq ft`, sys];
+            if (meta.color) bits.push(meta.color);
+            if (meta.primerCars > 0) bits.push(`Primer coat (${meta.primerCars}-car)`);
+            if (meta.crackRepair) bits.push('Crack & hole repair');
+            return bits.join(' · ');
         }
 
         // Customer-facing process that auto-fills on the proposal.
@@ -9557,12 +9594,16 @@ Based on the journal entries, calculate and return this JSON (no other text):
             <div style="margin:2px 0 6px;">
                 <span style="${chip}">${flakes ? 'DECORATIVE FLAKE FINISH' : 'SOLID COLOR FINISH'}</span>
                 ${meta.color ? `<span style="${chip}">COLOR: ${meta.color.toUpperCase()}</span>` : ''}
+                ${meta.primerCars > 0 ? `<span style="${chip}">EPOXY PRIMER COAT</span>` : ''}
+                ${meta.crackRepair ? `<span style="${chip}">CRACK &amp; HOLE REPAIR</span>` : ''}
             </div>
             <p style="margin:4px 0;">This is a full mechanical-prep coating system — not a paint-over. Most garage floors that peel were coated over dirty, sealed, or damp concrete; every step below exists to make sure yours never does. The result: a sealed, showroom-quality surface that shrugs off hot tires, oil, and road salt, and wipes clean with a mop.</p>
             <ol style="margin:4px 0;padding-left:18px;">
             <li><strong>Diamond-grind every square foot.</strong> We machine-grind the entire slab with commercial diamond-grinding equipment and dust extraction — stripping old sealers, contaminants, and weak surface paste, and opening the pores of the concrete so the epoxy bonds <em>into</em> the slab, not just onto it. This is the step DIY kits and budget installers skip, and it's the single biggest reason coatings fail.</li>
             <li><strong>Test — don't guess.</strong> After grinding, we test the slab with a Tramex moisture meter and a rapid pH test. Moisture trapped under a coating is what causes bubbling and peeling later; if readings come back above 4%, we review the findings with you before a drop of epoxy goes down (mitigation, if ever needed, is quoted separately — never sprung on you).</li>
-            <li><strong>Detail prep.</strong> We vacuum and tack the floor dust-free, degrease any oil-stained areas, and fill minor cracks and divots — so the finished floor reads clean and uniform edge to edge.</li>
+            ${meta.crackRepair ? `<li><strong>Crack &amp; hole repair.</strong> Before any coating goes down, we chase out cracks, spalls, and holes in the slab, fill them with a two-part epoxy concrete repair compound, and grind the repairs flush. Coating over an unrepaired crack is how defects telegraph through the finish and how water and salt find a way under the edge of the coating — repairing them first is what keeps the floor reading clean and uniform for years.</li>` : ''}
+            <li><strong>Detail prep.</strong> We vacuum and tack the floor dust-free, degrease any oil-stained areas, and fill ${meta.crackRepair ? 'any remaining hairline' : 'minor'} cracks and divots — so the finished floor reads clean and uniform edge to edge.</li>
+            ${meta.primerCars > 0 ? `<li><strong>Epoxy primer coat.</strong> We roll a full coat of Benjamin Moore HP1550 Concrete &amp; Metal Epoxy Primer (formerly Corotech® V155) over the ground slab. This is a 100%-solids, two-component epoxy pre-primer: it soaks into the open pores of the concrete and seals them, binding down surface dust and weak paste and giving the GarageGuard® coats a solid, uniform foundation to bond into instead of raw, thirsty concrete. On older, porous, or previously stained slabs this is the step that turns a good bond into a permanent one — and it evens out absorption so the color coat cures uniformly with no blotchy or starved areas.</li>` : ''}
             <li><strong>Base coat.</strong> We roll a full coat of GarageGuard® two-part waterborne epoxy — a professional catalyzed coating whose two components chemically cure into a film far harder than any off-the-shelf floor paint${flakes ? ' — and hand-broadcast decorative vinyl flakes evenly into the wet coat for consistent coverage wall to wall' : ''}.</li>
             ${flakes ? '<li><strong>Flake dress-down.</strong> Once the base coat cures, we scrape and vacuum away every loose flake, leaving an even, comfortable texture that also helps hide everyday dust and tire marks.</li>' : ''}
             <li><strong>Finish coat.</strong> A second full coat of GarageGuard® ${flakes ? 'locks the flakes in permanently and builds the protective wear layer' : 'builds a uniform, durable wear layer'} — this two-coat build is what stands up to hot-tire pickup and daily traffic year after year.</li>
@@ -9575,7 +9616,10 @@ Based on the journal entries, calculate and return this JSON (no other text):
             return {
                 sqft: parseFloat(document.getElementById('garageEpoxySqft').value) || 0,
                 system: document.getElementById('garageEpoxySystem').value || 'flakes',
-                color: document.getElementById('garageEpoxyColor').value.trim()
+                color: document.getElementById('garageEpoxyColor').value.trim(),
+                primerCars: parseInt(document.getElementById('garageEpoxyPrimerCars').value) || 0,
+                crackRepair: document.getElementById('garageEpoxyCrackRepair').checked,
+                crackRepairPrice: parseFloat(document.getElementById('garageEpoxyCrackRepairPrice').value) || 0
             };
         }
 
@@ -9585,8 +9629,12 @@ Based on the journal entries, calculate and return this JSON (no other text):
             const auto = computeGarageEpoxyTotal(meta);
             const override = parseFloat(document.getElementById('garageEpoxyPriceOverride').value);
             const total = (override > 0) ? override : auto;
+            const a = _garageEpoxyAddonTotals(meta);
+            let lines = `<div>${(meta.sqft || 0).toLocaleString()} sq ft × $${rate.toFixed(2)}/sq ft = $${((meta.sqft || 0) * rate).toFixed(2)}</div>`;
+            if (meta.primerCars > 0) lines += `<div>Primer coat: ${meta.primerCars}-car × $${_garageEpoxyPrimerPerCar().toFixed(0)} = $${a.primer.toFixed(2)}</div>`;
+            if (meta.crackRepair) lines += `<div>Crack &amp; hole repair: $${a.crack.toFixed(2)}</div>`;
             document.getElementById('garageEpoxyPricePreview').innerHTML =
-                `<div>${(meta.sqft || 0).toLocaleString()} sq ft × $${rate.toFixed(2)}/sq ft</div><div style="font-weight:700;font-size:16px;margin-top:4px;">Total: $${total.toFixed(2)}${override > 0 ? ' (override)' : ''}</div>`;
+                lines + `<div style="font-weight:700;font-size:16px;margin-top:4px;">Total: $${total.toFixed(2)}${override > 0 ? ' (override)' : ''}</div>`;
         };
 
         window.openGarageEpoxyModal = function(editIndex) {
@@ -9595,11 +9643,14 @@ Based on the journal entries, calculate and return this JSON (no other text):
             const svc = editing ? window.currentRoom.additionalServices[window._editingGarageEpoxyIndex] : null;
             // Pre-fill sq ft from the room's L×W when starting fresh.
             const dimSqft = Math.round((window.currentRoom?.length || 0) * (window.currentRoom?.width || 0));
-            const meta = svc?.garageEpoxy || { sqft: dimSqft || '', system: 'flakes', color: '' };
+            const meta = svc?.garageEpoxy || { sqft: dimSqft || '', system: 'flakes', color: '', primerCars: 0, crackRepair: false };
             document.getElementById('garageEpoxyModalTitle').textContent = editing ? 'Edit Garage Floor Epoxy' : 'Garage Floor Epoxy';
             document.getElementById('garageEpoxySqft').value = meta.sqft || '';
             document.getElementById('garageEpoxySystem').value = meta.system || 'flakes';
             document.getElementById('garageEpoxyColor').value = meta.color || '';
+            document.getElementById('garageEpoxyPrimerCars').value = String(meta.primerCars || 0);
+            document.getElementById('garageEpoxyCrackRepair').checked = !!meta.crackRepair;
+            document.getElementById('garageEpoxyCrackRepairPrice').value = meta.crackRepairPrice || (PRICING.GarageEpoxyCrackRepairFlat || 250);
             document.getElementById('garageEpoxyPriceOverride').value = (editing && svc.garageEpoxy?.priceOverride) ? svc.garageEpoxy.priceOverride : '';
             updateGarageEpoxyPreview();
             showScreen('garageEpoxyModal');
@@ -9618,6 +9669,8 @@ Based on the journal entries, calculate and return this JSON (no other text):
             if (meta.sqft <= 0) { alert('Enter the floor square footage.'); return; }
 
             meta.rate = _garageEpoxyRate();
+            meta.primerPerCar = _garageEpoxyPrimerPerCar();
+            if (!meta.crackRepair) meta.crackRepairPrice = 0;
             const override = parseFloat(document.getElementById('garageEpoxyPriceOverride').value);
             if (override > 0) meta.priceOverride = override;
             meta.scopeHtml = _garageEpoxyScopeHtml(meta);
