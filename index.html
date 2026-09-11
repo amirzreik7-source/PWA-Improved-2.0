@@ -157,7 +157,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v139</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v140</span>
             </div>
 
             <!-- Global Search -->
@@ -1134,7 +1134,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v139</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v140</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -2048,6 +2048,8 @@
                 loadProjects(),
                 loadCrewMembers()
             ]);
+            // Make sure the curated primer products exist (v140) — non-blocking
+            window._ensurePrimerProducts().catch(e => console.warn('primer seed failed', e));
 
             // Public completion report route (?report=<slug>) — short-circuit into viewer
             try { if (typeof _detectPublicReportRoute === 'function' && _detectPublicReportRoute()) return; } catch (e) { console.warn('public report route check failed', e); }
@@ -8672,15 +8674,9 @@ Based on the journal entries, calculate and return this JSON (no other text):
             document.getElementById('surfaceQuantityLabel').textContent = 'Quantity (' + unit + ')';
             document.getElementById('surfaceUnit').textContent = unit;
 
-            // Populate primer product dropdown (filtered by type)
+            // Populate primer product dropdown — curated top-5 primers only, Fresh Start default
             const primerDropdown = document.getElementById('primerProduct');
-            primerDropdown.innerHTML = '<option value="">Select Primer...</option>';
-            filteredProducts.forEach(product => {
-                const option = document.createElement('option');
-                option.value = product.id;
-                option.textContent = `${product.brand} - ${product.name} (${product.category || 'Paint'}) - ${product.sheen}`;
-                primerDropdown.appendChild(option);
-            });
+            window._populatePrimerDropdown(primerDropdown, jobType, existingSurface ? existingSurface.primerProductId : '');
 
             if (existingSurface) {
                 // Editing existing
@@ -8694,7 +8690,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 if (existingSurface.usePrimer) {
                     document.getElementById('usePrimer').checked = true;
                     document.getElementById('primerSection').classList.remove('hidden');
-                    document.getElementById('primerProduct').value = existingSurface.primerProductId || '';
+                    // dropdown already positioned on the saved primer (or the default)
                     document.getElementById('primerCoats').value = existingSurface.primerCoats || 1;
                 } else {
                     document.getElementById('usePrimer').checked = false;
@@ -9031,6 +9027,9 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 updateSurfaceSheenDropdown(this.value);
             };
 
+            // Primer dropdown — curated top-5 primers only, Fresh Start default (synced with openSurfaceConfig)
+            window._populatePrimerDropdown(document.getElementById('primerProduct'), jobType, existingSurface ? existingSurface.primerProductId : '');
+
             if (existingSurface) {
                 // Editing existing
                 document.getElementById('surfaceQuantity').value = existingSurface.quantity || '';
@@ -9039,9 +9038,14 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 document.getElementById('surfaceColor').value = existingSurface.color || '';
                 document.getElementById('surfaceCoats').value = existingSurface.coats || 2;
                 document.getElementById('surfaceOptional').checked = !!existingSurface.optional;
+                document.getElementById('usePrimer').checked = !!existingSurface.usePrimer;
+                document.getElementById('primerSection').classList.toggle('hidden', !existingSurface.usePrimer);
+                document.getElementById('primerCoats').value = existingSurface.primerCoats || 1;
             } else {
                 // New surface — check profile for defaults
                 document.getElementById('surfaceOptional').checked = false;
+                document.getElementById('usePrimer').checked = false;
+                document.getElementById('primerSection').classList.add('hidden');
                 const profile = currentEstimate.profileId ? (window.profiles || []).find(p => p.id === currentEstimate.profileId) : null;
                 const mapping = profile?.surfaceMapping?.[surfaceType];
                 const profileProductId = mapping ? (typeof mapping === 'string' ? mapping : mapping.productId) : '';
@@ -9075,10 +9079,90 @@ Based on the journal entries, calculate and return this JSON (no other text):
         };
         
         // Save surface configuration
-        // Toggle primer section visibility
+        // ── Primer picker (v140) ─────────────────────────────────────────
+        // The primer dropdown used to list the entire paint catalog. It now
+        // shows ONLY a curated top-5 primer list per job type, with Benjamin
+        // Moore Fresh Start first and pre-selected, so ticking "Use Primer"
+        // needs no further input unless a different primer is wanted.
+        // Each pick resolves to a real product doc (matched by name regex so
+        // existing catalog entries like "Fresh Start primer " are reused);
+        // missing ones are seeded once by _ensurePrimerProducts().
+        const PRIMER_PICKS = {
+            Exterior: [
+                { brand: 'Benjamin Moore',   name: 'Fresh Start High-Hiding All Purpose Primer', match: /fresh\s*start/i },
+                { brand: 'Zinsser',          name: 'Cover Stain Oil-Base Primer',               match: /cover\s*stain/i },
+                { brand: 'Zinsser',          name: 'Bulls Eye 1-2-3 Water-Base Primer',         match: /1-?2-?3|bulls?\s*eye/i },
+                { brand: 'Sherwin Williams', name: 'Exterior Latex Wood Primer',                match: /latex\s*wood\s*primer/i },
+                { brand: 'KILZ',             name: 'KILZ 3 Premium Primer',                     match: /kilz\s*3/i }
+            ],
+            Interior: [
+                { brand: 'Benjamin Moore',   name: 'Fresh Start Multi-Purpose Primer',          match: /fresh\s*start/i },
+                { brand: 'Benjamin Moore',   name: 'Insl-X Stix Bonding Primer',                match: /stix/i },
+                { brand: 'Zinsser',          name: 'BIN Shellac-Base Primer',                   match: /\bbin\b/i },
+                { brand: 'Zinsser',          name: 'Bulls Eye 1-2-3 Water-Base Primer',         match: /1-?2-?3|bulls?\s*eye/i },
+                { brand: 'KILZ',             name: 'KILZ 2 All-Purpose Primer',                 match: /kilz\s*2/i }
+            ]
+        };
+        function _primerPicksFor(jobType) { return PRIMER_PICKS[jobType] || PRIMER_PICKS.Interior; }
+        function _findPrimerProduct(pick, jobType) {
+            return (window.products || []).find(p =>
+                (p.type === jobType || p.type === 'Both') && pick.match.test(`${p.brand || ''} ${p.name || ''}`));
+        }
+        window._defaultPrimerId = function(jobType) {
+            const p = _findPrimerProduct(_primerPicksFor(jobType)[0], jobType);
+            return p ? p.id : '';
+        };
+        // Fill a <select> with the curated primers (default first). A previously
+        // saved primer that is not in the top 5 is appended so edits keep it.
+        window._populatePrimerDropdown = function(selectEl, jobType, selectedId) {
+            selectEl.innerHTML = '';
+            const seen = new Set();
+            const addOpt = (p, label) => {
+                const o = document.createElement('option');
+                o.value = p.id; o.textContent = label;
+                selectEl.appendChild(o); seen.add(p.id);
+            };
+            _primerPicksFor(jobType).forEach((pick, i) => {
+                const p = _findPrimerProduct(pick, jobType);
+                if (!p || seen.has(p.id)) return;
+                addOpt(p, `${p.brand} - ${(p.name || '').trim()}${i === 0 ? ' (default)' : ''}`);
+            });
+            if (!seen.size) {
+                // Seeding hasn't landed yet — fall back to anything primer-like in the catalog
+                (window.products || []).filter(p => (p.type === jobType || p.type === 'Both') &&
+                    (p.category === 'Primer' || /primer/i.test(p.name || ''))).forEach(p => addOpt(p, `${p.brand} - ${(p.name || '').trim()}`));
+            }
+            if (selectedId && !seen.has(selectedId)) {
+                const p = (window.products || []).find(x => x.id === selectedId);
+                if (p) addOpt(p, `${p.brand} - ${(p.name || '').trim()}`);
+            }
+            selectEl.value = (selectedId && seen.has(selectedId)) ? selectedId : (selectEl.options[0] ? selectEl.options[0].value : '');
+            return selectEl.value;
+        };
+        // One-time, idempotent: create any curated primer missing from the catalog.
+        window._ensurePrimerProducts = async function() {
+            if (!currentUser || window._primerSeedRan) return;
+            window._primerSeedRan = true;
+            let added = 0;
+            for (const type of ['Exterior', 'Interior']) {
+                for (const pick of _primerPicksFor(type)) {
+                    if (_findPrimerProduct(pick, type)) continue;
+                    await addDoc(collection(db, 'products'), { userId: currentUser.uid, brand: pick.brand, name: pick.name, category: 'Primer', sheen: 'Flat', type });
+                    added++;
+                }
+            }
+            if (added) await loadProducts();
+        };
+
+        // Toggle primer section visibility — ticking "Use Primer" pre-selects
+        // the default primer (Fresh Start) so nothing else needs filling in.
         window.togglePrimerSection = function() {
             const checked = document.getElementById('usePrimer').checked;
             document.getElementById('primerSection').classList.toggle('hidden', !checked);
+            if (checked) {
+                const sel = document.getElementById('primerProduct');
+                if (!sel.value) window._populatePrimerDropdown(sel, currentEstimate.jobType, '');
+            }
         };
 
         window.saveSurface = function() {
@@ -9757,9 +9841,9 @@ Based on the journal entries, calculate and return this JSON (no other text):
             const prodSelect = document.getElementById('bulkProduct');
             prodSelect.innerHTML = '<option value="">— Don\'t change —</option>' + availableProducts.map(p => `<option value="${p.id}">${p.brand} - ${p.name} - ${p.sheen}</option>`).join('');
 
-            // Populate primer product dropdown
+            // Populate primer product dropdown — curated top-5 primers, Fresh Start pre-selected
             const primerSelect = document.getElementById('bulkPrimerProduct');
-            primerSelect.innerHTML = availableProducts.map(p => `<option value="${p.id}">${p.brand} - ${p.name} - ${p.sheen}</option>`).join('');
+            window._populatePrimerDropdown(primerSelect, currentEstimate.jobType, '');
 
             // Reset fields
             document.getElementById('bulkSheen').value = '';
