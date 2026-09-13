@@ -157,7 +157,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v141</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v142</span>
             </div>
 
             <!-- Global Search -->
@@ -939,6 +939,17 @@
                 </div>
             </div>
 
+            <!-- Deposit toggle (v142) -->
+            <div class="room-card">
+                <h3>Deposit</h3>
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;">
+                    <input type="checkbox" id="depositRequired" checked onchange="updateDiscountPreview()" style="width:20px;height:20px;">
+                    <span><strong>Require 50% deposit to schedule</strong></span>
+                </label>
+                <div style="font-size:12px;color:#6b7280;margin-top:6px;">On: proposal shows Deposit Due (50%) and Balance. Off: proposal shows the total only, full amount due at completion.</div>
+                <div id="depositDcHint" style="display:none;font-size:12px;color:#b45309;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:8px;margin-top:8px;">DC residential job: DC rules bar a home improvement contractor from taking payment before completion unless the Home Improvement Contractor license (with bond) is held. Consider turning the deposit off for DC jobs until that license is in place.</div>
+            </div>
+
             <!-- Change Orders Section -->
             <div class="room-card">
                 <h3>Change Orders (Optional)</h3>
@@ -1002,8 +1013,8 @@
                     <div id="reviewCreditsRows"></div>
                     <hr style="margin: 10px 0;">
                     <p><strong>Subtotal:</strong> <span id="reviewSubtotal">$0.00</span></p>
-                    <p><strong>Deposit Due (50%):</strong> <span id="reviewDeposit">$0.00</span></p>
-                    <p><strong>Balance:</strong> <span id="reviewBalance">$0.00</span></p>
+                    <p id="reviewDepositRow"><strong>Deposit Due (50%):</strong> <span id="reviewDeposit">$0.00</span></p>
+                    <p id="reviewBalanceRow"><strong>Balance:</strong> <span id="reviewBalance">$0.00</span></p>
                     <p style="font-size: 24px; color: #667eea; margin-top: 15px;"><strong>TOTAL:</strong> <span id="reviewGrandTotal">$0.00</span></p>
                 </div>
             </div>
@@ -1134,7 +1145,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v141</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v142</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -1370,6 +1381,17 @@
                     <div class="form-group"><label>Email</label><input type="email" id="companyEmail" value="info@northernstarpainters.com"></div>
                 </div>
                 <div class="form-group"><label>Website</label><input type="text" id="companyWebsite" value="www.northernstarpainters.com"></div>
+                <h3 style="margin:16px 0 8px;">Contractor Licenses (printed on proposals)</h3>
+                <div style="font-size:12px;color:#6b7280;margin-bottom:8px;">The Virginia block prints on VA jobs only when the VA license number is filled in; the DC block prints on DC jobs only when the DC license number is filled in.</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                    <div class="form-group"><label>VA DPOR License #</label><input type="text" id="vaLicenseNumber" placeholder="2705xxxxxx"></div>
+                    <div class="form-group"><label>VA License Class</label><input type="text" id="vaLicenseClass" placeholder="A, B or C"></div>
+                </div>
+                <div class="form-group"><label>VA Specialty / Classification</label><input type="text" id="vaLicenseSpecialty" placeholder="e.g. PTC (Painting and Wallcovering)"></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                    <div class="form-group"><label>DC Contractor License #</label><input type="text" id="dcLicenseNumber" placeholder="410525000627"></div>
+                    <div class="form-group"><label>DC Home Improvement Salesperson #</label><input type="text" id="dcSalespersonLicense" placeholder="optional"></div>
+                </div>
                 <div class="form-group">
                     <label>Google Profile / Review Link</label>
                     <input type="url" id="googleReviewUrl" placeholder="https://g.page/r/your-id/review">
@@ -2598,6 +2620,7 @@
                     document.getElementById('companyPhone').value = companySettings.companyPhone || '';
                     document.getElementById('companyEmail').value = companySettings.companyEmail || '';
                     document.getElementById('companyWebsite').value = companySettings.companyWebsite || '';
+                    ['vaLicenseNumber','vaLicenseClass','vaLicenseSpecialty','dcLicenseNumber','dcSalespersonLicense'].forEach(k => { const el = document.getElementById(k); if (el) el.value = companySettings[k] || ''; });
                     document.getElementById('consultantName').value = companySettings.consultantName || '';
                     document.getElementById('consultantTitle').value = companySettings.consultantTitle || '';
                     document.getElementById('consultantPhone').value = companySettings.consultantPhone || '';
@@ -2631,6 +2654,11 @@
                 consultantPhone: document.getElementById('consultantPhone').value,
                 consultantEmail: document.getElementById('consultantEmail').value,
                 googleReviewUrl: document.getElementById('googleReviewUrl').value.trim(),
+                vaLicenseNumber: document.getElementById('vaLicenseNumber').value.trim(),
+                vaLicenseClass: document.getElementById('vaLicenseClass').value.trim(),
+                vaLicenseSpecialty: document.getElementById('vaLicenseSpecialty').value.trim(),
+                dcLicenseNumber: document.getElementById('dcLicenseNumber').value.trim(),
+                dcSalespersonLicense: document.getElementById('dcSalespersonLicense').value.trim(),
                 logoUrl: companySettings?.logoUrl || '',
                 consultantPhotoUrl: companySettings?.consultantPhotoUrl || ''
             };
@@ -3060,6 +3088,9 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
         // Where dynamically-created overlays/sheets/toasts must be attached.
         // The stylesheet has `body > script ~ * { display:none !important }`,
         // so anything appended to <body> after the module script is invisible.
+        // v142 — jurisdiction detection from a customer address string.
+        window._isDcAddress = a => /\bWashington,?\s*D\.?C\.?\b|\bDC\s*200\d\d\b|\bD\.?C\.?\s*200\d\d\b/i.test(a || '');
+        window._isVaAddress = a => !window._isDcAddress(a) && /\bVA\b|\bVirginia\b/i.test(a || '');
         window._overlayRoot = function() {
             return document.getElementById('appContainer') || document.body;
         };
@@ -7428,6 +7459,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 rooms: safeRooms,
                 basePrice: job.basePrice || job.grandTotal,
                 priceOverride: job.priceOverride || false,
+                depositRequired: job.depositRequired !== false,
                 discountType: job.discountType,
                 discountValue: job.discountValue,
                 discountName: job.discountName,
@@ -7524,6 +7556,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 rooms: job.rooms || [],
                 basePrice: job.basePrice || job.grandTotal,
                 priceOverride: job.priceOverride || false,
+                depositRequired: job.depositRequired !== false,
                 discountType: job.discountType,
                 discountValue: job.discountValue,
                 discountName: job.discountName,
@@ -10402,6 +10435,19 @@ Only return JSON, no other text.`;
             const subtotal = discountBase - discountAmount + skipDiscountCOTotal - totalCredits;
             const deposit = subtotal * 0.5;
             const balance = subtotal * 0.5;
+            // v142 deposit toggle: first pass pushes the saved value into the
+            // checkbox, later passes read the checkbox (user toggled it).
+            const depEl = document.getElementById('depositRequired');
+            if (depEl) {
+                if (currentEstimate._depositSynced !== true) { depEl.checked = currentEstimate.depositRequired !== false; currentEstimate._depositSynced = true; }
+                currentEstimate.depositRequired = depEl.checked;
+                const dcHint = document.getElementById('depositDcHint');
+                if (dcHint) { const _c = (customers || []).find(c => c.id === currentEstimate.customerId); dcHint.style.display = (depEl.checked && window._isDcAddress(_c?.address)) ? 'block' : 'none'; }
+            }
+            const _depOn = currentEstimate.depositRequired !== false;
+            const _depRow = document.getElementById('reviewDepositRow'), _balRow = document.getElementById('reviewBalanceRow');
+            if (_depRow) _depRow.style.display = _depOn ? '' : 'none';
+            if (_balRow) _balRow.style.display = _depOn ? '' : 'none';
 
             // Store in estimate object
             currentEstimate.discountType = discountType;
@@ -16921,6 +16967,7 @@ Generate JSON with these EXACT keys:
                 rooms: currentEstimate.rooms,
                 basePrice: currentEstimate.basePrice,
                 priceOverride: currentEstimate.priceOverride || false,
+                depositRequired: currentEstimate.depositRequired !== false,
                 discountType: currentEstimate.discountType,
                 discountValue: currentEstimate.discountValue,
                 discountName: currentEstimate.discountName,
@@ -16968,6 +17015,7 @@ Generate JSON with these EXACT keys:
                         rooms: job.rooms,
                         basePrice: job.basePrice,
                         priceOverride: job.priceOverride,
+                        depositRequired: job.depositRequired !== false,
                         discountType: job.discountType,
                         discountValue: job.discountValue,
                         discountName: job.discountName,
@@ -17124,7 +17172,7 @@ Generate JSON with these EXACT keys:
                 'Please find below the details of your painting proposal:\n\n' +
                 'Project: ' + jobName + '\n' +
                 'Total: $' + total + '\n' +
-                'Deposit Due (50%): $' + (parseFloat(total) / 2).toFixed(2) + '\n\n' +
+                (currentEstimate.depositRequired !== false ? 'Deposit Due (50%): $' + (parseFloat(total) / 2).toFixed(2) + '\n\n' : 'Payment due at completion.\n\n') +
                 'To view the full detailed proposal with room breakdowns, please request a PDF copy.\n\n' +
                 'If you have any questions or would like to proceed, please don\'t hesitate to reach out.\n\n' +
                 'Best regards,\n' +
@@ -17311,12 +17359,48 @@ Generate JSON with these EXACT keys:
             const subtotal = basePrice + _changeOrdersTotal - discountAmount - totalCredits;
             const depositAmount = subtotal * 0.5;
             const balanceAmount = subtotal * 0.5;
+            const _depositReq = currentEstimate.depositRequired !== false; // v142 toggle
             const projectNotes = document.getElementById('projectSummaryNotes')?.value || '';
             const showBreakdown = window._crewMode || document.getElementById('pdfDetailLevel')?.value !== 'total';
             const showRoomPrices = document.getElementById('showRoomPrices')?.checked === true;
             const co = companySettings || {};
             const pca = '-webkit-print-color-adjust:exact;print-color-adjust:exact';
             const sectionTitle = (t) => `<div style="color:#1e3a8a;padding:6px 0 4px 0;margin:15px 0 0;font-weight:700;font-size:11pt;letter-spacing:0.5px;border-bottom:2px solid #2563eb">${t}</div><div style="height:2px;width:50px;background-color:#f4a624;margin-top:-2px;${pca}"></div>`;
+            // v142 — permanent contract language on every proposal. General
+            // terms always render; VA / DC disclosure blocks render from the
+            // customer address and only when the license fields in Settings
+            // are filled (never print a blank license number).
+            const _jurisVA = window._isVaAddress(customer.address), _jurisDC = window._isDcAddress(customer.address);
+            const _generalTermsHTML = `<h2>GENERAL TERMS</h2>
+<p><strong>Written contract and change orders:</strong> This proposal becomes the contract when signed by both parties. Any change to the scope, materials, price or completion date must be in a written change order signed by both parties before that work is performed.</p>
+<p><strong>Schedule and events beyond our control:</strong> Start and completion dates are estimates. Delays caused by events beyond our control, including weather, temperature or humidity outside the paint manufacturer's application range, material or color availability, permit or utility delays, customer-caused delays, lack of access, illness, or acts of God, do not constitute abandonment and extend the schedule and any payment timeframes by the length of the delay.</p>
+<p><strong>Permits:</strong> We will comply with all local requirements for building permits, inspections and zoning that apply to this work.</p>
+<p><strong>Site and access:</strong> The customer provides reasonable access, water and electricity, secures pets, and moves or protects items not listed under Set-Up. Vehicles should be moved away from the work area.</p>
+<p><strong>Pre-existing conditions:</strong> We are not responsible for conditions not visible at the time of the estimate, including hidden rot, moisture, mold, lead-based paint, structural defects, or failure of prior coatings or repairs by others. Work to correct such conditions is priced by written change order.</p>
+<p><strong>Lead-safe practices:</strong> Homes built before 1978 may contain lead-based paint. Where lead is present or presumed, work follows EPA Renovation, Repair and Painting (RRP) lead-safe practices and the customer receives the EPA "Renovate Right" pamphlet before work begins.</p>
+<p><strong>Cancellation:</strong> Either party may cancel this contract in writing within three (3) business days after signing at no cost. After that period, cancellation by the customer forfeits our documented costs incurred (materials ordered, scheduling), not to exceed the deposit amount.</p>
+<p><strong>Limitation of liability:</strong> Our total liability under this contract is limited to the contract price. Neither party is liable for indirect or consequential damages. The workmanship warranty below is the exclusive remedy for defects in our work.</p>
+<p><strong>Photographs:</strong> We may photograph the work for our records and portfolio. No customer name or street address is published without written consent.</p>
+<p><strong>Governing law and disputes:</strong> This contract is governed by the law of the jurisdiction where the property is located, and any dispute will be brought in that jurisdiction. The parties agree to attempt in good faith to resolve any dispute directly before filing suit.</p>
+<p><strong>Entire agreement:</strong> This document, including its attachments and any signed change orders, is the entire agreement. If any provision is found unenforceable, the rest remains in effect.</p>`;
+            const _jurisdictionHTML = (() => {
+                let h = '';
+                if (_jurisVA && co.vaLicenseNumber) {
+                    h += `<h2>VIRGINIA CONTRACTOR DISCLOSURES</h2>
+<p><strong>Contractor:</strong> ${co.companyName||'Northern Star Painters'}, ${co.companyAddress||''}. Virginia DPOR contractor license no. <strong>${co.vaLicenseNumber}</strong>${co.vaLicenseClass ? ', Class ' + co.vaLicenseClass : ''}${co.vaLicenseSpecialty ? ', ' + co.vaLicenseSpecialty : ''}.</p>
+<p><strong>Down payment and progress payments:</strong> ${_depositReq ? '50% of the contract price is due at signing to schedule; the balance is due at the completion walk-through.' : 'No down payment; the full contract price is due at the completion walk-through.'}</p>
+<p><strong>Virginia Contractor Transaction Recovery Fund:</strong> The Virginia Contractor Transaction Recovery Fund may provide relief to consumers who suffer losses through the improper or dishonest conduct of a licensed residential contractor. For information, or to obtain the Board for Contractors' statement of consumer protection, contact the Department of Professional and Occupational Regulation, 9960 Mayland Drive, Suite 400, Richmond, VA 23233, (804) 367-8500, www.dpor.virginia.gov. By signing, the customer acknowledges receipt of this statement of protection.</p>`;
+                }
+                if (_jurisDC && co.dcLicenseNumber) {
+                    h += `<h2>DISTRICT OF COLUMBIA DISCLOSURES</h2>
+<p><strong>Contractor:</strong> ${co.companyName||'Northern Star Painters'}, ${co.companyAddress||''}, ${formatPhone(co.companyPhone)||''}. District of Columbia contractor license no. <strong>${co.dcLicenseNumber}</strong>.</p>
+${co.dcSalespersonLicense ? `<p><strong>Salesperson:</strong> ${co.consultantName||''}, DC Home Improvement Salesperson license no. <strong>${co.dcSalespersonLicense}</strong>.</p>` : ''}
+<p><strong>Dates:</strong> The approximate start and completion dates are as agreed in writing at scheduling and may be changed only by written agreement of both parties.</p>
+<p><strong>Payment terms:</strong> ${_depositReq ? '50% at signing, balance at the completion walk-through.' : 'No payment is due before completion; the full contract price is due at the completion walk-through.'}</p>
+<p style="font-weight:bold;font-size:11pt;border:2px solid #111;padding:8px;">DO NOT SIGN THIS CONTRACT IF ANY SPACES ARE LEFT BLANK. YOU ARE ENTITLED TO A COPY OF THIS CONTRACT AT THE TIME YOU SIGN IT.</p>`;
+                }
+                return h;
+            })();
             const priceRow = (label, val, extra='') => `<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:10pt;border-bottom:1px solid #e5e7eb;${extra}"><span>${label}</span><span>${val}</span></div>`;
 
             // Contract terms (use cache — loaded at app init, no await needed).
@@ -17636,8 +17720,7 @@ ${changeOrdersPriceRow}
 ${discountHTML}
 ${creditsHTML}
 ${priceRow('Subtotal','$'+subtotal.toFixed(2),'border-top:2px solid #1e3a8a;font-weight:bold;margin-top:6px;padding-top:6px')}
-${priceRow('Deposit Due (50%)','$'+depositAmount.toFixed(2))}
-${priceRow('Balance','$'+balanceAmount.toFixed(2))}
+${_depositReq ? priceRow('Deposit Due (50%)','$'+depositAmount.toFixed(2)) + priceRow('Balance','$'+balanceAmount.toFixed(2)) : priceRow('Total Due at Completion','$'+subtotal.toFixed(2),'font-weight:bold')}
 </div>`}
 ${sectionTitle('PROJECT SUMMARY')}
 <p><strong>Included in the price above:</strong></p>
@@ -17654,6 +17737,7 @@ ${window._crewMode ? '' : `<h2>MISCELLANEOUS</h2>
 <h2>CLEAN-UP</h2>
 <p><strong>Daily:</strong></p><ul><li>Ladders stored, debris swept and removed daily.</li></ul>
 <p><strong>Upon Completion:</strong></p><ul><li>Comprehensive clean-up, final walk-through, all equipment removed. Left-over paint stored per your preference.</li></ul>
+${_generalTermsHTML}
 <h2>WORKMANSHIP WARRANTY (2 YEARS)</h2>
 <p>Northern Star Painters warrants its workmanship for <strong>two (2) years from the date of completion</strong>, on all work where we supplied the materials and performed the service.</p>
 <p><strong>Covered:</strong></p>
@@ -17661,11 +17745,13 @@ ${window._crewMode ? '' : `<h2>MISCELLANEOUS</h2>
 <p><strong>Remedy:</strong> We re-prepare, re-prime and recoat the affected area at no charge.</p>
 <p><strong>Not Covered (conditions outside our control):</strong></p>
 <ul><li>Failure of existing fillers, patches, caulk or repairs made by others before our work, unless we replaced them under this contract.</li><li>Movement, cracking, warping, delamination or manufacturer defects in the substrate (siding, trim, masonry, drywall, wood).</li><li>Rust or tannin bleed-through from existing fasteners or the substrate.</li><li>Moisture intrusion from behind the surface, or from roofs, gutters, flashing, plumbing or caulk joints outside our scope.</li><li>Normal weathering, fading, chalking, mildew or wear.</li><li>Horizontal moisture-collecting surfaces (decks, floors, roofs, railing tops).</li><li>Damage from settling, impact, abrasion, pressure washing, landscaping, pets or work by others.</li><li>Varnished or galvanized metal surfaces.</li><li>Materials not provided by us or surfaces we did not paint. Paint costs for touch-ups.</li></ul>
+<p><strong>Conditions:</strong> This warranty is provided to the original customer at the property address and is not transferable. Claims must be reported to us in writing within thirty (30) days of discovery, and the warranty applies only once the contract has been paid in full. Repaired areas are recoated to match as closely as practical; exact match to weathered surrounding surfaces is not guaranteed. The warranty is void where the surface has been altered, repaired or painted by others.</p>
 <h2>PAYMENT AND PRICING</h2>
 <p><strong>Expiration:</strong> Pricing valid 30 days from proposal date.</p>
 <p><strong>Methods:</strong> Checks, Visa, MasterCard, AmEx. 3.5% convenience fee for credit cards.</p>
-<p><strong>Deposit:</strong> 50% required to schedule.</p>
-<p><strong>Balance:</strong> Due at completion walk-through. Late fees of 12% after 5 days.</p>
+${_depositReq ? '<p><strong>Deposit:</strong> 50% required to schedule.</p><p><strong>Balance:</strong> Due at completion walk-through.</p>' : '<p><strong>Deposit:</strong> None required for this proposal.</p><p><strong>Payment:</strong> Full amount due at the completion walk-through.</p>'}
+<p><strong>Late payment:</strong> Balances unpaid 5 days after completion accrue a late fee of 12%, and the customer is responsible for reasonable collection costs and attorney's fees. We may suspend work and reserve all lien rights for unpaid amounts as permitted by law.</p>
+${_jurisdictionHTML}
 ${sectionTitle('SIGNATURES')}`}
 ${window._crewMode ? '' : `<p style="margin:10px 0">The undersigned have read and accept the terms stated herein.</p>
 <div class="signature-grid">
