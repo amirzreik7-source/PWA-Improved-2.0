@@ -115,6 +115,96 @@
             .selection-card { padding: 10px 12px; }
             .selection-grid { gap: 10px; }
         }
+        /* ── Job Cost (v148) ─────────────────────────────────────────── */
+        .jc-sub { color:#6b7280; font-size:12px; }
+        .jc-pill { display:inline-block; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700; color:#fff; white-space:nowrap; }
+        .jc-pill.good { background:#10b981; } .jc-pill.warn { background:#f59e0b; } .jc-pill.bad { background:#ef4444; } .jc-pill.none { background:#9ca3af; }
+        .jc-chip { display:inline-block; padding:2px 7px; border-radius:6px; font-size:10.5px; font-weight:600; line-height:1.5; margin:1px 2px 1px 0; white-space:nowrap; }
+        .jc-chip.review { background:#fef3c7; color:#92400e; } .jc-chip.est { background:#eef2ff; color:#4338ca; }
+        .jc-chip.deduct { background:#e0f2fe; color:#075985; } .jc-chip.excl { background:#f3f4f6; color:#6b7280; }
+        .jc-chip.edited { background:#ede9fe; color:#5b21b6; } .jc-chip.src { background:#f3f4f6; color:#374151; }
+        .jc-card-head { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px; }
+        .jc-card-head h3 { margin:0; }
+        .jc-mini { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin:6px 0 8px; }
+        .jc-mini div { background:#f8f9fa; border-radius:8px; padding:7px 8px; }
+        .jc-mini b { display:block; font-size:15px; color:#1f2937; }
+        .jc-mini span { font-size:11px; color:#6b7280; }
+        .jc-bar { display:flex; height:9px; border-radius:6px; overflow:hidden; background:#e5e7eb; margin:6px 0; }
+        .jc-bar i { display:block; height:100%; }
+        .jc-c-mat { background:#f59e0b; } .jc-c-lab { background:#667eea; } .jc-c-oth { background:#9ca3af; } .jc-c-pro { background:#10b981; } .jc-c-loss { background:#ef4444; }
+        .jc-legend { display:flex; flex-wrap:wrap; gap:10px; font-size:11px; color:#4b5563; }
+        .jc-legend i { display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:4px; vertical-align:-1px; }
+        .jc-head { text-align:center; margin-bottom:12px; }
+        .jc-head .no { color:#667eea; font-weight:700; font-size:13px; margin:0; }
+        .jc-head h2 { margin:4px 0 2px; font-size:21px; }
+        .jc-cards { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-bottom:12px; }
+        .jc-stat { background:#fff; border:2px solid #eef0f4; border-radius:12px; padding:10px 12px; }
+        .jc-stat .l { font-size:11px; font-weight:700; color:#6b7280; text-transform:uppercase; letter-spacing:.04em; }
+        .jc-stat .v { font-size:20px; font-weight:800; color:#111827; margin-top:2px; font-variant-numeric:tabular-nums; }
+        .jc-stat .s { font-size:11.5px; color:#6b7280; margin-top:2px; }
+        .jc-stat.margin { grid-column:1 / -1; border-color:transparent; color:#fff; }
+        .jc-stat.margin .l, .jc-stat.margin .s { color:rgba(255,255,255,.88); }
+        .jc-stat.margin .v { color:#fff; font-size:26px; }
+        .jc-stat.margin.good { background:linear-gradient(135deg,#11998e 0%,#10b981 100%); }
+        .jc-stat.margin.warn { background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%); }
+        .jc-stat.margin.bad { background:linear-gradient(135deg,#ef4444 0%,#b91c1c 100%); }
+        .jc-stat.margin.none { background:linear-gradient(135deg,#9ca3af 0%,#6b7280 100%); }
+        .jc-target { position:relative; height:8px; background:rgba(255,255,255,.3); border-radius:5px; margin-top:8px; }
+        .jc-target i { position:absolute; left:0; top:0; bottom:0; background:#fff; border-radius:5px; }
+        .jc-target b { position:absolute; top:-4px; width:2px; height:16px; background:#111827; opacity:.6; }
+        .jc-tabs { display:flex; gap:4px; background:#f1f3f7; padding:4px; border-radius:12px; margin-bottom:12px; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+        .jc-tabs button { flex:1 0 auto; border:none; background:transparent; padding:9px 10px; border-radius:9px; font-size:13px; font-weight:600; color:#4b5563; cursor:pointer; white-space:nowrap; }
+        .jc-tabs button.on { background:#fff; color:#4c51bf; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+        .jc-tabs .n { display:inline-block; min-width:18px; padding:0 5px; margin-left:4px; border-radius:9px; background:#f59e0b; color:#fff; font-size:11px; }
+        .jc-group { background:#fff; border:2px solid #eef0f4; border-radius:12px; margin-bottom:10px; overflow:hidden; }
+        .jc-group-h { display:flex; justify-content:space-between; align-items:baseline; gap:8px; padding:10px 12px; background:#f8f9fb; border-bottom:1px solid #eef0f4; }
+        .jc-group-h b { font-size:14px; color:#1f2937; } .jc-group-h .t { font-weight:800; font-variant-numeric:tabular-nums; }
+        .jc-row { display:flex; justify-content:space-between; gap:10px; padding:9px 12px; border-top:1px solid #f3f4f6; cursor:pointer; }
+        .jc-row:first-of-type { border-top:none; }
+        .jc-row:active { background:#f5f7ff; }
+        .jc-row .d { font-size:13px; color:#1f2937; min-width:0; }
+        .jc-row .d .m { font-size:11.5px; color:#6b7280; margin-top:1px; overflow:hidden; text-overflow:ellipsis; }
+        .jc-row .a { font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; font-size:14px; }
+        .jc-row .a.neg { color:#059669; }
+        .jc-row.tent { background:#fffbeb; }
+        .jc-row.dim { opacity:.55; }
+        .jc-target-row { padding:9px 12px; border-top:1px solid #f3f4f6; font-size:13px; }
+        .jc-target-row .bar { height:6px; background:#e5e7eb; border-radius:4px; margin-top:6px; overflow:hidden; }
+        .jc-target-row .bar i { display:block; height:100%; background:#667eea; }
+        .jc-review { background:#fff; border:2px solid #fde68a; border-radius:12px; padding:11px 12px; margin-bottom:10px; }
+        .jc-review .top { display:flex; justify-content:space-between; gap:8px; }
+        .jc-review .why { font-size:11.5px; color:#6b7280; margin:4px 0 8px; }
+        .jc-actions { display:flex; flex-wrap:wrap; gap:6px; }
+        .jc-actions button, .jc-btn { border:1.5px solid #c7d2fe; background:#eef2ff; color:#3730a3; border-radius:8px; padding:7px 10px; font-size:12.5px; font-weight:600; cursor:pointer; }
+        .jc-actions button.primary, .jc-btn.primary { background:linear-gradient(135deg,#667eea 0%,#764ba2 100%); color:#fff; border-color:transparent; }
+        .jc-actions button.ok { background:#ecfdf5; border-color:#a7f3d0; color:#065f46; }
+        .jc-actions button.ghost { background:#fff; border-color:#e5e7eb; color:#374151; }
+        .jc-hist { border-left:3px solid #e0e7ff; padding:2px 0 2px 10px; margin:0 0 10px 4px; font-size:12.5px; }
+        .jc-hist .w { font-size:11px; color:#6b7280; }
+        .jc-empty { text-align:center; color:#9ca3af; padding:18px 8px; font-size:13px; }
+        .jc-sheet-bg { position:fixed; inset:0; background:rgba(17,24,39,.45); z-index:9000; display:flex; align-items:flex-end; justify-content:center; animation:reportFadeIn .15s ease; }
+        .jc-sheet { background:#fff; width:100%; max-width:640px; max-height:92vh; overflow-y:auto; border-radius:18px 18px 0 0; padding:16px 16px calc(18px + env(safe-area-inset-bottom)); box-shadow:0 -10px 40px rgba(0,0,0,.25); }
+        .jc-sheet h3 { margin:0 0 4px; font-size:17px; }
+        .jc-sheet .grab { width:40px; height:5px; border-radius:3px; background:#d1d5db; margin:0 auto 10px; }
+        .jc-sheet label { display:block; font-size:12px; font-weight:700; color:#374151; margin:10px 0 4px; }
+        .jc-sheet input, .jc-sheet select, .jc-sheet textarea { width:100%; padding:10px; border:2px solid #e0e0e0; border-radius:8px; font-size:16px; background:#fff; }
+        .jc-sheet .row2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+        .jc-sheet .kv { display:grid; grid-template-columns:auto 1fr; gap:3px 10px; font-size:12.5px; margin:8px 0; }
+        .jc-sheet .kv span:nth-child(odd) { color:#6b7280; }
+        .jc-sheet .kv span:nth-child(even) { word-break:break-word; }
+        .jc-split-row { display:grid; grid-template-columns:1fr 110px 34px; gap:6px; margin-bottom:6px; }
+        .jc-split-row button { border:none; background:#fee2e2; color:#b91c1c; border-radius:8px; font-size:16px; cursor:pointer; }
+        .jc-ov-row { display:grid; grid-template-columns:1fr auto; gap:6px 10px; padding:11px 12px; border-top:1px solid #f3f4f6; cursor:pointer; align-items:center; }
+        .jc-ov-row:active { background:#f5f7ff; }
+        .jc-ov-row .nm { font-size:14px; font-weight:600; color:#1f2937; }
+        .jc-ov-row .nm small { display:block; font-weight:500; color:#6b7280; font-size:11.5px; margin-top:1px; }
+        .jc-ov-row .fig { text-align:right; font-size:12px; color:#4b5563; font-variant-numeric:tabular-nums; }
+        .jc-filter { display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap; }
+        .jc-filter button { border:1.5px solid #e5e7eb; background:#fff; border-radius:999px; padding:6px 12px; font-size:12.5px; font-weight:600; color:#4b5563; cursor:pointer; }
+        .jc-filter button.on { background:#4c51bf; color:#fff; border-color:#4c51bf; }
+        .jc-fab { position:sticky; bottom:12px; display:flex; justify-content:flex-end; pointer-events:none; margin-top:6px; }
+        .jc-fab button { pointer-events:auto; border:none; border-radius:999px; padding:12px 18px; font-size:14px; font-weight:700; color:#fff; background:linear-gradient(135deg,#11998e 0%,#38ef7d 100%); box-shadow:0 6px 18px rgba(17,153,142,.35); cursor:pointer; }
+        @media (min-width: 640px) { .jc-cards { grid-template-columns:repeat(4,1fr); } .jc-stat.margin { grid-column:span 4; } }
     </style>
 </head>
 <body>
@@ -157,7 +247,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v145</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v148</span>
             </div>
 
             <!-- Global Search -->
@@ -187,6 +277,7 @@
                 <button class="btn btn-success" onclick="showCalendar()">📅 Calendar</button>
                 <button class="btn btn-info" onclick="showScreen('settingsScreen')">⚙️ Settings</button>
                 <button class="btn btn-secondary" onclick="showDashboard()">📊 Dashboard</button>
+                <button class="btn btn-success" onclick="showJobCostsOverview()">💰 Job Costs</button>
             </div>
             <div style="margin-top:20px; text-align:center;">
                 <button class="btn btn-secondary btn-small" onclick="logout()">Sign Out</button>
@@ -1145,7 +1236,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v145</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v148</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -1790,6 +1881,10 @@
         </div>
 
         <!-- BUSINESS INTELLIGENCE DASHBOARD -->
+        <!-- JOB COST (v148): per-project screen + company overview, rendered by the jc* functions -->
+        <div id="jobCostScreen" class="screen"></div>
+        <div id="jobCostsOverviewScreen" class="screen"></div>
+
         <div id="dashboardScreen" class="screen">
             <button class="btn btn-back" onclick="showScreen('homeScreen')">← Back</button>
             <h2 class="screen-title">Business Intelligence</h2>
@@ -1802,7 +1897,7 @@
         // Import Firebase modules
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
-        import { getFirestore, collection, addDoc, getDocs, getDoc, doc, updateDoc, deleteDoc, deleteField, query, where, orderBy, enableIndexedDbPersistence, serverTimestamp, runTransaction } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        import { getFirestore, collection, addDoc, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc, deleteField, query, where, orderBy, enableIndexedDbPersistence, serverTimestamp, runTransaction } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
         import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js';
 
         // Firebase configuration
@@ -3450,6 +3545,9 @@ We're grateful at Northern Star Painting for the chance to submit our proposal f
                 });
             }
             html += '</div>';
+
+            // Job Cost card (v148) — fills itself from the jobCosts collection
+            html += window._jcProjectCardSlot(projectId);
 
             // Crew Proposals Section
             const crewProposals = project.crewProposals || [];
@@ -18253,6 +18351,704 @@ IMPORTANT: Return ONLY the JSON object. No other text.`;
             navigator.serviceWorker.register('service-worker.js').catch(function(){});
         }
 
+        // ═══════════════════════════════════════════════════════════════════
+        // JOB COST (v148) — revenue vs materials / labor / other per project.
+        // Data: Firestore `jobCosts` (written nightly by ~/nsp-agents jobcost.py,
+        // corrected here). Docs: L_* cost lines, P_<projectId> job settings,
+        // M_agent last-run info. Every hand edit sets userEdited/editedFields so
+        // the nightly agent never overwrites it, and appends to history[].
+        // ═══════════════════════════════════════════════════════════════════
+        window._jc = { docs: [], lines: [], pdocs: {}, meta: null, loadedAt: 0, loading: null, pid: null, tab: 'overview', ovFilter: 'active' };
+        const JC_EXT_LABELS = {
+            '710-e-st': '710 E St SE (Brownston / units 2–3, common)',
+            'holmes-run-1219': '5300 Holmes Run #1219 (Mo Abu Naim)',
+            '1300-yards': '1300 Yards Pl SE (Nimer)',
+            'o-st-unit-b': '2118 O St NW Unit B (Priscilla Luong)'
+        };
+        const JC_STORE_LABELS = { homedepot: 'Home Depot', evolution: 'Benjamin Moore — Evolution Paint', paintloft: 'Benjamin Moore — The Paint Loft', ubereats: 'Uber Eats deliveries', ace: 'Ace Hardware', sherwin: 'Sherwin-Williams', amazon: 'Amazon' };
+        const JC_SOURCE_LABELS = { mercury: 'Mercury', cashapp: 'Cash App', homedepot: 'Pro Xtra export', evolution: 'Rundoo statement', paintloft: 'Rundoo invoice', ledger: 'Crew ledger', ubereats: 'Uber Eats', qb: 'QuickBooks', manual: 'Job file', app: 'Added in app' };
+        const JC_PEOPLE = [['javier','Javier (Francisco Javier Reyes)'],['carlos','Carlos (Alvarado Painting LLC)'],['albert','Albert / Fredis'],['edilser','Edilser Cameros'],['erick_c','Erick Cardenas'],['jorge','Jorge Urbina Ramos'],['erick_g','Erick Garcia'],['josue','Josue (helper)'],['walter','Walter Diazfranco (flooring)'],['khaled','Khaled Khalifa']];
+
+        const _jcEsc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        const _jcMoney = (n, cents) => { const v = Number(n) || 0; const s = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: cents === false ? 0 : 2, maximumFractionDigits: cents === false ? 0 : 2 }); return (v < 0 ? '−$' : '$') + s; };
+        const _jcDate = (iso) => { if (!iso) return ''; const d = new Date(String(iso).slice(0, 10) + 'T12:00:00'); return isNaN(d) ? String(iso) : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); };
+        const _jcAgo = (iso) => { if (!iso) return 'never'; const ms = Date.now() - new Date(iso).getTime(); const h = Math.round(ms / 3600000); return h < 1 ? 'just now' : h < 36 ? h + ' h ago' : Math.round(h / 24) + ' days ago'; };
+        const _jcPid = (pid) => { const seen = {}; let id = pid; while (id && window._jc.pdocs[id]?.mergedInto && !seen[id]) { seen[id] = 1; id = window._jc.pdocs[id].mergedInto; } return id; };
+
+        // Headless verification only: a render script may set window.__JC_FIXTURE__ = {docs:[…]} before
+        // login to feed admin-SDK data in and capture writes (the live app never sets it).
+        const _jcFx = () => window.__JC_FIXTURE__;
+        async function _jcWrite(op, id, data) {
+            if (_jcFx()) { (_jcFx().writes = _jcFx().writes || []).push({ op, id, data }); return; }
+            return op === 'update' ? updateDoc(doc(db, 'jobCosts', id), data) : setDoc(doc(db, 'jobCosts', id), data);
+        }
+        async function _jcLoad(force) {
+            const st = window._jc;
+            if (!force && st.loadedAt && Date.now() - st.loadedAt < 60000) return st;
+            if (st.loading) return st.loading;
+            st.loading = (async () => {
+                try {
+                    if (_jcFx()) st.docs = JSON.parse(JSON.stringify(_jcFx().docs || []));
+                    else {
+                        const snap = await getDocs(query(collection(db, 'jobCosts'), where('userId', '==', currentUser.uid)));
+                        st.docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                    }
+                    if (_jcFx()) _jcFx().docs = st.docs;
+                    st.lines = st.docs.filter(d => d.kind === 'line');
+                    st.pdocs = {};
+                    st.docs.filter(d => d.kind === 'project').forEach(d => { st.pdocs[d.projectId] = d; });
+                    st.meta = st.docs.find(d => d.kind === 'meta') || null;
+                    st.loadedAt = Date.now();
+                } catch (e) {
+                    console.warn('jobCosts load failed', e);
+                    st.error = e?.message || String(e);
+                } finally { st.loading = null; }
+                return st;
+            })();
+            return st.loading;
+        }
+
+        function _jcRevenue(project) {
+            const pd = window._jc.pdocs[project.id] || {};
+            const basis = pd.revenueBasis || { mode: 'landed' };
+            if (basis.mode === 'manual') return { amount: Number(basis.amount) || 0, label: 'Manual contract amount', note: basis.note || '' };
+            if (basis.mode === 'job' && basis.jobId) {
+                const j = jobs.find(x => x.id === basis.jobId);
+                if (j) return { amount: Number(j.grandTotal || j.basePrice || 0), label: `Proposal ${j.proposalLabel || ''} (chosen as the contract)`, note: basis.note || '' };
+            }
+            const eff = (typeof getEffectiveProposal === 'function') ? getEffectiveProposal(project) : null;
+            return { amount: eff ? Number(eff.grandTotal || eff.basePrice || 0) : 0, label: eff ? `Proposal ${eff.proposalLabel || 'A'}${project.landedProposalId === eff.id ? ' (landed)' : ' (latest — none landed)'}` : 'No proposal', note: '' };
+        }
+
+        // Every money movement that belongs to a project (after merges), as {line, amount}
+        function _jcPortions(pid) {
+            const out = [];
+            window._jc.lines.forEach(l => {
+                if (l.excluded) return;
+                (l.allocations || []).forEach(a => { if (a.projectId && _jcPid(a.projectId) === pid) out.push({ line: l, amount: Number(a.amount) || 0, tentative: !!l.needsReview }); });
+            });
+            return out;
+        }
+        function _jcReviewLines(pid) {
+            return window._jc.lines.filter(l => l.needsReview && !l.excluded && (
+                (l.allocations || []).some(a => a.projectId && _jcPid(a.projectId) === pid) ||
+                ((l.match || {}).candidates || []).some(c => c.projectId && _jcPid(c.projectId) === pid)));
+        }
+
+        function _jcSummary(project) {
+            const pid = project.id;
+            const pd = window._jc.pdocs[pid] || {};
+            const rev = _jcRevenue(project);
+            const portions = _jcPortions(pid);
+            const t = { materials: 0, labor: 0, other: 0, collected: 0, tentative: 0, days: 0 };
+            portions.forEach(p => {
+                const c = p.line.category;
+                if (c === 'payment') { t.collected += p.amount; return; }
+                if (c === 'settlement') return;
+                if (t[c] === undefined) return;
+                t[c] += p.amount;
+                if (p.tentative) t.tentative += p.amount;
+                if (p.line.days && p.line.amount) t.days += p.line.days * (p.amount / p.line.amount);
+            });
+            const cost = t.materials + t.labor + t.other;
+            const target = (pd.targetMargin != null ? Number(pd.targetMargin) : 0.5);
+            const margin = rev.amount > 0 ? (rev.amount - cost) / rev.amount : null;
+            const status = (margin == null || cost === 0) ? 'none' : margin >= target ? 'good' : margin >= target - 0.10 ? 'warn' : 'bad';
+            return { rev, cost, profit: rev.amount - cost, margin, target, status, ...t, portions, review: _jcReviewLines(pid), pd };
+        }
+
+        function _jcBar(s) {
+            const base = Math.max(s.rev.amount, s.cost, 1);
+            const w = (v) => Math.max(0, v / base * 100).toFixed(2) + '%';
+            const pro = s.rev.amount - s.cost;
+            return `<div class="jc-bar" title="Materials ${_jcMoney(s.materials)} · Labor ${_jcMoney(s.labor)} · Other ${_jcMoney(s.other)}">
+                <i class="jc-c-mat" style="width:${w(s.materials)}"></i><i class="jc-c-lab" style="width:${w(s.labor)}"></i><i class="jc-c-oth" style="width:${w(s.other)}"></i>${pro > 0 ? `<i class="jc-c-pro" style="width:${w(pro)}"></i>` : ''}</div>`;
+        }
+        const _jcPct = (m) => m == null ? '—' : (m * 100).toFixed(1) + '%';
+
+        // ── Project detail card (filled async so the page never waits on it) ──
+        window._jcProjectCardSlot = function(projectId) {
+            setTimeout(() => window._jcFillProjectCard(projectId), 0);
+            return `<div id="jcCard_${projectId}" class="room-card" style="border-left:4px solid #667eea;"><div class="jc-card-head"><h3>💰 Job Cost</h3><span class="jc-sub">loading…</span></div></div>`;
+        };
+        window._jcFillProjectCard = async function(projectId) {
+            await _jcLoad();
+            const el = document.getElementById('jcCard_' + projectId);
+            const project = projects.find(p => p.id === projectId);
+            if (!el || !project) return;
+            const pd = window._jc.pdocs[projectId];
+            if (pd?.mergedInto) {
+                const parent = projects.find(p => p.id === pd.mergedInto);
+                el.innerHTML = `<div class="jc-card-head"><h3>💰 Job Cost</h3><span class="jc-pill none">rolled up</span></div>
+                    <p class="jc-sub" style="margin-bottom:8px;">Costs for this project are tracked on <strong>${_jcEsc(parent?.jobNumber || '')}</strong> ${_jcEsc(parent?.projectName || '')} — it's billed inside that contract.</p>
+                    <button class="btn btn-primary btn-small" onclick="openJobCost('${pd.mergedInto}')" style="width:100%;">Open ${_jcEsc(parent?.jobNumber || 'parent')} Job Cost →</button>`;
+                return;
+            }
+            const s = _jcSummary(project);
+            const hasData = s.portions.length || s.review.length;
+            if (!hasData && !['Landed Job', 'Scheduled', 'In Progress', 'Complete'].includes(project.status)) { el.remove(); return; }
+            el.innerHTML = `<div class="jc-card-head"><h3>💰 Job Cost</h3>${s.margin == null ? '<span class="jc-pill none">no revenue</span>' : s.cost === 0 ? '<span class="jc-pill none">no costs yet</span>' : `<span class="jc-pill ${s.status}">${_jcPct(s.margin)} margin</span>`}</div>
+                ${hasData ? `<div class="jc-mini">
+                    <div><span>Revenue</span><b>${_jcMoney(s.rev.amount, false)}</b></div>
+                    <div><span>Cost so far</span><b>${_jcMoney(s.cost, false)}</b></div>
+                    <div><span>Profit</span><b style="color:${s.profit >= 0 ? '#059669' : '#dc2626'}">${_jcMoney(s.profit, false)}</b></div>
+                </div>${_jcBar(s)}
+                <div class="jc-legend" style="margin-bottom:8px;"><span><i class="jc-c-mat"></i>Materials ${_jcMoney(s.materials, false)}</span><span><i class="jc-c-lab"></i>Labor ${_jcMoney(s.labor, false)}</span>${s.other ? `<span><i class="jc-c-oth"></i>Other ${_jcMoney(s.other, false)}</span>` : ''}<span>Collected ${_jcMoney(s.collected, false)}</span></div>
+                ${s.review.length ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:7px 10px;font-size:12.5px;color:#92400e;margin-bottom:8px;">⚠️ ${s.review.length} item${s.review.length === 1 ? '' : 's'} need${s.review.length === 1 ? 's' : ''} a look${s.tentative ? ` · ${_jcMoney(s.tentative, false)} counted as a best guess` : ''}</div>` : ''}`
+                : `<p class="jc-sub" style="margin-bottom:8px;">No receipts or crew payments matched to this job yet. The nightly agent fills this in; you can also add entries by hand.</p>`}
+                <button class="btn btn-primary btn-small" onclick="openJobCost('${projectId}')" style="width:100%;">Open Job Cost →</button>`;
+        };
+
+        // ── Job Cost screen ──
+        window.openJobCost = async function(projectId, tab) {
+            window._jc.pid = projectId;
+            if (tab) window._jc.tab = tab;
+            let scr = document.getElementById('jobCostScreen');
+            scr.innerHTML = '<div class="loading">Loading job cost…</div>';
+            showScreen('jobCostScreen');
+            window.scrollTo(0, 0);
+            await _jcLoad(true);
+            _jcRender();
+        };
+        window.jcTab = function(tab) { window._jc.tab = tab; _jcRender(); };
+
+        function _jcRowHtml(p, opts) {
+            const l = p.line;
+            const chips = [];
+            if (l.needsReview) chips.push('<span class="jc-chip review">best guess</span>');
+            if (l.taxEstimated) chips.push('<span class="jc-chip est">tax est.</span>');
+            if (l.deductFromCrew) chips.push(`<span class="jc-chip deduct">−${_jcMoney(l.deductAmount ?? l.amount)} from ${_jcEsc((JC_PEOPLE.find(x => x[0] === l.deductFromCrew) || [0, l.deductFromCrew])[1].split(' (')[0])}'s pay</span>`);
+            if (l.userEdited) chips.push('<span class="jc-chip edited">edited</span>');
+            if ((l.allocations || []).length > 1) chips.push(`<span class="jc-chip src">split · ${_jcMoney(p.amount)} of ${_jcMoney(l.amount)}</span>`);
+            const title = opts?.title || l.description || l.party;
+            const shortRef = l.source === 'mercury' || l.source === 'ledger' || l.source === 'ubereats' || l.source === 'cashapp' || l.source === 'app' ? '' : l.ref;
+            const sub = [opts?.sub, shortRef && !String(title).includes(shortRef) ? '#' + shortRef : '', JC_SOURCE_LABELS[l.source] || l.source].filter(Boolean).join(' · ');
+            return `<div class="jc-row ${l.needsReview ? 'tent' : ''}" onclick="jcOpenLine('${l.id}')">
+                <div class="d"><div>${_jcEsc(_jcDate(l.date))} · ${_jcEsc(title)}</div><div class="m">${_jcEsc(sub)} ${chips.join('')}</div></div>
+                <div class="a ${p.amount < 0 ? 'neg' : ''}">${_jcMoney(p.amount)}</div></div>`;
+        }
+
+        function _jcRender() {
+            const st = window._jc;
+            const scr = document.getElementById('jobCostScreen');
+            const project = projects.find(p => p.id === st.pid);
+            if (!project) { scr.innerHTML = '<button class="btn btn-back" onclick="showJobCostsOverview()">← Back</button><p class="jc-empty">Project not found.</p>'; return; }
+            if (st.pdocs[project.id]?.mergedInto) { openJobCost(st.pdocs[project.id].mergedInto); return; }
+            const s = _jcSummary(project);
+            const mergedKids = Object.values(st.pdocs).filter(d => d.mergedInto === project.id).map(d => projects.find(p => p.id === d.projectId)).filter(Boolean);
+            const m = st.meta;
+            const marginPctBar = s.margin == null ? 0 : Math.max(0, Math.min(100, s.margin * 100));
+            let html = `<div style="display:flex;gap:8px;"><button class="btn btn-back" style="width:auto;flex:1;" onclick="viewProjectDetail('${project.id}')">← Project</button>
+                <button class="btn btn-back" style="width:auto;flex:1;" onclick="showJobCostsOverview()">All jobs</button></div>
+                <div class="jc-head"><p class="no">${_jcEsc(project.jobNumber)}${mergedKids.length ? ' + ' + mergedKids.map(k => _jcEsc(k.jobNumber)).join(', ') : ''}</p>
+                    <h2>${_jcEsc(project.customerName || '')}</h2>
+                    <div class="jc-sub">${_jcEsc(project.projectName || '')} · ${_jcEsc(project.status || '')}</div>
+                    <div class="jc-sub" style="margin-top:4px;">${m ? `Auto-updated nightly · last run ${_jcEsc(_jcAgo(m.lastRunAt))} · tracking since ${_jcEsc(_jcDate(m.startDate))}` : 'Agent has not run yet'}</div></div>
+                <div class="jc-cards">
+                    <div class="jc-stat margin ${s.status}"><div class="l">Margin · target ${(s.target * 100).toFixed(0)}%</div>
+                        <div class="v">${_jcPct(s.margin)} <span style="font-size:15px;font-weight:700;">${s.margin == null ? '' : '· ' + _jcMoney(s.profit, false) + ' profit'}</span></div>
+                        <div class="jc-target"><i style="width:${marginPctBar}%"></i><b style="left:calc(${(s.target * 100).toFixed(1)}% - 1px)"></b></div>
+                        <div class="s" style="margin-top:6px;">${s.margin == null ? 'Set the contract amount to see margin.' : s.margin >= s.target ? 'On target.' : `Below target by ${((s.target - s.margin) * 100).toFixed(1)} pts — ${_jcMoney(s.rev.amount * s.target - s.profit, false)} over the cost budget.`}${s.tentative ? ` Includes ${_jcMoney(s.tentative, false)} of best-guess items.` : ''}</div></div>
+                    <div class="jc-stat"><div class="l">Revenue</div><div class="v">${_jcMoney(s.rev.amount, false)}</div><div class="s">Collected ${_jcMoney(s.collected, false)}${s.rev.amount ? ` · ${Math.round(s.collected / s.rev.amount * 100)}%` : ''}</div></div>
+                    <div class="jc-stat"><div class="l">Materials</div><div class="v">${_jcMoney(s.materials, false)}</div><div class="s">${s.rev.amount ? (s.materials / s.rev.amount * 100).toFixed(1) + '% of revenue' : ''}</div></div>
+                    <div class="jc-stat"><div class="l">Labor</div><div class="v">${_jcMoney(s.labor, false)}</div><div class="s">${s.rev.amount ? (s.labor / s.rev.amount * 100).toFixed(1) + '% of revenue' : ''}${s.days ? ` · ${(+s.days.toFixed(2))} crew days` : ''}</div></div>
+                    <div class="jc-stat"><div class="l">Other</div><div class="v">${_jcMoney(s.other, false)}</div><div class="s">Total cost ${_jcMoney(s.cost, false)}</div></div>
+                </div>`;
+            const tabs = [['overview', 'Overview'], ['materials', 'Materials'], ['labor', 'Labor'], ['review', 'Review'], ['history', 'History']];
+            html += `<div class="jc-tabs">${tabs.map(([k, lbl]) => `<button class="${st.tab === k ? 'on' : ''}" onclick="jcTab('${k}')">${lbl}${k === 'review' && s.review.length ? `<span class="n">${s.review.length}</span>` : ''}</button>`).join('')}</div>`;
+            html += `<div id="jcTabBody">${_jcTabHtml(st.tab, project, s)}</div>`;
+            html += `<div class="jc-fab"><button onclick="jcManualEntry('${project.id}')">+ Add entry</button></div>`;
+            scr.innerHTML = html;
+        }
+
+        function _jcGroup(title, total, rows, extra) {
+            return `<div class="jc-group"><div class="jc-group-h"><b>${title}</b><span class="t">${_jcMoney(total)}</span></div>${extra || ''}${rows.join('')}</div>`;
+        }
+
+        function _jcTargets(project, s) {
+            const pd = s.pd || {};
+            const targets = (pd.crewTargets || []);
+            const byPerson = {};
+            s.portions.filter(p => p.line.category === 'labor').forEach(p => { const k = p.line.partyKey || p.line.party; byPerson[k] = (byPerson[k] || 0) + p.amount; });
+            const deducted = {};
+            s.portions.filter(p => p.line.category === 'materials' && p.line.deductFromCrew).forEach(p => {
+                const share = p.line.amount ? p.amount / p.line.amount : 1;
+                deducted[p.line.deductFromCrew] = (deducted[p.line.deductFromCrew] || 0) + Number(p.line.deductAmount ?? p.line.amount) * share;
+            });
+            const keys = [...new Set(targets.map(t => t.partyKey))];
+            const rows = keys.map(k => {
+                const ts = targets.filter(t => t.partyKey === k);
+                const target = ts.reduce((a, t) => a + Number(t.amount || 0), 0);
+                const paid = byPerson[k] || 0, ded = deducted[k] || 0, actual = paid + ded;
+                const left = target - actual;
+                const pct = target > 0 ? Math.min(100, actual / target * 100) : 0;
+                const name = (JC_PEOPLE.find(x => x[0] === k) || [k, k])[1];
+                return `<div class="jc-target-row"><div style="display:flex;justify-content:space-between;gap:8px;"><b>${_jcEsc(name)}</b><span>${_jcMoney(actual)} of ${_jcMoney(target)}</span></div>
+                    <div class="jc-sub">${ts.map(t => _jcEsc(t.label || '') + (t.note ? ' — ' + _jcEsc(t.note) : '')).join('<br>')}</div>
+                    <div class="jc-sub">Paid ${_jcMoney(paid)}${ded ? ` + ${_jcMoney(ded)} materials deducted` : ''} · <strong style="color:${left > 0.5 ? '#92400e' : left < -0.5 ? '#b91c1c' : '#059669'}">${left > 0.5 ? _jcMoney(left) + ' still owed' : left < -0.5 ? _jcMoney(-left) + ' over target' : 'settled'}</strong></div>
+                    <div class="bar"><i style="width:${pct}%;${actual > target + 0.5 ? 'background:#ef4444' : ''}"></i></div></div>`;
+            });
+            const cps = project.crewProposals || [];
+            const cpInfo = cps.length ? `<div class="jc-target-row jc-sub">Crew proposals in the app: ${cps.map(cp => `${cp.percentage}% ${_jcMoney(cp.crewTotal)} ${cp.paymentMode === 'labor_plus_materials' ? 'L+M' : 'labor only'}${cp.accepted ? ' ✓' : ''}`).join(' · ')}</div>` : '';
+            return `<div class="jc-group"><div class="jc-group-h"><b>👷 Crew target vs actual</b><button class="jc-btn" onclick="jcEditTargets('${project.id}')">Edit</button></div>
+                ${rows.length ? rows.join('') : '<div class="jc-empty">No crew target linked to a person yet. Tap Edit to link a crew proposal to who is doing the job.</div>'}${cpInfo}</div>`;
+        }
+
+        function _jcTabHtml(tab, project, s) {
+            const st = window._jc;
+            if (tab === 'overview') {
+                const pays = s.portions.filter(p => p.line.category === 'payment').sort((a, b) => a.line.date < b.line.date ? -1 : 1);
+                const notes = (s.pd.notes || []).slice().reverse();
+                const linesFor = (cat) => s.portions.filter(p => p.line.category === cat);
+                const top = s.portions.filter(p => ['materials', 'labor', 'other'].includes(p.line.category)).sort((a, b) => b.amount - a.amount).slice(0, 5);
+                return `<div class="room-card" style="padding:12px;">${_jcBar(s)}<div class="jc-legend"><span><i class="jc-c-mat"></i>Materials ${_jcMoney(s.materials, false)}</span><span><i class="jc-c-lab"></i>Labor ${_jcMoney(s.labor, false)}</span><span><i class="jc-c-oth"></i>Other ${_jcMoney(s.other, false)}</span><span><i class="jc-c-pro"></i>Profit ${_jcMoney(s.profit, false)}</span></div></div>
+                    ${_jcTargets(project, s)}
+                    <div class="jc-group"><div class="jc-group-h"><b>💵 Contract</b><button class="jc-btn" onclick="jcEditRevenue('${project.id}')">Change</button></div>
+                        <div class="jc-target-row"><div style="display:flex;justify-content:space-between;"><span>${_jcEsc(s.rev.label)}</span><b>${_jcMoney(s.rev.amount)}</b></div>${s.rev.note ? `<div class="jc-sub" style="margin-top:4px;">${_jcEsc(s.rev.note)}</div>` : ''}
+                        <div class="jc-sub" style="margin-top:4px;">Target margin ${(s.target * 100).toFixed(0)}% · cost budget ${_jcMoney(s.rev.amount * (1 - s.target), false)} · ${_jcMoney(s.rev.amount * (1 - s.target) - s.cost, false)} left to spend</div></div></div>
+                    ${_jcGroup('🏦 Collected', s.collected, pays.length ? pays.map(p => _jcRowHtml(p, { title: p.line.party || 'Payment' })) : ['<div class="jc-empty">No customer payments matched yet (QuickBooks + Mercury deposits).</div>'])}
+                    ${top.length ? _jcGroup('Biggest costs', top.reduce((a, p) => a + p.amount, 0), top.map(p => _jcRowHtml(p, { title: p.line.category === 'labor' ? p.line.party : (JC_STORE_LABELS[p.line.store] || p.line.party) }))) : ''}
+                    <div class="jc-group"><div class="jc-group-h"><b>📝 Notes</b><button class="jc-btn" onclick="jcAddProjectNote('${project.id}')">+ Note</button></div>
+                        ${notes.length ? notes.map(n => `<div class="jc-target-row"><div>${_jcEsc(n.text)}</div><div class="jc-sub">${_jcEsc(n.by || '')} · ${_jcEsc(_jcDate(n.at))}</div></div>`).join('') : '<div class="jc-empty">No notes.</div>'}</div>`;
+            }
+            if (tab === 'materials') {
+                const mats = s.portions.filter(p => p.line.category === 'materials');
+                const other = s.portions.filter(p => p.line.category === 'other');
+                if (!mats.length && !other.length) return '<div class="jc-empty">No materials matched to this job yet.</div>';
+                const groups = {};
+                mats.forEach(p => { const k = JC_STORE_LABELS[p.line.store] || p.line.party || 'Other store'; (groups[k] = groups[k] || []).push(p); });
+                let h = Object.entries(groups).sort((a, b) => b[1].reduce((x, p) => x + p.amount, 0) - a[1].reduce((x, p) => x + p.amount, 0)).map(([k, ps]) =>
+                    _jcGroup(_jcEsc(k), ps.reduce((a, p) => a + p.amount, 0), ps.sort((a, b) => a.line.date < b.line.date ? -1 : 1).map(p => _jcRowHtml(p, { title: p.line.po ? `${p.line.ref ? '#' + p.line.ref + ' · ' : ''}PO “${p.line.po}”` : (p.line.description || p.line.party) })))).join('');
+                if (other.length) h += _jcGroup('Other costs', other.reduce((a, p) => a + p.amount, 0), other.map(p => _jcRowHtml(p, { title: p.line.party })));
+                return h;
+            }
+            if (tab === 'labor') {
+                const lab = s.portions.filter(p => p.line.category === 'labor');
+                if (!lab.length) return _jcTargets(project, s) + '<div class="jc-empty">No crew payments matched to this job yet.</div>';
+                const groups = {};
+                lab.forEach(p => { const k = p.line.partyKey || p.line.party; (groups[k] = groups[k] || []).push(p); });
+                return _jcTargets(project, s) + Object.entries(groups).sort((a, b) => b[1].reduce((x, p) => x + p.amount, 0) - a[1].reduce((x, p) => x + p.amount, 0)).map(([k, ps]) => {
+                    const days = ps.reduce((a, p) => a + (p.line.days ? p.line.days * (p.amount / (p.line.amount || 1)) : 0), 0);
+                    const nm = ps[0].line.party || k;
+                    const extra = days ? `<div class="jc-target-row jc-sub">${+days.toFixed(2)} day${days === 1 ? '' : 's'} on this job @ $200 (day ledger). Payouts to ${_jcEsc(nm.split(' ')[0])} by Cash App are tracked against all his days, not per job.</div>` : '';
+                    return _jcGroup(_jcEsc(nm), ps.reduce((a, p) => a + p.amount, 0), ps.sort((a, b) => a.line.date < b.line.date ? -1 : 1).map(p => _jcRowHtml(p, { title: p.line.days ? p.line.description.replace(/ — .*/, '') : (p.line.description || 'Payment'), sub: p.line.days ? (p.line.hints?.site || '') : '' })), extra);
+                }).join('');
+            }
+            if (tab === 'review') {
+                if (!s.review.length) return '<div class="jc-empty">✅ Nothing to review on this job.</div>';
+                return `<p class="jc-sub" style="margin-bottom:8px;">The agent wasn't sure about these. One tap fixes it; your answer is remembered (same register tag / PO next time).</p>` + s.review.map(l => _jcReviewCard(l, project.id)).join('');
+            }
+            if (tab === 'history') {
+                const items = [];
+                (s.pd.history || []).forEach(h => items.push({ ...h, what: 'Job settings' }));
+                const seen = new Set();
+                s.portions.concat(s.review.map(l => ({ line: l }))).forEach(p => {
+                    if (seen.has(p.line.id)) return; seen.add(p.line.id);
+                    (p.line.history || []).forEach(h => items.push({ ...h, what: `${_jcDate(p.line.date)} ${p.line.party || ''} ${_jcMoney(p.line.amount)}`, lineId: p.line.id }));
+                });
+                items.sort((a, b) => (a.at < b.at ? 1 : -1));
+                if (!items.length) return '<div class="jc-empty">No history yet.</div>';
+                return items.slice(0, 150).map(h => `<div class="jc-hist" ${h.lineId ? `onclick="jcOpenLine('${h.lineId}')" style="cursor:pointer;"` : ''}><div><b>${_jcEsc(h.by === 'amir' ? 'You' : h.by === 'agent' ? 'Agent' : (h.by || ''))}</b> ${_jcEsc(h.action || '')} — ${_jcEsc(h.what)}</div><div class="w">${_jcEsc(h.detail || '')}</div><div class="w">${_jcEsc(new Date(h.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}</div></div>`).join('');
+            }
+            return '';
+        }
+
+        function _jcTargetName(c) {
+            if (c.projectId) { const p = projects.find(x => x.id === c.projectId); return p ? `${p.jobNumber} ${p.customerName || ''}`.trim() : c.projectId; }
+            return JC_EXT_LABELS[c.ext] || ('Outside job: ' + c.ext);
+        }
+        function _jcReviewCard(l, contextPid) {
+            const m = l.match || {};
+            const cands = (m.candidates || []).filter(c => c.score >= 0.15).slice(0, 3);
+            const cur = (l.allocations || [])[0];
+            const title = l.category === 'labor' || l.category === 'payment' ? l.party : `${JC_STORE_LABELS[l.store] || l.party}${l.po ? ` · “${l.po}”` : ''}`;
+            const flags = (m.flags || []).map(f => `<div>⚠️ ${_jcEsc(f)}</div>`).join('');
+            return `<div class="jc-review"><div class="top"><div><b>${_jcEsc(title)}</b><div class="jc-sub">${_jcEsc(_jcDate(l.date))} · ${_jcEsc(l.description || '')}</div></div><b style="white-space:nowrap;">${_jcMoney(l.amount)}</b></div>
+                <div class="why">${cur ? `Counted on <b>${_jcEsc(_jcTargetName(cur))}</b> as a best guess (${Math.round((m.confidence || 0) * 100)}%). ` : 'Not counted on any job yet. '}${_jcEsc((cands[0] || {}).why || '')}${flags}</div>
+                <div class="jc-actions">
+                    ${cands.map(c => `<button class="${cur && (cur.projectId || cur.ext) === (c.projectId || c.ext) ? 'ok' : ''}" onclick="jcAssign('${l.id}', '${c.projectId || ''}', '${c.ext || ''}')">✓ ${_jcEsc(_jcTargetName(c))} <span style="opacity:.6">${Math.round(c.score * 100)}%</span></button>`).join('')}
+                    ${contextPid && !cands.some(c => c.projectId === contextPid) ? `<button onclick="jcAssign('${l.id}', '${contextPid}', '')">✓ This job</button>` : ''}
+                    <button class="ghost" onclick="jcOpenLine('${l.id}', 'assign')">Other job…</button>
+                    <button class="ghost" onclick="jcOpenLine('${l.id}', 'split')">Split</button>
+                    <button class="ghost" onclick="jcExclude('${l.id}')">Not a job cost</button>
+                    <button class="ghost" onclick="jcOpenLine('${l.id}')">Details</button>
+                </div></div>`;
+        }
+
+        // ── Writes ──
+        async function _jcSaveLine(lineId, patch, action, detail, fields) {
+            const st = window._jc;
+            const l = st.lines.find(x => x.id === lineId);
+            if (!l) return;
+            const h = { at: new Date().toISOString(), by: 'amir', action, detail: detail || '' };
+            const edited = Array.from(new Set([...(l.editedFields || []), ...(fields || Object.keys(patch))]));
+            const full = { ...patch, userEdited: true, editedFields: edited, updatedAt: new Date().toISOString(), history: [...(l.history || []), h].slice(-60) };
+            try {
+                await _jcWrite('update', lineId, full);
+                Object.assign(l, full);
+                if (window._reportToast) window._reportToast('Saved', 'success', 1400);
+            } catch (e) {
+                console.error(e);
+                alert('Could not save: ' + (e?.message || e));
+            }
+        }
+        async function _jcSaveProject(projectId, patch, action, detail) {
+            const st = window._jc;
+            const id = 'P_' + projectId;
+            const cur = st.pdocs[projectId];
+            const h = { at: new Date().toISOString(), by: 'amir', action, detail: detail || '' };
+            const project = projects.find(p => p.id === projectId);
+            try {
+                if (cur) {
+                    const full = { ...patch, editedFields: Array.from(new Set([...(cur.editedFields || []), ...Object.keys(patch)])), updatedAt: new Date().toISOString(), history: [...(cur.history || []), h].slice(-80) };
+                    await _jcWrite('update', id, full);
+                    Object.assign(cur, full);
+                } else {
+                    const full = { userId: currentUser.uid, kind: 'project', projectId, jobNumber: project?.jobNumber || '', revenueBasis: { mode: 'landed' }, targetMargin: 0.5, crewTargets: [], notes: [], createdAt: new Date().toISOString(), ...patch, editedFields: Object.keys(patch), updatedAt: new Date().toISOString(), history: [h] };
+                    await _jcWrite('set', id, full);
+                    st.pdocs[projectId] = { id, ...full };
+                    st.docs.push(st.pdocs[projectId]);
+                }
+                if (window._reportToast) window._reportToast('Saved', 'success', 1400);
+            } catch (e) { console.error(e); alert('Could not save: ' + (e?.message || e)); }
+        }
+        function _jcAfterSave() {
+            _jcCloseSheet();
+            if (document.getElementById('jobCostScreen')?.classList.contains('active')) _jcRender();
+            else if (document.getElementById('jobCostsOverviewScreen')?.classList.contains('active')) _jcRenderOverview();
+        }
+
+        window.jcAssign = async function(lineId, projectId, ext) {
+            const l = window._jc.lines.find(x => x.id === lineId);
+            if (!l) return;
+            const target = projectId ? { projectId, ext: null, amount: l.amount } : { projectId: null, ext, amount: l.amount };
+            await _jcSaveLine(lineId, { allocations: [target], needsReview: false, excluded: false }, 'assigned', `→ ${_jcTargetName(target)} ${_jcMoney(l.amount)}`, ['allocations', 'needsReview', 'excluded']);
+            _jcAfterSave();
+        };
+        window.jcExclude = async function(lineId) {
+            const reason = prompt('Why is this not a job cost? (e.g. tool, personal, office)', 'Not a job cost');
+            if (reason === null) return;
+            await _jcSaveLine(lineId, { excluded: true, excludeReason: reason || 'Not a job cost', needsReview: false, allocations: [] }, 'excluded', reason, ['excluded', 'excludeReason', 'needsReview', 'allocations']);
+            _jcAfterSave();
+        };
+
+        // ── Bottom sheet ──
+        function _jcSheet(inner) {
+            _jcCloseSheet();
+            const bg = document.createElement('div');
+            bg.className = 'jc-sheet-bg';
+            bg.id = 'jcSheet';
+            bg.onclick = (e) => { if (e.target === bg) _jcCloseSheet(); };
+            bg.innerHTML = `<div class="jc-sheet"><div class="grab"></div>${inner}</div>`;
+            window._overlayRoot().appendChild(bg);
+            return bg;
+        }
+        function _jcCloseSheet() { document.getElementById('jcSheet')?.remove(); }
+        window._jcCloseSheet = _jcCloseSheet;
+
+        function _jcProjectOptions(selected, includeExt) {
+            const act = ['Landed Job', 'Scheduled', 'In Progress'];
+            const sorted = projects.slice().filter(p => p.status !== 'Dead').sort((a, b) => String(b.jobNumber).localeCompare(String(a.jobNumber)));
+            const grp = (label, list) => list.length ? `<optgroup label="${label}">${list.map(p => `<option value="p:${p.id}" ${selected === 'p:' + p.id ? 'selected' : ''}>${_jcEsc(p.jobNumber)} — ${_jcEsc(p.customerName || '')} · ${_jcEsc(p.projectName || '')}</option>`).join('')}</optgroup>` : '';
+            let h = grp('Active jobs', sorted.filter(p => act.includes(p.status))) + grp('Complete', sorted.filter(p => p.status === 'Complete')) + grp('Leads & estimates', sorted.filter(p => !act.includes(p.status) && p.status !== 'Complete'));
+            if (includeExt) {
+                const exts = new Set(Object.keys(JC_EXT_LABELS));
+                window._jc.lines.forEach(l => (l.allocations || []).forEach(a => a.ext && exts.add(a.ext)));
+                h += `<optgroup label="Outside the app">${[...exts].map(k => `<option value="x:${k}" ${selected === 'x:' + k ? 'selected' : ''}>${_jcEsc(JC_EXT_LABELS[k] || k)}</option>`).join('')}<option value="x:__new">+ New outside job…</option></optgroup>`;
+            }
+            return h;
+        }
+        function _jcParseTarget(v) {
+            if (!v) return null;
+            if (v.startsWith('p:')) return { projectId: v.slice(2), ext: null };
+            if (v === 'x:__new') { const n = prompt('Name the outside job (address or customer):'); if (!n) return null; return { projectId: null, ext: n.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) }; }
+            return { projectId: null, ext: v.slice(2) };
+        }
+
+        window.jcOpenLine = function(lineId, mode) {
+            const l = window._jc.lines.find(x => x.id === lineId);
+            if (!l) return;
+            const al = l.allocations || [];
+            const cur = al[0] ? (al[0].projectId ? 'p:' + al[0].projectId : 'x:' + al[0].ext) : '';
+            const sr = l.sourceRef || {};
+            const m = l.match || {};
+            const items = (l.items || []).filter(i => i.name);
+            const audit = [['Source', JC_SOURCE_LABELS[l.source] || l.source], ['Reference', l.ref], ['Date', l.date], ['Party', l.party], l.po ? ['PO / tag', l.po] : null,
+                sr.subject ? ['E-mail', sr.subject] : null, sr.messageId ? ['Message-ID', sr.messageId] : null, sr.pdf ? ['PDF', sr.pdf] : null,
+                sr.file ? ['File', sr.file + (sr.row ? ' row ' + sr.row : sr.rows ? ' rows ' + sr.rows.join(',') : '')] : null, sr.cardAlert ? ['Exact total from', 'Mercury card alert'] : null,
+                l.taxEstimated ? ['Tax', 'estimated at 6% (pre-tax ' + _jcMoney(l.pretax) + ')'] : null, l.memo ? ['Note', l.memo] : null,
+                ['Match', `${m.method || '—'} · ${Math.round((m.confidence || 0) * 100)}%`], (m.candidates || [])[0] ? ['Why', m.candidates[0].why] : null,
+                l.excluded ? ['Excluded', l.excludeReason || ''] : null].filter(Boolean);
+            const splitRows = (al.length ? al : [{ projectId: window._jc.pid, amount: l.amount }]).map(a => _jcSplitRowHtml(a.projectId ? 'p:' + a.projectId : (a.ext ? 'x:' + a.ext : ''), a.amount)).join('');
+            const deductOpts = `<option value="">— not deducted —</option>` + JC_PEOPLE.map(([k, n]) => `<option value="${k}" ${l.deductFromCrew === k ? 'selected' : ''}>${_jcEsc(n)}</option>`).join('');
+            _jcSheet(`<h3>${_jcEsc(l.party || l.description)} · ${_jcMoney(l.amount)}</h3><div class="jc-sub">${_jcEsc(_jcDate(l.date))} · ${_jcEsc(l.description || '')}</div>
+                <div class="jc-tabs" style="margin-top:10px;">${[['assign', 'Assign'], ['split', 'Split'], ['edit', 'Edit'], ['note', 'Note'], ['audit', 'Source']].map(([k, n]) => `<button class="${(mode || 'assign') === k ? 'on' : ''}" onclick="jcSheetMode('${k}')">${n}</button>`).join('')}</div>
+                <div data-mode="assign" ${(mode || 'assign') === 'assign' ? '' : 'style="display:none"'}>
+                    <label>Job</label><select id="jcAssignSel"><option value="">— choose —</option>${_jcProjectOptions(cur, true)}</select>
+                    <div class="jc-actions" style="margin-top:12px;"><button class="primary" onclick="jcSheetAssign('${l.id}')">Assign whole ${_jcMoney(l.amount)}</button><button class="ghost" onclick="jcExclude('${l.id}')">Not a job cost</button>${l.excluded ? `<button class="ok" onclick="jcRestore('${l.id}')">Restore (count it again)</button>` : ''}</div>
+                </div>
+                <div data-mode="split" ${mode === 'split' ? '' : 'style="display:none"'}>
+                    <p class="jc-sub" style="margin:6px 0;">One receipt across several jobs — amounts must add up to ${_jcMoney(l.amount)}.</p>
+                    <div id="jcSplitRows">${splitRows}</div>
+                    <div class="jc-actions"><button class="ghost" onclick="jcSplitAdd()">+ Row</button><button class="ghost" onclick="jcSplitEven(${l.amount})">Split evenly</button></div>
+                    <div id="jcSplitMsg" class="jc-sub" style="margin-top:6px;"></div>
+                    <div class="jc-actions" style="margin-top:10px;"><button class="primary" onclick="jcSheetSplit('${l.id}')">Save split</button></div>
+                </div>
+                <div data-mode="edit" ${mode === 'edit' ? '' : 'style="display:none"'}>
+                    <div class="row2"><div><label>Amount</label><input id="jcEdAmt" type="number" step="0.01" value="${l.amount}"></div>
+                        <div><label>Category</label><select id="jcEdCat">${['materials', 'labor', 'other', 'payment'].map(c => `<option ${l.category === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div></div>
+                    <label>Description</label><input id="jcEdDesc" value="${_jcEsc(l.description || '')}">
+                    <label>Deduct from crew pay <span style="font-weight:400;color:#6b7280;">(labor + materials deals)</span></label>
+                    <div class="row2"><select id="jcEdDed">${deductOpts}</select><input id="jcEdDedAmt" type="number" step="0.01" placeholder="amount" value="${l.deductFromCrew ? (l.deductAmount ?? l.amount) : ''}"></div>
+                    <div class="jc-actions" style="margin-top:12px;"><button class="primary" onclick="jcSheetEdit('${l.id}')">Save changes</button></div>
+                </div>
+                <div data-mode="note" ${mode === 'note' ? '' : 'style="display:none"'}>
+                    <label>Note (kept in the edit history)</label><textarea id="jcNoteTxt" rows="3" placeholder="e.g. sealer deducted from crew pay"></textarea>
+                    <div class="jc-actions" style="margin-top:10px;"><button class="primary" onclick="jcSheetNote('${l.id}')">Add note</button></div>
+                    ${(l.history || []).slice().reverse().map(h => `<div class="jc-hist" style="margin-top:10px;"><div><b>${_jcEsc(h.by === 'amir' ? 'You' : 'Agent')}</b> ${_jcEsc(h.action)}</div><div class="w">${_jcEsc(h.detail || '')}</div><div class="w">${_jcEsc(new Date(h.at).toLocaleString())}</div></div>`).join('')}
+                </div>
+                <div data-mode="audit" ${mode === 'audit' ? '' : 'style="display:none"'}>
+                    <div class="kv">${audit.map(([k, v]) => `<span>${_jcEsc(k)}</span><span>${_jcEsc(v)}</span>`).join('')}</div>
+                    ${items.length ? `<label>Items</label><div style="font-size:12.5px;">${items.map(i => `<div style="display:flex;justify-content:space-between;gap:8px;border-top:1px solid #f3f4f6;padding:4px 0;"><span>${i.qty ? _jcEsc(i.qty) + ' × ' : ''}${_jcEsc(i.name)}</span><span>${i.amount != null ? _jcMoney(i.amount) : ''}</span></div>`).join('')}</div>` : ''}
+                </div>
+                <button class="btn btn-secondary btn-small" style="margin-top:14px;" onclick="_jcCloseSheet()">Close</button>`);
+        };
+        window.jcSheetMode = function(mode) {
+            const sh = document.querySelector('#jcSheet .jc-sheet');
+            sh.querySelectorAll('[data-mode]').forEach(el => el.style.display = el.dataset.mode === mode ? '' : 'none');
+            sh.querySelectorAll('.jc-tabs button').forEach(b => b.classList.toggle('on', b.getAttribute('onclick').includes(`'${mode}'`)));
+        };
+        function _jcSplitRowHtml(sel, amt) {
+            return `<div class="jc-split-row"><select>${'<option value="">— job —</option>' + _jcProjectOptions(sel, true)}</select><input type="number" step="0.01" value="${amt != null ? Number(amt).toFixed(2) : ''}"><button onclick="this.parentElement.remove()">×</button></div>`;
+        }
+        window.jcSplitAdd = function() { document.getElementById('jcSplitRows').insertAdjacentHTML('beforeend', _jcSplitRowHtml('', '')); };
+        window.jcSplitEven = function(total) {
+            const rows = [...document.querySelectorAll('#jcSplitRows .jc-split-row')];
+            if (!rows.length) return;
+            const each = Math.floor(total / rows.length * 100) / 100;
+            rows.forEach((r, i) => { r.querySelector('input').value = (i === rows.length - 1 ? (total - each * (rows.length - 1)) : each).toFixed(2); });
+        };
+        window.jcSheetAssign = async function(lineId) {
+            const t = _jcParseTarget(document.getElementById('jcAssignSel').value);
+            if (!t) return;
+            await jcAssign(lineId, t.projectId || '', t.ext || '');
+        };
+        window.jcRestore = async function(lineId) {
+            await _jcSaveLine(lineId, { excluded: false, excludeReason: '' }, 'restored', 'counted again', ['excluded', 'excludeReason']);
+            _jcAfterSave();
+        };
+        window.jcSheetSplit = async function(lineId) {
+            const l = window._jc.lines.find(x => x.id === lineId);
+            const rows = [...document.querySelectorAll('#jcSplitRows .jc-split-row')].map(r => ({ t: _jcParseTarget(r.querySelector('select').value), amt: parseFloat(r.querySelector('input').value) }));
+            if (rows.some(r => !r.t || !isFinite(r.amt))) { document.getElementById('jcSplitMsg').textContent = 'Pick a job and an amount on every row.'; return; }
+            const sum = Math.round(rows.reduce((a, r) => a + r.amt, 0) * 100) / 100;
+            if (Math.abs(sum - l.amount) > 0.009) { document.getElementById('jcSplitMsg').innerHTML = `<span style="color:#b91c1c">Rows add up to ${_jcMoney(sum)}, receipt is ${_jcMoney(l.amount)} (off by ${_jcMoney(l.amount - sum)}).</span>`; return; }
+            const allocations = rows.map(r => ({ projectId: r.t.projectId, ext: r.t.ext, amount: Math.round(r.amt * 100) / 100 }));
+            await _jcSaveLine(lineId, { allocations, needsReview: false, excluded: false }, 'split', allocations.map(a => `${_jcTargetName(a)} ${_jcMoney(a.amount)}`).join(' + '), ['allocations', 'needsReview', 'excluded']);
+            _jcAfterSave();
+        };
+        window.jcSheetEdit = async function(lineId) {
+            const l = window._jc.lines.find(x => x.id === lineId);
+            const amt = parseFloat(document.getElementById('jcEdAmt').value);
+            const cat = document.getElementById('jcEdCat').value;
+            const desc = document.getElementById('jcEdDesc').value.trim();
+            const ded = document.getElementById('jcEdDed').value;
+            const dedAmt = parseFloat(document.getElementById('jcEdDedAmt').value);
+            if (!isFinite(amt)) { alert('Amount?'); return; }
+            const patch = {}; const parts = [];
+            if (Math.abs(amt - l.amount) > 0.001) {
+                patch.amount = amt; parts.push(`amount ${_jcMoney(l.amount)} → ${_jcMoney(amt)}`);
+                const al = l.allocations || [];
+                if (al.length === 1) patch.allocations = [{ ...al[0], amount: amt }];
+                else if (al.length > 1) { const k = amt / (l.amount || 1); patch.allocations = al.map(a => ({ ...a, amount: Math.round(a.amount * k * 100) / 100 })); }
+            }
+            if (cat !== l.category) { patch.category = cat; parts.push(`category → ${cat}`); }
+            if (desc !== (l.description || '')) { patch.description = desc; parts.push('description'); }
+            if ((ded || '') !== (l.deductFromCrew || '') || (ded && isFinite(dedAmt) && Math.abs(dedAmt - (l.deductAmount ?? l.amount)) > 0.001)) {
+                patch.deductFromCrew = ded || null; patch.deductAmount = ded ? (isFinite(dedAmt) ? dedAmt : amt) : null;
+                parts.push(ded ? `deduct ${_jcMoney(patch.deductAmount)} from ${ded}'s pay` : 'no crew deduction');
+            }
+            if (!parts.length) { _jcCloseSheet(); return; }
+            await _jcSaveLine(lineId, patch, 'edited', parts.join(' · '));
+            _jcAfterSave();
+        };
+        window.jcSheetNote = async function(lineId) {
+            const t = document.getElementById('jcNoteTxt').value.trim();
+            if (!t) return;
+            await _jcSaveLine(lineId, {}, 'note', t, []);
+            _jcAfterSave();
+        };
+
+        window.jcManualEntry = function(projectId) {
+            const today = new Date(); const iso = new Date(today.getTime() - today.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+            _jcSheet(`<h3>Add an entry</h3><div class="jc-sub">For anything no feed sees — cash, a bonus, a credit, a receipt from another store. Use a negative amount for a credit or return.</div>
+                <div class="row2"><div><label>Type</label><select id="jcMCat"><option value="materials">Materials</option><option value="labor">Labor</option><option value="other">Other cost</option><option value="payment">Payment received</option></select></div>
+                    <div><label>Date</label><input id="jcMDate" type="date" value="${iso}"></div></div>
+                <div class="row2"><div><label>Amount</label><input id="jcMAmt" type="number" step="0.01" placeholder="50.00"></div>
+                    <div><label>Who / store</label><input id="jcMParty" list="jcPeopleList" placeholder="e.g. Javier, Ace"></div></div>
+                <datalist id="jcPeopleList">${JC_PEOPLE.map(([k, n]) => `<option value="${_jcEsc(n)}">`).join('')}</datalist>
+                <label>Description</label><input id="jcMDesc" placeholder="e.g. +$50 bonus for finishing before the rain">
+                <label>Job</label><select id="jcMJob">${_jcProjectOptions('p:' + projectId, true)}</select>
+                <div class="jc-actions" style="margin-top:14px;"><button class="primary" onclick="jcSaveManual()">Add</button></div>
+                <button class="btn btn-secondary btn-small" style="margin-top:12px;" onclick="_jcCloseSheet()">Cancel</button>`);
+        };
+        window.jcSaveManual = async function() {
+            const cat = document.getElementById('jcMCat').value;
+            const date = document.getElementById('jcMDate').value;
+            const amt = parseFloat(document.getElementById('jcMAmt').value);
+            const party = document.getElementById('jcMParty').value.trim();
+            const desc = document.getElementById('jcMDesc').value.trim();
+            const t = _jcParseTarget(document.getElementById('jcMJob').value);
+            if (!isFinite(amt) || !date || !t) { alert('Amount, date and job are required.'); return; }
+            const person = JC_PEOPLE.find(([k, n]) => n === party || n.toLowerCase().startsWith(party.toLowerCase()) && party.length >= 3);
+            const id = 'L_app_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+            const now = new Date().toISOString();
+            const line = { userId: currentUser.uid, kind: 'line', source: 'app', ref: id.slice(6), category: cat, date, amount: Math.round(amt * 100) / 100,
+                party: person ? person[1] : party, partyKey: person ? person[0] : '', store: '', description: desc || (cat + ' (added by hand)'), items: [], po: '', memo: '', hints: {}, sourceRef: { addedIn: 'PWA' },
+                allocations: [{ projectId: t.projectId, ext: t.ext, amount: Math.round(amt * 100) / 100 }], match: { confidence: 1, method: 'manual', candidates: [], flags: [] },
+                needsReview: false, excluded: false, userEdited: true, editedFields: ['allocations', 'amount', 'category', 'description'], createdAt: now, updatedAt: now,
+                history: [{ at: now, by: 'amir', action: 'added by hand', detail: `${cat} ${_jcMoney(amt)} → ${_jcTargetName(t)}` }] };
+            try {
+                await _jcWrite('set', id, line);
+                window._jc.lines.push({ id, ...line });
+                window._jc.docs.push(window._jc.lines[window._jc.lines.length - 1]);
+                if (window._reportToast) window._reportToast('Added', 'success', 1400);
+                _jcAfterSave();
+            } catch (e) { alert('Could not save: ' + (e?.message || e)); }
+        };
+
+        window.jcAddProjectNote = async function(projectId) {
+            const t = prompt('Note for this job cost:');
+            if (!t) return;
+            const cur = window._jc.pdocs[projectId];
+            const notes = [...(cur?.notes || []), { at: new Date().toISOString(), by: 'amir', text: t }];
+            await _jcSaveProject(projectId, { notes }, 'note', t);
+            _jcRender();
+        };
+        window.jcEditRevenue = function(projectId) {
+            const project = projects.find(p => p.id === projectId);
+            const pd = window._jc.pdocs[projectId] || {};
+            const basis = pd.revenueBasis || { mode: 'landed' };
+            const props = jobs.filter(j => j.projectId === projectId && !j.deleted);
+            _jcSheet(`<h3>Contract amount</h3><div class="jc-sub">Which number is the real contract for ${_jcEsc(project?.jobNumber || '')}? Change orders and credits on that proposal are included.</div>
+                <label>Revenue basis</label><select id="jcRevSel">
+                    <option value="landed" ${basis.mode === 'landed' ? 'selected' : ''}>Landed proposal (default)</option>
+                    ${props.map(j => `<option value="job:${j.id}" ${basis.mode === 'job' && basis.jobId === j.id ? 'selected' : ''}>Proposal ${_jcEsc(j.proposalLabel || 'A')} — ${_jcMoney(j.grandTotal || 0)}${j.id === project?.landedProposalId ? ' (landed)' : ''}</option>`).join('')}
+                    <option value="manual" ${basis.mode === 'manual' ? 'selected' : ''}>Enter an amount…</option></select>
+                <label>Manual amount</label><input id="jcRevAmt" type="number" step="0.01" value="${basis.mode === 'manual' ? basis.amount : ''}" placeholder="only for 'Enter an amount'">
+                <label>Note</label><input id="jcRevNote" value="${_jcEsc(basis.note || '')}" placeholder="why this number">
+                <label>Target margin %</label><input id="jcRevTgt" type="number" step="1" min="0" max="100" value="${Math.round((pd.targetMargin != null ? pd.targetMargin : 0.5) * 100)}">
+                <div class="jc-actions" style="margin-top:14px;"><button class="primary" onclick="jcSaveRevenue('${projectId}')">Save</button></div>
+                <button class="btn btn-secondary btn-small" style="margin-top:12px;" onclick="_jcCloseSheet()">Cancel</button>`);
+        };
+        window.jcSaveRevenue = async function(projectId) {
+            const v = document.getElementById('jcRevSel').value;
+            const note = document.getElementById('jcRevNote').value.trim();
+            const tgt = Math.max(0, Math.min(100, parseFloat(document.getElementById('jcRevTgt').value) || 50)) / 100;
+            let basis = { mode: 'landed', note };
+            if (v.startsWith('job:')) basis = { mode: 'job', jobId: v.slice(4), note };
+            if (v === 'manual') { const a = parseFloat(document.getElementById('jcRevAmt').value); if (!isFinite(a)) { alert('Amount?'); return; } basis = { mode: 'manual', amount: a, note }; }
+            await _jcSaveProject(projectId, { revenueBasis: basis, targetMargin: tgt }, 'contract basis', `${basis.mode}${basis.jobId ? ' ' + basis.jobId : ''}${basis.amount ? ' ' + _jcMoney(basis.amount) : ''} · target ${Math.round(tgt * 100)}%`);
+            _jcAfterSave();
+        };
+        window.jcEditTargets = function(projectId) {
+            const project = projects.find(p => p.id === projectId);
+            const pd = window._jc.pdocs[projectId] || {};
+            const targets = pd.crewTargets || [];
+            const cps = project?.crewProposals || [];
+            const rowHtml = _jcTgtRowHtml;
+            _jcSheet(`<h3>Crew targets</h3><div class="jc-sub">Who is doing ${_jcEsc(project?.jobNumber || '')} and for how much. On labor + materials deals, materials NSP buys for the job are deducted from that person automatically.</div>
+                <label>From a crew proposal</label>
+                <div class="jc-actions">${cps.length ? cps.map((cp, i) => `<button class="ghost" onclick="jcTargetFromCp('${projectId}', ${i})">${cp.percentage}% · ${_jcMoney(cp.crewTotal)} · ${cp.paymentMode === 'labor_plus_materials' ? 'L+M' : 'labor'}</button>`).join('') : '<span class="jc-sub">No crew proposals on this project.</span>'}</div>
+                <label>Targets</label><div id="jcTgtRows">${targets.map(rowHtml).join('')}</div>
+                <div class="jc-actions"><button class="ghost" onclick="jcTgtAdd()">+ Person</button></div>
+                <div class="jc-actions" style="margin-top:14px;"><button class="primary" onclick="jcSaveTargets('${projectId}')">Save targets</button></div>
+                <button class="btn btn-secondary btn-small" style="margin-top:12px;" onclick="_jcCloseSheet()">Cancel</button>`);
+        };
+        function _jcTgtRowHtml(t) {
+            return `<div class="jc-split-row" style="grid-template-columns:1fr 100px 34px;"><select>${JC_PEOPLE.map(([k, n]) => `<option value="${k}" ${t.partyKey === k ? 'selected' : ''}>${_jcEsc(n)}</option>`).join('')}</select><input type="number" step="0.01" value="${t.amount ?? ''}" data-label="${_jcEsc(t.label || '')}" data-mode="${t.paymentMode || 'labor_only'}" data-key="${_jcEsc(t.key || '')}"><button onclick="this.parentElement.remove()">×</button></div>`;
+        }
+        window.jcTgtAdd = function() { document.getElementById('jcTgtRows').insertAdjacentHTML('beforeend', _jcTgtRowHtml({ paymentMode: 'labor_only' })); };
+        window.jcTargetFromCp = function(projectId, idx) {
+            const project = projects.find(p => p.id === projectId);
+            const cp = (project?.crewProposals || [])[idx];
+            if (!cp) return;
+            const html = `<div class="jc-split-row" style="grid-template-columns:1fr 100px 34px;"><select>${JC_PEOPLE.map(([k, n]) => `<option value="${k}">${_jcEsc(n)}</option>`).join('')}</select><input type="number" step="0.01" value="${cp.crewTotal}" data-label="Crew proposal ${cp.percentage}% (${cp.paymentMode === 'labor_plus_materials' ? 'labor + materials' : 'labor only'})" data-mode="${cp.paymentMode || 'labor_only'}" data-key="cp-${_jcEsc(cp.createdAt || idx)}"><button onclick="this.parentElement.remove()">×</button></div>`;
+            document.getElementById('jcTgtRows').insertAdjacentHTML('beforeend', html);
+        };
+        window.jcSaveTargets = async function(projectId) {
+            const prev = window._jc.pdocs[projectId]?.crewTargets || [];
+            const rows = [...document.querySelectorAll('#jcTgtRows .jc-split-row')].map(r => {
+                const inp = r.querySelector('input'); const key = inp.dataset.key || ('t-' + Date.now().toString(36));
+                const old = prev.find(t => t.key === key) || {};
+                const name = (JC_PEOPLE.find(x => x[0] === r.querySelector('select').value) || ['', ''])[1];
+                return { ...old, key, partyKey: r.querySelector('select').value, amount: parseFloat(inp.value) || 0, label: inp.dataset.label || old.label || (name.split(' (')[0] + ' — crew price'), paymentMode: inp.dataset.mode || old.paymentMode || 'labor_only' };
+            }).filter(t => t.amount > 0);
+            await _jcSaveProject(projectId, { crewTargets: rows }, 'crew targets', rows.map(t => `${t.partyKey} ${_jcMoney(t.amount)}`).join(', ') || 'cleared');
+            _jcAfterSave();
+        };
+
+        // ── Company-wide overview ──
+        window.showJobCostsOverview = async function() {
+            const scr = document.getElementById('jobCostsOverviewScreen');
+            scr.innerHTML = '<div class="loading">Loading job costs…</div>';
+            showScreen('jobCostsOverviewScreen');
+            window.scrollTo(0, 0);
+            await _jcLoad(true);
+            _jcRenderOverview();
+        };
+        window.jcOvFilter = function(f) { window._jc.ovFilter = f; _jcRenderOverview(); };
+        function _jcRenderOverview() {
+            const st = window._jc;
+            const scr = document.getElementById('jobCostsOverviewScreen');
+            const act = ['Landed Job', 'Scheduled', 'In Progress'];
+            const withData = new Set();
+            st.lines.forEach(l => (l.allocations || []).forEach(a => a.projectId && withData.add(_jcPid(a.projectId))));
+            let list = projects.filter(p => !st.pdocs[p.id]?.mergedInto && (act.includes(p.status) || withData.has(p.id)));
+            if (st.ovFilter === 'active') list = list.filter(p => act.includes(p.status));
+            if (st.ovFilter === 'complete') list = list.filter(p => p.status === 'Complete');
+            const rows = list.map(p => ({ p, s: _jcSummary(p) })).sort((a, b) => (b.s.review.length - a.s.review.length) || String(b.p.jobNumber).localeCompare(String(a.p.jobNumber)));
+            // blended margin only over jobs that have costs recorded (a $0-cost job would read as 100%)
+            const costed = rows.filter(r => r.s.cost > 0);
+            const tot = costed.reduce((a, r) => ({ rev: a.rev + r.s.rev.amount, cost: a.cost + r.s.cost }), { rev: 0, cost: 0 });
+            tot.col = rows.reduce((a, r) => a + r.s.collected, 0);
+            const tm = tot.rev > 0 ? (tot.rev - tot.cost) / tot.rev : null;
+            const unassigned = st.lines.filter(l => l.needsReview && !l.excluded && !(l.allocations || []).length && l.category !== 'settlement');
+            const extTotals = {};
+            st.lines.forEach(l => { if (l.excluded) return; (l.allocations || []).forEach(a => { if (!a.ext) return; const e = extTotals[a.ext] = extTotals[a.ext] || { cost: 0, col: 0, n: 0 }; if (l.category === 'payment') e.col += a.amount; else if (l.category !== 'settlement') e.cost += a.amount; e.n++; }); });
+            const m = st.meta;
+            let html = `<button class="btn btn-back" onclick="showScreen('homeScreen')">← Back</button>
+                <h2 class="screen-title" style="margin-bottom:4px;">💰 Job Costs</h2>
+                <p class="jc-sub" style="text-align:center;margin-bottom:12px;">${m ? `Auto-updated nightly · last run ${_jcEsc(_jcAgo(m.lastRunAt))} · tracking since ${_jcEsc(_jcDate(m.startDate))}` : 'The nightly agent has not run yet.'}${st.error ? ' · ⚠️ ' + _jcEsc(st.error) : ''}</p>
+                <div class="jc-cards">
+                    <div class="jc-stat margin ${tm == null ? 'none' : tm >= 0.5 ? 'good' : tm >= 0.4 ? 'warn' : 'bad'}"><div class="l">Blended margin · ${costed.length} job${costed.length === 1 ? '' : 's'} with costs</div><div class="v">${_jcPct(tm)}</div><div class="s">${_jcMoney(tot.rev, false)} revenue · ${_jcMoney(tot.cost, false)} cost so far · ${_jcMoney(tot.col, false)} collected</div></div>
+                </div>
+                <div class="jc-filter">${[['active', 'Active'], ['complete', 'Complete'], ['all', 'All with costs']].map(([k, n]) => `<button class="${st.ovFilter === k ? 'on' : ''}" onclick="jcOvFilter('${k}')">${n}</button>`).join('')}</div>`;
+            if (unassigned.length) html += `<div class="jc-review" style="cursor:pointer;" onclick="jcShowUnassigned()"><div class="top"><b>⚠️ ${unassigned.length} item${unassigned.length === 1 ? '' : 's'} not on any job yet</b><b>${_jcMoney(unassigned.reduce((a, l) => a + (l.category === 'payment' ? 0 : l.amount), 0), false)}</b></div><div class="why" style="margin-bottom:0;">Tap to assign — receipts without a job tag, transfers with no memo, deliveries to the condo.</div></div>`;
+            html += `<div class="jc-group">${rows.length ? rows.map(({ p, s }) => `<div class="jc-ov-row" onclick="openJobCost('${p.id}')">
+                    <div class="nm">${_jcEsc(p.jobNumber)} · ${_jcEsc((p.customerName || '').trim())}<small>${_jcEsc(p.projectName || '')} · ${_jcEsc(p.status)}${s.review.length ? ` · <span style="color:#b45309;font-weight:700;">${s.review.length} to review</span>` : ''}</small></div>
+                    <div class="fig">${s.margin == null ? '<span class="jc-pill none">—</span>' : s.cost === 0 ? '<span class="jc-pill none">no costs yet</span>' : `<span class="jc-pill ${s.status}">${_jcPct(s.margin)}</span>`}<div style="margin-top:3px;">${_jcMoney(s.cost, false)} / ${_jcMoney(s.rev.amount, false)}</div></div></div>`).join('') : '<div class="jc-empty">No jobs in this filter.</div>'}</div>`;
+            const exts = Object.entries(extTotals);
+            if (exts.length) html += `<div class="jc-group"><div class="jc-group-h"><b>Outside the app</b><span class="jc-sub">restoration / not yet a project</span></div>${exts.map(([k, e]) => `<div class="jc-ov-row" onclick="jcShowExt('${_jcEsc(k)}')"><div class="nm">${_jcEsc(JC_EXT_LABELS[k] || k)}<small>${e.n} item${e.n === 1 ? '' : 's'}</small></div><div class="fig">cost ${_jcMoney(e.cost, false)}<div>collected ${_jcMoney(e.col, false)}</div></div></div>`).join('')}</div>`;
+            scr.innerHTML = html;
+        }
+        window.jcShowUnassigned = function() {
+            const st = window._jc;
+            const list = st.lines.filter(l => l.needsReview && !l.excluded && !(l.allocations || []).length && l.category !== 'settlement').sort((a, b) => b.amount - a.amount);
+            const scr = document.getElementById('jobCostsOverviewScreen');
+            scr.innerHTML = `<button class="btn btn-back" onclick="showJobCostsOverview()">← Job Costs</button><h2 class="screen-title" style="margin-bottom:6px;">Not on any job yet</h2>
+                <p class="jc-sub" style="text-align:center;margin-bottom:12px;">${list.length} items · biggest first. Assign, split, or mark “not a job cost” (tools, personal, office).</p>
+                ${list.map(l => _jcReviewCard(l, null)).join('') || '<div class="jc-empty">✅ All caught up.</div>'}`;
+        };
+        window.jcShowExt = function(key) {
+            const st = window._jc;
+            const ps = [];
+            st.lines.forEach(l => { if (l.excluded) return; (l.allocations || []).forEach(a => { if (a.ext === key) ps.push({ line: l, amount: a.amount, tentative: l.needsReview }); }); });
+            const scr = document.getElementById('jobCostsOverviewScreen');
+            scr.innerHTML = `<button class="btn btn-back" onclick="showJobCostsOverview()">← Job Costs</button><h2 class="screen-title" style="margin-bottom:6px;">${_jcEsc(JC_EXT_LABELS[key] || key)}</h2>
+                <p class="jc-sub" style="text-align:center;margin-bottom:12px;">Not a project in the app — create one to get margin tracking, then reassign these.</p>
+                ${_jcGroup('Items', ps.reduce((a, p) => a + (p.line.category === 'payment' ? 0 : p.amount), 0), ps.sort((a, b) => a.line.date < b.line.date ? -1 : 1).map(p => _jcRowHtml(p, { title: `${p.line.category === 'payment' ? '💵 ' : ''}${p.line.party || p.line.description}` })))}`;
+        };
     </script>
 </body>
 </html>

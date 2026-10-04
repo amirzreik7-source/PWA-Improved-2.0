@@ -1,0 +1,18 @@
+--- firestore.rules.live	2026-10-04 17:27:34
++++ firestore.rules	2026-10-04 17:27:34
+@@ -35,6 +35,15 @@
+     match /emailContacts/{doc}   { allow read, update, delete: if ownsExisting(); allow create: if ownsNew(); }
+     match /emailLists/{doc}      { allow read, update, delete: if ownsExisting(); allow create: if ownsNew(); }
+ 
++    // Job Cost (v148): cost lines / per-job settings / agent meta. The nightly agent writes with the
++    // admin SDK (bypasses rules); the PWA reads + corrects. Owner-isolated like everything else, and an
++    // update may never move a doc to another user.
++    match /jobCosts/{doc} {
++      allow read, delete: if ownsExisting();
++      allow update: if ownsExisting() && request.resource.data.userId == request.auth.uid;
++      allow create: if ownsNew();
++    }
++
+     // Anything not explicitly matched above is denied.
+     match /{document=**} { allow read, write: if false; }
+   }

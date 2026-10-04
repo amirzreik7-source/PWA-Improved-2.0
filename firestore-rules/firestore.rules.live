@@ -1,0 +1,41 @@
+rules_version = '2';
+
+// Northern Star Painters — Firestore security rules.
+// Before this, the database had NO rules in effect: any authenticated user
+// (and anyone could self-create an account from the public app URL) could
+// read EVERY user's data. These rules strictly isolate each user's data by
+// the `userId` field that every business document already carries.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn()    { return request.auth != null; }
+    // The existing document must belong to the caller (read / update / delete).
+    function ownsExisting() { return signedIn() && resource.data.userId == request.auth.uid; }
+    // A newly written document must be stamped with the caller's own uid (create).
+    function ownsNew()      { return signedIn() && request.resource.data.userId == request.auth.uid; }
+
+    // Global project-number counter — no per-user owner field exists on it.
+    // Low sensitivity (just an integer); require auth so the public can't touch it.
+    match /counters/{doc} {
+      allow read, write: if signedIn();
+    }
+
+    // All per-user business data — strictly owner-isolated.
+    match /customers/{doc}       { allow read, update, delete: if ownsExisting(); allow create: if ownsNew(); }
+    match /projects/{doc}        { allow read, update, delete: if ownsExisting(); allow create: if ownsNew(); }
+    match /jobs/{doc}            { allow read, update, delete: if ownsExisting(); allow create: if ownsNew(); }
+    match /products/{doc}        { allow read, update, delete: if ownsExisting(); allow create: if ownsNew(); }
+    match /profiles/{doc}        { allow read, update, delete: if ownsExisting(); allow create: if ownsNew(); }
+    match /settings/{doc}        { allow read, update, delete: if ownsExisting(); allow create: if ownsNew(); }
+    match /pricingSettings/{doc} { allow read, update, delete: if ownsExisting(); allow create: if ownsNew(); }
+    match /contractTerms/{doc}   { allow read, update, delete: if ownsExisting(); allow create: if ownsNew(); }
+    match /crewMembers/{doc}     { allow read, update, delete: if ownsExisting(); allow create: if ownsNew(); }
+    match /emailCampaigns/{doc}  { allow read, update, delete: if ownsExisting(); allow create: if ownsNew(); }
+    match /emailContacts/{doc}   { allow read, update, delete: if ownsExisting(); allow create: if ownsNew(); }
+    match /emailLists/{doc}      { allow read, update, delete: if ownsExisting(); allow create: if ownsNew(); }
+
+    // Anything not explicitly matched above is denied.
+    match /{document=**} { allow read, write: if false; }
+  }
+}
