@@ -247,7 +247,7 @@
         <div id="homeScreen" class="screen active">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
                 <h2 class="screen-title" style="margin:0;">Dashboard</h2>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v148</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;letter-spacing:0.5px;font-weight:600;">build v149</span>
             </div>
 
             <!-- Global Search -->
@@ -1034,10 +1034,17 @@
             <div class="room-card">
                 <h3>Deposit</h3>
                 <label style="display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;">
-                    <input type="checkbox" id="depositRequired" checked onchange="updateDiscountPreview()" style="width:20px;height:20px;">
-                    <span><strong>Require 50% deposit to schedule</strong></span>
+                    <input type="checkbox" id="depositRequired" checked onchange="currentEstimate._depositSynced = true; updateDiscountPreview()" style="width:20px;height:20px;">
+                    <span><strong>Require a deposit to schedule</strong></span>
                 </label>
-                <div style="font-size:12px;color:#6b7280;margin-top:6px;">On: proposal shows Deposit Due (50%) and Balance. Off: proposal shows the total only, full amount due at completion.</div>
+                <div id="depositPctRow" style="display:flex;align-items:center;gap:10px;margin-top:10px;">
+                    <label for="depositPercent" style="font-size:14px;margin:0;">Deposit</label>
+                    <select id="depositPercent" onchange="currentEstimate._depositSynced = true; updateDiscountPreview()" style="padding:8px 10px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;">
+                        <option value="50">50% (default)</option><option value="40">40%</option><option value="35">35%</option><option value="30">30%</option><option value="25">25%</option><option value="20">20%</option><option value="15">15%</option><option value="10">10%</option>
+                    </select>
+                    <span style="font-size:13px;color:#6b7280;">of the contract price</span>
+                </div>
+                <div style="font-size:12px;color:#6b7280;margin-top:6px;">On: proposal shows the deposit (at the % picked) and the balance. Off: proposal shows the total only, full amount due at completion.</div>
                 <div id="depositDcHint" style="display:none;font-size:12px;color:#b45309;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:8px;margin-top:8px;">DC residential job: DC rules bar a home improvement contractor from taking payment before completion unless the Home Improvement Contractor license (with bond) is held. Consider turning the deposit off for DC jobs until that license is in place.</div>
             </div>
 
@@ -1104,7 +1111,7 @@
                     <div id="reviewCreditsRows"></div>
                     <hr style="margin: 10px 0;">
                     <p><strong>Subtotal:</strong> <span id="reviewSubtotal">$0.00</span></p>
-                    <p id="reviewDepositRow"><strong>Deposit Due (50%):</strong> <span id="reviewDeposit">$0.00</span></p>
+                    <p id="reviewDepositRow"><strong>Deposit Due (<span id="reviewDepositPct">50</span>%):</strong> <span id="reviewDeposit">$0.00</span></p>
                     <p id="reviewBalanceRow"><strong>Balance:</strong> <span id="reviewBalance">$0.00</span></p>
                     <p style="font-size: 24px; color: #667eea; margin-top: 15px;"><strong>TOTAL:</strong> <span id="reviewGrandTotal">$0.00</span></p>
                 </div>
@@ -1236,7 +1243,7 @@
                 <button class="btn btn-warning btn-small" onclick="reportExportSocial()" style="flex:0 0 auto;">📷 Social</button>
                 <button class="btn btn-secondary btn-small" onclick="openReportQuickEdit(window._reportProjectId)" style="flex:0 0 auto;" title="Fix typos / edit fields without redoing the conversation">✏️ Quick Edit</button>
                 <button class="btn btn-secondary btn-small" onclick="openCompletionReport(window._reportProjectId, true)" style="flex:0 0 auto;" title="Re-walk the AI conversation">🔄 Redo Flow</button>
-                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v148</span>
+                <span style="font-size:11px;color:#10b981;background:#ecfdf5;border:1px solid #6ee7b7;padding:3px 8px;border-radius:6px;flex:0 0 auto;align-self:center;letter-spacing:0.5px;font-weight:600;">build v149</span>
             </div>
             <div id="reportContent" style="background:#fff;"></div>
         </div>
@@ -7558,6 +7565,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 basePrice: job.basePrice || job.grandTotal,
                 priceOverride: job.priceOverride || false,
                 depositRequired: job.depositRequired !== false,
+                depositPercent: window._depositPct(job),
                 discountType: job.discountType,
                 discountValue: job.discountValue,
                 discountName: job.discountName,
@@ -7655,6 +7663,7 @@ Based on the journal entries, calculate and return this JSON (no other text):
                 basePrice: job.basePrice || job.grandTotal,
                 priceOverride: job.priceOverride || false,
                 depositRequired: job.depositRequired !== false,
+                depositPercent: window._depositPct(job),
                 discountType: job.discountType,
                 discountValue: job.discountValue,
                 discountName: job.discountName,
@@ -10531,18 +10540,28 @@ Only return JSON, no other text.`;
             const totalCredits = credits.reduce((sum, c) => sum + c.amount, 0);
 
             const subtotal = discountBase - discountAmount + skipDiscountCOTotal - totalCredits;
-            const deposit = subtotal * 0.5;
-            const balance = subtotal * 0.5;
-            // v142 deposit toggle: first pass pushes the saved value into the
-            // checkbox, later passes read the checkbox (user toggled it).
+            // v142 deposit toggle + v149 deposit percent: first pass pushes the
+            // saved values into the controls, later passes read the controls.
             const depEl = document.getElementById('depositRequired');
+            const pctEl = document.getElementById('depositPercent');
             if (depEl) {
-                if (currentEstimate._depositSynced !== true) { depEl.checked = currentEstimate.depositRequired !== false; currentEstimate._depositSynced = true; }
+                if (currentEstimate._depositSynced !== true) {
+                    depEl.checked = currentEstimate.depositRequired !== false;
+                    if (pctEl) pctEl.value = String(window._depositPct(currentEstimate));
+                    currentEstimate._depositSynced = true;
+                }
                 currentEstimate.depositRequired = depEl.checked;
+                if (pctEl) currentEstimate.depositPercent = parseInt(pctEl.value, 10) || 50;
+                const pctRow = document.getElementById('depositPctRow');
+                if (pctRow) pctRow.style.display = depEl.checked ? 'flex' : 'none';
                 const dcHint = document.getElementById('depositDcHint');
                 if (dcHint) { const _c = (customers || []).find(c => c.id === currentEstimate.customerId); dcHint.style.display = (depEl.checked && window._isDcAddress(_c?.address)) ? 'block' : 'none'; }
             }
             const _depOn = currentEstimate.depositRequired !== false;
+            const _pct = window._depositPct(currentEstimate);
+            const deposit = subtotal * _pct / 100;
+            const balance = subtotal - deposit;
+            const _pctEl = document.getElementById('reviewDepositPct'); if (_pctEl) _pctEl.textContent = _pct;
             const _depRow = document.getElementById('reviewDepositRow'), _balRow = document.getElementById('reviewBalanceRow');
             if (_depRow) _depRow.style.display = _depOn ? '' : 'none';
             if (_balRow) _balRow.style.display = _depOn ? '' : 'none';
@@ -17066,6 +17085,7 @@ Generate JSON with these EXACT keys:
                 basePrice: currentEstimate.basePrice,
                 priceOverride: currentEstimate.priceOverride || false,
                 depositRequired: currentEstimate.depositRequired !== false,
+                depositPercent: window._depositPct(currentEstimate),
                 discountType: currentEstimate.discountType,
                 discountValue: currentEstimate.discountValue,
                 discountName: currentEstimate.discountName,
@@ -17114,6 +17134,7 @@ Generate JSON with these EXACT keys:
                         basePrice: job.basePrice,
                         priceOverride: job.priceOverride,
                         depositRequired: job.depositRequired !== false,
+                        depositPercent: window._depositPct(job),
                         discountType: job.discountType,
                         discountValue: job.discountValue,
                         discountName: job.discountName,
@@ -17270,7 +17291,7 @@ Generate JSON with these EXACT keys:
                 'Please find below the details of your painting proposal:\n\n' +
                 'Project: ' + jobName + '\n' +
                 'Total: $' + total + '\n' +
-                (currentEstimate.depositRequired !== false ? 'Deposit Due (50%): $' + (parseFloat(total) / 2).toFixed(2) + '\n\n' : 'Payment due at completion.\n\n') +
+                (currentEstimate.depositRequired !== false ? 'Deposit Due (' + window._depositPct(currentEstimate) + '%): $' + (parseFloat(total) * window._depositPct(currentEstimate) / 100).toFixed(2) + '\n\n' : 'Payment due at completion.\n\n') +
                 'To view the full detailed proposal with room breakdowns, please request a PDF copy.\n\n' +
                 'If you have any questions or would like to proceed, please don\'t hesitate to reach out.\n\n' +
                 'Best regards,\n' +
@@ -17290,6 +17311,12 @@ Generate JSON with these EXACT keys:
 
         // Track where to return after proposal view
         window._proposalReturnScreen = 'estimateStep6Screen';
+
+        // v149 — deposit percent (default 50). Stored on the job as depositPercent.
+        window._depositPct = function(est) {
+            const n = parseInt(est?.depositPercent, 10);
+            return (n >= 1 && n <= 100) ? n : 50;
+        };
 
         window.exitProposalView = function() {
             if (window._crewReturnProjectId) {
@@ -17457,8 +17484,9 @@ Generate JSON with these EXACT keys:
             // Discount applies to (base + change orders), matching updateDiscountPreview.
             const _changeOrdersTotal = (currentEstimate.changeOrders || []).reduce((s, co) => s + (co.amount || 0), 0);
             const subtotal = basePrice + _changeOrdersTotal - discountAmount - totalCredits;
-            const depositAmount = subtotal * 0.5;
-            const balanceAmount = subtotal * 0.5;
+            const _depPct = window._depositPct(currentEstimate); // v149
+            const depositAmount = subtotal * _depPct / 100;
+            const balanceAmount = subtotal - depositAmount;
             const _depositReq = currentEstimate.depositRequired !== false; // v142 toggle
             const projectNotes = document.getElementById('projectSummaryNotes')?.value || '';
             const showBreakdown = window._crewMode || document.getElementById('pdfDetailLevel')?.value !== 'total';
@@ -17497,7 +17525,7 @@ Generate JSON with these EXACT keys:
                 if (_jurisVA && co.vaLicenseNumber) {
                     h += `<h2>VIRGINIA CONTRACTOR DISCLOSURES</h2>
 <p><strong>Contractor:</strong> ${co.companyName||'Northern Star Painters'}, ${co.companyAddress||''}. Virginia DPOR contractor license no. <strong>${co.vaLicenseNumber}</strong>${co.vaLicenseClass ? ', Class ' + co.vaLicenseClass : ''}${co.vaLicenseSpecialty ? ', ' + co.vaLicenseSpecialty : ''}.</p>
-<p><strong>Down payment and progress payments:</strong> ${_depositReq ? '50% of the contract price is due at signing to schedule; the balance is due at the completion walk-through.' : 'No down payment; the full contract price is due at the completion walk-through.'}</p>
+<p><strong>Down payment and progress payments:</strong> ${_depositReq ? _depPct + '% of the contract price is due at signing to schedule; the balance is due at the completion walk-through.' : 'No down payment; the full contract price is due at the completion walk-through.'}</p>
 <p><strong>Virginia Contractor Transaction Recovery Fund:</strong> The Virginia Contractor Transaction Recovery Fund may provide relief to consumers who suffer losses through the improper or dishonest conduct of a licensed residential contractor. For information, or to obtain the Board for Contractors' statement of consumer protection, contact the Department of Professional and Occupational Regulation, 9960 Mayland Drive, Suite 400, Richmond, VA 23233, (804) 367-8500, www.dpor.virginia.gov. By signing, the customer acknowledges receipt of this statement of protection.</p>`;
                 }
                 if (_jurisDC && co.dcLicenseNumber) {
@@ -17505,7 +17533,7 @@ Generate JSON with these EXACT keys:
 <p><strong>Contractor:</strong> ${co.companyName||'Northern Star Painters'}, ${co.companyAddress||''}, ${formatPhone(co.companyPhone)||''}. District of Columbia contractor license no. <strong>${co.dcLicenseNumber}</strong>.</p>
 ${co.dcSalespersonLicense ? `<p><strong>Salesperson:</strong> ${co.consultantName||''}, DC Home Improvement Salesperson license no. <strong>${co.dcSalespersonLicense}</strong>.</p>` : ''}
 <p><strong>Dates:</strong> The approximate start and completion dates are as agreed in writing at scheduling and may be changed only by written agreement of both parties.</p>
-<p><strong>Payment terms:</strong> ${_depositReq ? '50% at signing, balance at the completion walk-through.' : 'No payment is due before completion; the full contract price is due at the completion walk-through.'}</p>
+<p><strong>Payment terms:</strong> ${_depositReq ? _depPct + '% at signing, balance at the completion walk-through.' : 'No payment is due before completion; the full contract price is due at the completion walk-through.'}</p>
 <p style="font-weight:bold;font-size:11pt;border:2px solid #111;padding:8px;">DO NOT SIGN THIS CONTRACT IF ANY SPACES ARE LEFT BLANK. YOU ARE ENTITLED TO A COPY OF THIS CONTRACT AT THE TIME YOU SIGN IT.</p>`;
                 }
                 return h;
@@ -17829,7 +17857,7 @@ ${changeOrdersPriceRow}
 ${discountHTML}
 ${creditsHTML}
 ${priceRow('Subtotal','$'+subtotal.toFixed(2),'border-top:2px solid #1e3a8a;font-weight:bold;margin-top:6px;padding-top:6px')}
-${_depositReq ? priceRow('Deposit Due (50%)','$'+depositAmount.toFixed(2)) + priceRow('Balance','$'+balanceAmount.toFixed(2)) : priceRow('Total Due at Completion','$'+subtotal.toFixed(2),'font-weight:bold')}
+${_depositReq ? priceRow('Deposit Due ('+_depPct+'%)','$'+depositAmount.toFixed(2)) + priceRow('Balance','$'+balanceAmount.toFixed(2)) : priceRow('Total Due at Completion','$'+subtotal.toFixed(2),'font-weight:bold')}
 </div>`}
 ${sectionTitle('PROJECT SUMMARY')}
 <p><strong>Included in the price above:</strong></p>
@@ -17858,7 +17886,7 @@ ${_generalTermsHTML}
 <h2>PAYMENT AND PRICING</h2>
 <p><strong>Expiration:</strong> Pricing valid 30 days from proposal date.</p>
 <p><strong>Methods:</strong> Checks, Visa, MasterCard, AmEx. 3.5% convenience fee for credit cards.</p>
-${_depositReq ? '<p><strong>Deposit:</strong> 50% required to schedule.</p><p><strong>Balance:</strong> Due at completion walk-through.</p>' : '<p><strong>Deposit:</strong> None required for this proposal.</p><p><strong>Payment:</strong> Full amount due at the completion walk-through.</p>'}
+${_depositReq ? '<p><strong>Deposit:</strong> ' + _depPct + '% required to schedule.</p><p><strong>Balance:</strong> Due at completion walk-through.</p>' : '<p><strong>Deposit:</strong> None required for this proposal.</p><p><strong>Payment:</strong> Full amount due at the completion walk-through.</p>'}
 <p><strong>Late payment:</strong> Balances unpaid 5 days after completion accrue a late fee of 12%, and the customer is responsible for reasonable collection costs and attorney's fees. We may suspend work and reserve all lien rights for unpaid amounts as permitted by law.</p>
 ${_jurisdictionHTML}
 ${sectionTitle('SIGNATURES')}`}
